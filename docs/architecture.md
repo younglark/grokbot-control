@@ -1,37 +1,128 @@
-# 架构
+# 架构（细化）
 
-## 定位
+## 1. 定位
+
+人原先在 **Grok Bot App** 操作；本项目提供 **MCP + CLI** 可编程控制面，经 **Connect 原生 RPC** 驱动同一后端。  
+上层 agent CLI 负责需求沟通与编排；本层**不**强制自建 task 账本。
 
 ```
-人 / 上层 agent CLI（拆需求、编排）
-        │
-        ├── MCP（stdio 等）  ─┐
-        └── CLI `gbc`（示意）─┴──► 共享 SDK
-                                      ├── Credential provider（独立 store + refresh）
-                                      ├── Connect 客户端（GrokBotService / Dashboard 必要方法）
-                                      └── 按操作直接调用 RPC（bot/message/session/sidebar…）
-                                               │
-                                               ▼
-                                          Grok Bot 后端
+上层 agent CLI / 人
+   ├─ MCP adapter (stdio…)     ─┐
+   └─ CLI adapter (示意 gbc)   ─┴─► shared SDK
+                                      ├─ auth/credentials（独立 store）
+                                      ├─ connect client + interceptors
+                                      ├─ ops: bot | message | session | sidebar | progress
+                                      └─ outcome/error 归一
+                                           │
+                                           ▼
+                                      GrokBotService / DashboardService
 ```
 
-- **薄适配**：CLI 与 MCP 只做参数/结果形状转换，业务语义同一套。  
-- **默认可无持久化任务账本**：凭据存储除外；基础 list/send 不依赖本地 queue/daemon。  
-- **可选 P1**：对长等待的观测辅助、幂等缓存、聚合「工作项」——**不得**成为 send/CRUD 的必经之路。
+## 2. 建议模块与目录（设计，未实现）
 
-## 与「任务调度」关系
+```
+src/
+  auth/           # bootstrap, store, refresh single-flight, logout(本地)
+  connect/        # transport, headers, deadline, error map
+  ops/
+    bot.ts        # list/create/get(via list)/update/delete
+    message.ts    # send/status/history
+    session.ts
+    sidebar.ts    # sections read/patch/verify
+    progress.ts   # status/todos/tasks/subagents/interrupt
+    room.ts       # 显式分列，非默认分组
+  dto/            # 稳定 JSON schema_version
+  cli/            # 薄适配
+  mcp/            # 薄适配 + toolsets
+```
 
-上层 agent 的任务拆分是**调用方工作流**。本控制面暴露的是 App 同级的 bot 操作。  
-旧 task-bridge 的 bridge_task 状态机**不**作为本架构中心。
+**禁止默认提供：** 任意 `raw_rpc`、Admin/Internal 代理、Vault 明文工具。
 
-## 安全边界
+## 3. 原生 ID 与命名
 
-- 独立登录；Cursor / xAI 种类显式区分  
-- token 不进 argv / 日志 / MCP tool 结果  
-- 宿主 MCP OAuth ≠ Grok Bot 执行身份  
-- dry-run 纯无副作用；删除需显式确认  
-- 不暴露 Admin/Internal/Vault 明文；无 auto-approve  
+| 概念 | 协议字段 | SDK/DTO 建议 |
+|---|---|---|
+| Bot | `GrokBotAgent.agent_id` 与 `id` 均存在 | 对外主字段 `agent_id`；写入时与 App 一样以客户端 nonce 预分配（create） |
+| Session | `viewer_session_id` / 请求 `session_id` | `session_id`；默认：若未传则用 list 中该 bot 的 `viewer_session_id`（**待真机确认始终有效**） |
+| Message | 客户端生成 `message_id` | UUID；**丢响应后不自动重发同 id 除非有服务端幂等证据**（未证实前不承诺） |
+| Transcript cursor | `generation` / seq | DTO 保留；Watch 短生命周期 |
+| Sidebar section | `id`,`name`,`agent_ids` | 删除 section ≠ 删除 bot |
 
-## 非目标
+**无独立 GetBot RPC：** `bot.get` = `ListGrokBotAgents` 后客户端按 `agent_id` 筛选；找不到→`not_found`。
 
-另造对话 agent；全量 607 RPC 导出；假扮官方 CLI 名。
+## 4. 统一结果契约（CLI `--json` 与 MCP structuredContent）
+
+```json
+{
+  "schema_version": "1.0.0",
+  "ok": true,
+  "outcome": "known_success | known_failure | unknown",
+  "code": "STRING_CODE",
+  "retryable": false,
+  "request_id": "uuid",
+  "data": {},
+  "error": { "message": "", "hint": "" }
+}
+```
+
+- MCP：业务失败优先 `isError: true` + 同上 JSON 文本/structuredContent（对齐 MCP tools 规范）。  
+- CLI：stdout 仅结果 JSON/文本；错误 JSON→stderr；退出码表见下。  
+- **MCP stdio 进程禁止打印 CLI 风格日志到 stdout。**
+
+### CLI 退出码（设计决定；写入 --help 后不改含义）
+
+| 码 | 含义 |
+|---:|---|
+| 0 | known_success |
+| 2 | usage |
+| 4 | auth |
+| 5 | not_found |
+| 6 | conflict（含 sidebar base 冲突） |
+| 7 | denied / dry-run 外的写拒绝 |
+| 8 | retryable（瞬时） |
+| 9 | known_failure |
+| 10 | unknown outcome（丢响应、证据不足） |
+| 1 | 其它错误 |
+
+## 5. 写安全
+
+- 删除/破坏性：`--confirm=<agent_id>`（或资源名）+ 可选 `--dry-run`（**纯**无 RPC）  
+- create/send/delete：**超时/取消后不自动重试写**；引导 `list`/`get_send_status`/transcript 对账；无法判定→`unknown`  
+- idempotency：**仅当真机证明**服务端对 `message_id`/`agent_id` 去重后，才在文档承诺；此前标「客户端尽最大努力」  
+- sidebar：read → 本地改最小 sections 集合 → write(sections, base=读到的快照) → read verify；进程内锁；**不声称跨 App 事务**
+
+## 6. Auth
+
+- 独立 bootstrap（browser URL + 内存 verifier + poll）；secure store；refresh 跨进程单飞锁  
+- account scope 与 `GBT_BASE_URL`（或配置 backend）绑定；自定义 backend 需显式信任确认，防 token 打到错误域（RFC9700 / 鉴权报告）  
+- Cursor vs xAI kind 分离；logout 只清本工具凭据  
+- 无 auto-approve；不读桌面 sand-secrets  
+
+## 7. 进展模型
+
+| 层 | 含义 | 不可当作 |
+|---|---|---|
+| delivery / send_status | 发送路径接受 | 任务业务成功 |
+| live running / awaiting | App 状态条 | 最终用户可见完成 |
+| transcript 助手可见消息 | 用户可见进展 | 自动「验收通过」 |
+| Interrupt | 中断 run | MCP cancelled 通知 |
+
+Watch：按需、有界、可取消订阅；断连/CLI 退出 **默认不** Interrupt。
+
+## 8. 工具面治理（借鉴 GitHub MCP）
+
+建议 toolsets：`auth` / `bot` / `message` / `sidebar` / `progress` / `room(opt)`；默认启用前四+progress；`--read-only` 跳过写工具。
+
+## 9. CLI 设计：规范 / 本项目决定 / 待验证
+
+| 项 | 归类 | 说明 |
+|---|---|---|
+| stdout=数据、stderr=诊断；无 TTY 不阻塞 | **规范要求**（agent-cli-design / clig 共识） | MCP stdio 进程另遵守 MCP transports，禁止夹带 CLI JSON |
+| 退出码分类表写入 --help 后不改 | **规范要求** | 见 §4 |
+| `--json` 字段稳定 + schema_version | **规范要求** | 人类文本可迭代 |
+| 列表默认 limit + truncated hint | **规范要求** | |
+| dry-run 纯 + `--confirm=<id>` | **规范要求**（破坏性确认共识） | 避免万能 `--yes` |
+| 默认输出文本还是 JSON | **有争议**→**本项目决定**：人机默认文本，脚本/agent 显式 `--json` | |
+| 幂等键对 create/send | **待验证** | 未证实服务端去重前不承诺 |
+| `--agent` / `--no-input` 命名 | **有争议** | 先用 isatty + 无提示；命名后定 |
+| 默认只读全局开关 | **有争议**→倾向 MCP `--read-only` toolset；CLI 写操作自带 confirm | |

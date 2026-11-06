@@ -1,35 +1,19 @@
-# 验收
+# 验收（细化）
 
 ## 理念
 
-**App 里人能完成且纳入范围的动作 → agent 经 MCP 与 CLI 可等价完成**（权限与人工确认仍由服务端/产品约束）。  
-不验收「模仿点击」；验收**同一业务结果**（bot 存在、消息送达、状态可读、section 变更等）。
+App 能做且纳入范围 → MCP 与 CLI **等价完成**（保留服务端权限/人工确认）。不模仿 GUI。
 
-## 分层证据
+## 必含场景（真机另授；本轮不执行）
 
-| 层 | 含义 |
-|---|---|
-| 离线 / mock | 仅形状与双入口等价；**不是**交付 |
-| 协议已映射 | 字段与 RPC 对照完成 |
-| 真机（另授） | 真实登录后的读写；才算该能力完成 |
+1. 独立 test bot：create→list/get 可见  
+2. send→send_status/history 有进展（delivery≠业务成功分列）  
+3. status/todos 或 tasks 可读；interrupt 需确认  
+4. sidebar：改 sections→读回 verify；故意冲突→conflict；**删 section 后 bot 仍在**  
+5. delete confirm；token 过期/组织策略拒绝路径  
+6. 丢 send 响应→unknown，禁止自动重发  
+7. 同剧本 CLI 与 MCP 各一遍；无 TTY + `--json`  
 
-## 真机剧本（到时另授权；当前不执行）
+## 证据分层
 
-1. auth whoami  
-2. bot create → list 可见  
-3. message send → send status / transcript 有进展  
-4. bot status / todos 或 tasks 可读  
-5. sidebar sections 更新（若确认分组=Sidebar）  
-6. bot delete（dry-run → 确认删除）  
-7. 同上剧本各跑一遍 **CLI** 与 **MCP**
-
-## 防护
-
-- 防误删；纯 dry-run  
-- timeout ≠ 自动重发写  
-- 取消/中断作用域说清  
-- 无终态不强行 success  
-
-## 旧仓
-
-`grokbot-task-bridge` 的 mock 绿**不**计入本仓验收。
+mock/离线 ≠ 交付；协议映射 ≠ 交付；真机 = 该能力完成。
