@@ -1,0 +1,9 @@
+export { ControlPlane } from "./ops/plane.js";
+export { createGrokBotClient, mapConnectError } from "./connect/client.js";
+export { createAuthProvider, staticTokenProvider } from "./auth/provider.js";
+export { FileCredentialStore, redactCredential } from "./auth/store.js";
+export { createMockTransport, createEmptyMockState } from "./testing/mock-transport.js";
+export { SCHEMA_VERSION, okResult, failResult } from "./dto/result.js";
+export type { ResultEnvelope, Outcome } from "./dto/result.js";
+export { GbcError, EXIT } from "./errors.js";
+export { buildTools } from "./mcp/tools.js";

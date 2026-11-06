@@ -1,11 +1,12 @@
 node_modules/
 dist/
+*.log
+.DS_Store
 .env
 .env.*
 !.env.example
-*.log
-*.pem
-*.key
-sand-secrets.json
+coverage/
+.gbc/
 credentials.json
-.DS_Store
+*.pem
+dist/
