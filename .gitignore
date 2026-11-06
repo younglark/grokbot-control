@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+*.log
+*.pem
+*.key
+sand-secrets.json
+credentials.json
+.DS_Store
