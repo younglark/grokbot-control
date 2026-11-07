@@ -279,10 +279,15 @@ export class UserComputerProvider implements UserComputerTransport {
           this.backlog = this.backlog.filter(x => x.requestId !== q.requestId);
           cancelRequest(q.requestId); continue;
         }
-        // Official (D:L178548–178552): when inflight>=8 and backlog>=64 → busy.
-        // Lab runBacklog still gates on replies.available, so active can fall <8
-        // while backlog stays full; hard-cap backlog at 64 so that state cannot
-        // push past the official ceiling (equivalent total-capacity hard top).
+        // Promote before admit (official startRequest.finally pulls while inflight<8,
+        // D:L178576–178583). Same-poll recoveries with replies.available must free
+        // backlog slots before the busy check — otherwise a recovered lane falsely
+        // busy-rejects while active still has room.
+        this.runBacklog();
+        // Official busy: inflight>=8 && backlog>=64 (D:L178548–178552).
+        // Lab compensation (NOT claimed equivalent): if backlog is still full after
+        // promote — including reply-stall where runBacklog cannot move work —
+        // refuse so backlog never grows past 64.
         if (this.backlog.length >= UC_BACKLOG_MAX) {
           this.emitBusy(q);
           continue;

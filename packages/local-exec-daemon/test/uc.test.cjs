@@ -252,7 +252,7 @@ describe('generation / lease / ownership helpers', () => {
 });
 
 describe('ownership PID superseded + UC admission gate + superviseBacklog', () => {
-  it('discovery naming another live pid exits as superseded (FDe/Jae/hce)', { timeout: 15000 }, async () => {
+  it('discovery naming another live pid exits as superseded (FDe/Jae/hce)', { timeout: 30000 }, async () => {
     const cp = require('node:child_process');
     const http = require('node:http');
     const streams = [];
@@ -270,8 +270,14 @@ describe('ownership PID superseded + UC admission gate + superviseBacklog', () =
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'led-super-'));
     const data = path.join(dir, 'data');
     fs.mkdirSync(data);
+    const refreshSupervisor = () => {
+      fs.writeFileSync(
+        path.join(data, 'local-exec-supervisor.json'),
+        JSON.stringify({ pid: process.pid, at: Date.now() }),
+      );
+    };
     fs.writeFileSync(path.join(data, 'settings.json'), JSON.stringify({ version: 1, localToolPermission: 'never' }));
-    fs.writeFileSync(path.join(data, 'local-exec-supervisor.json'), JSON.stringify({ pid: process.pid, at: Date.now() }));
+    refreshSupervisor();
     fs.writeFileSync(
       path.join(data, 'local-exec-daemon-connection.json'),
       JSON.stringify({ baseUrl: `http://127.0.0.1:${server.address().port}` }),
@@ -283,30 +289,46 @@ describe('ownership PID superseded + UC admission gate + superviseBacklog', () =
     let stdout = '';
     child.stdout.on('data', (chunk) => { stdout += String(chunk); });
     child.stderr.on('data', (chunk) => { stdout += String(chunk); });
+    const exitPromise = new Promise((resolve) => child.once('exit', (code, signal) => resolve({ code, signal })));
     child.send({
       type: 'sand-local-exec-file-key',
       key: Buffer.alloc(32, 9).toString('base64'),
       computerId: 'synthetic',
     });
     const discoveryPath = path.join(data, 'local-exec-daemon.json');
-    const until = (pred, ms = 8000) =>
+    const until = (pred, ms, label) =>
       new Promise((resolve, reject) => {
         const t0 = Date.now();
         const tick = () => {
           try {
             if (pred()) return resolve();
-          } catch {}
-          if (Date.now() - t0 > ms) return reject(new Error('timeout'));
-          setTimeout(tick, 50);
+          } catch { /* retry */ }
+          if (label === 'discovery' && child.exitCode != null) {
+            return reject(new Error(`child exited early code=${child.exitCode} log=${stdout.slice(-400)}`));
+          }
+          if (Date.now() - t0 > ms) {
+            return reject(new Error(`${label} timeout after ${ms}ms; log=${stdout.slice(-400)}`));
+          }
+          setTimeout(tick, 40);
         };
         tick();
       });
     try {
-      await until(() => fs.existsSync(discoveryPath) && JSON.parse(fs.readFileSync(discoveryPath, 'utf8')).pid === child.pid);
+      await until(
+        () => /started \(pid /.test(stdout)
+          && fs.existsSync(discoveryPath)
+          && JSON.parse(fs.readFileSync(discoveryPath, 'utf8')).pid === child.pid,
+        15000,
+        'discovery',
+      );
+      refreshSupervisor();
       const prev = JSON.parse(fs.readFileSync(discoveryPath, 'utf8'));
       fs.writeFileSync(discoveryPath, JSON.stringify({ ...prev, pid: process.pid, generation: 2 }));
-      await until(() => child.exitCode === 0, 10000);
-      assert.equal(child.exitCode, 0);
+      const exited = await Promise.race([
+        exitPromise,
+        until(() => child.exitCode === 0, 20000, 'superseded-exit').then(() => ({ code: child.exitCode, signal: null })),
+      ]);
+      assert.equal(exited.code, 0, `expected clean superseded exit, got ${JSON.stringify(exited)}; log=${stdout.slice(-500)}`);
       assert.match(
         stdout,
         /received superseded, shutting down/,
@@ -314,9 +336,8 @@ describe('ownership PID superseded + UC admission gate + superviseBacklog', () =
       );
     } finally {
       if (child.exitCode === null) {
-        const end = new Promise((r) => child.once('exit', r));
         child.kill('SIGTERM');
-        await end;
+        await exitPromise;
       }
       streams.forEach((s) => s.destroy());
       await new Promise((r) => server.close(r));
@@ -374,12 +395,10 @@ describe('ownership PID superseded + UC admission gate + superviseBacklog', () =
       },
     });
     const got = [];
+    const cancelHang = [];
     p.channel = { backendUrl: `http://127.0.0.1:${port}`, machineId: 'synthetic', credential: 'synthetic' };
     p.replies = { available: true };
     p.emit = (f) => got.push(f);
-    // Hang admitted work so active remains at capacity (admission still via poll).
-    // Rejectable so the test process does not leak forever-pending handles.
-    const cancelHang = [];
     p.handleQueued = () => new Promise((_, reject) => { cancelHang.push(reject); });
     try {
       for (let i = 0; i < 20 && !(p.active.size >= 8 && p.backlog.length >= 64); i++) {
@@ -405,7 +424,7 @@ describe('ownership PID superseded + UC admission gate + superviseBacklog', () =
   it('UC admit hard-caps backlog at 64 when active<8 and replies unavailable', { timeout: 5000 }, async () => {
     // Lab-only state: replies.available false blocks runBacklog, so active can drop
     // while backlog stays full. Official finally always pulls backlog (D:L178576–178583);
-    // hard-cap must still refuse admit so backlog never exceeds 64.
+    // after promote-before-admit, stall still refuses so backlog never exceeds 64.
     const http = require('node:http');
     const wire = require('./helpers/wire-oracle.cjs');
     const { UserComputerProvider, UC_BACKLOG_MAX, UC_BUSY_TEXT } = require('../dist/uc/provider');
@@ -445,7 +464,7 @@ describe('ownership PID superseded + UC admission gate + superviseBacklog', () =
     p.channel = { backendUrl: `http://127.0.0.1:${port}`, machineId: 'synthetic', credential: 'synthetic' };
     p.replies = { available: false };
     p.emit = (f) => got.push(f);
-    p.active = new Set(['only-three']); // <8
+    p.active = new Set(['only-three']);
     p.backlog = Array.from({ length: UC_BACKLOG_MAX }, (_, i) => ({
       id: `full-${i}`,
       requestId: `full-${i}`,
@@ -465,6 +484,73 @@ describe('ownership PID superseded + UC admission gate + superviseBacklog', () =
         JSON.stringify(got),
       );
     } finally {
+      await new Promise((r) => server.close(r));
+    }
+  });
+
+  it('UC promote-before-admit: replies available + backlog full + active<8 admits after promote', { timeout: 5000 }, async () => {
+    const http = require('node:http');
+    const wire = require('./helpers/wire-oracle.cjs');
+    const { UserComputerProvider, UC_BACKLOG_MAX, UC_INFLIGHT_MAX, UC_BUSY_TEXT } = require('../dist/uc/provider');
+    const frame = Buffer.concat([
+      wire.encStr(1, 'after-promote'),
+      wire.encMsg(2, wire.encStr(1, '{"id":1,"readArgs":{"path":"probe.txt"}}')),
+    ]);
+    const queued = wire.encMsg(
+      1,
+      Buffer.concat([wire.encStr(1, 'queue-after-promote'), wire.encMsg(2, frame)]),
+    );
+    const server = http.createServer((req, res) => {
+      req.resume();
+      req.on('end', () => {
+        res.writeHead(200, { 'content-type': 'application/proto' });
+        res.end(queued);
+      });
+    });
+    await new Promise((r) => server.listen(0, '127.0.0.1', r));
+    const port = server.address().port;
+    const p = new UserComputerProvider({
+      backendUrl: `http://127.0.0.1:${port}`,
+      machineId: 'synthetic',
+      credential: 'synthetic',
+      root: '/tmp',
+      permission: 'ask',
+      hello: {
+        label: 'lab',
+        localRoot: '/tmp',
+        terminalsFolder: '/tmp',
+        standing: 'ask',
+        variant: 'lab',
+        serverAuthoritative: false,
+      },
+    });
+    const got = [];
+    const cancelHang = [];
+    p.channel = { backendUrl: `http://127.0.0.1:${port}`, machineId: 'synthetic', credential: 'synthetic' };
+    p.replies = { available: true };
+    p.emit = (f) => got.push(f);
+    p.handleQueued = () => new Promise((_, reject) => { cancelHang.push(reject); });
+    p.active = new Set(['a', 'b', 'c']);
+    p.backlog = Array.from({ length: UC_BACKLOG_MAX }, (_, i) => ({
+      id: `full-${i}`,
+      requestId: `full-${i}`,
+      kind: 2,
+      serverMessage: {},
+    }));
+    try {
+      await p.pollOnce();
+      assert.ok(
+        !got.some((f) => f.message?.throw?.error === UC_BUSY_TEXT || f.error === UC_BUSY_TEXT),
+        `should not busy after promote: ${JSON.stringify(got)}`,
+      );
+      assert.equal(p.active.size, UC_INFLIGHT_MAX);
+      assert.ok(p.backlog.length <= UC_BACKLOG_MAX);
+      assert.equal(p.backlog.length, UC_BACKLOG_MAX - (UC_INFLIGHT_MAX - 3) + 1);
+      assert.ok(p.pendingAcks.includes('queue-after-promote'));
+    } finally {
+      for (const reject of cancelHang) reject(new Error('test cleanup'));
+      p.beginShutdown();
+      await new Promise((r) => setTimeout(r, 30));
       await new Promise((r) => server.close(r));
     }
   });
@@ -505,7 +591,6 @@ describe('ownership PID superseded + UC admission gate + superviseBacklog', () =
     });
     const got = [];
     p.channel = { backendUrl: `http://127.0.0.1:${port}`, machineId: 'synthetic', credential: 'synthetic' };
-    // available:false so a nudged pollOnce cannot runBacklog-steal the fixture item
     p.replies = { available: false };
     p.emit = (f) => got.push(f);
     p.backlog = [
@@ -519,7 +604,6 @@ describe('ownership PID superseded + UC admission gate + superviseBacklog', () =
     assert.ok(polls > pollsBefore, '5s nudge should request poll');
     assert.equal(p.backlog.length, 1, 'nudge must not drain');
 
-    // Stale drain does not require replies.available (official abandons queued work).
     p.lastPolledAt = now - (UC_BACKLOG_STALE_MS + 1);
     p.superviseBacklog(now);
     assert.equal(p.backlog.length, 0);

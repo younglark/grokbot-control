@@ -123,9 +123,13 @@ Preserved: inner-id reallocation, cancel-by-requestId, accepted_count=0, Watch r
 
 Also: superseded process regression asserts stdout `received superseded, shutting down`. UC busy test fills via poll path (hanging handleQueued) and is named admission-gate (not e2e load).
 
-## UC backlog hard-cap when replies saturated (post-25abe34)
+## UC backlog admit: promote-before-busy + stall ceiling (post-edc41ff)
 
-Lab `runBacklog` still waits on `replies.available`, so `active` can fall below 8 while `backlog` stays at 64. Official `startRequest.finally` always promotes backlog while `inflight < 8` (D:**L178576–178583**), so that overflow window barely exists upstream.
+| | Official | Lab compat |
+|--|----------|------------|
+| Busy predicate | `inflight >= 8 && backlog >= 64` (D:**L178548–178552**) | After `runBacklog()` promote, `backlog.length >= 64` → busy |
+| Promote | `startRequest.finally` always pulls while `inflight < 8` (D:**L178576–178583**) | `runBacklog()` still gated on `replies.available` (reply-lane backpressure); called **before** each admit busy check so a recovered lane frees slots in-poll |
+| Stall | Rare (finally always promotes) | If replies unavailable and backlog already 64, refuse admit so backlog **never > 64** (lab compensation — **not** claimed identical to official predicate) |
 
-Compat admit now **hard-caps** `backlog.length >= 64` → busy (`F5e`) regardless of `active.size` (ceiling equivalent to D:**L178548–178552**). Regression: active<8 + backlog full + replies unavailable must not grow backlog.
+Regressions: stall hard-cap; promote-then-admit when `replies.available` + `active<8` + full backlog.
 
