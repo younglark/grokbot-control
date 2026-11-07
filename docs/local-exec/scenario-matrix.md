@@ -22,7 +22,7 @@
 | 运行 | same / diff |
 |---|---|
 | official-v2 vs official-v2b（官方自身重复性）| 18 / 0 |
-| official-v2 vs ours@445ca90 | 6 / 12（ls 成功树、login shell、无状态、坏 cwd throw、env 缺失等）|
+| official-v2 vs ours@445ca90（ours-v2）| 9 / 9（ls、glob、sh-ident、sh-state1/2/3、sh-init、sh-plain2、sh-badcwd）|
 | official-v2 vs ours@e984310（v5）| 17 / 1 |
 剩余 1 个差异 `sh-ident`：官方多 `NODE_PATH=<官方安装 deps 目录>`（官方 bundle 自身产物）与空的 `__CURSOR_SANDBOX_ENV_RESTORE`，有意不模仿。
 
