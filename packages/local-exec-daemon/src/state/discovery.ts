@@ -39,6 +39,25 @@ export async function clearDiscovery(env: NodeJS.ProcessEnv = process.env): Prom
   }
 }
 
+
+export async function loadDiscovery(env: NodeJS.ProcessEnv = process.env): Promise<DiscoveryRecord | null> {
+  try {
+    const raw = JSON.parse(await fs.promises.readFile(discoveryPath(env), "utf8")) as Partial<DiscoveryRecord>;
+    if (!Number.isInteger(raw.pid) || (raw.pid as number) <= 0) return null;
+    if (typeof raw.startedAt !== "number" || Number.isNaN(raw.startedAt)) return null;
+    return {
+      pid: raw.pid as number,
+      startedAt: raw.startedAt,
+      servingAt: typeof raw.servingAt === "number" ? raw.servingAt : undefined,
+      inflightCount: typeof raw.inflightCount === "number" ? raw.inflightCount : 0,
+      filesKeyId: typeof raw.filesKeyId === "string" ? raw.filesKeyId : undefined,
+      generation: typeof raw.generation === "number" ? raw.generation : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export type SupervisorRecord = { pid: number; at: number };
 
 export function supervisorPath(env: NodeJS.ProcessEnv = process.env): string {

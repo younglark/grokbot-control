@@ -7,7 +7,7 @@ const path = require('node:path');
 const cp = require('node:child_process');
 const { startUcFakePeer, SYN_CRED, SYN_MACHINE } = require('./helpers/uc-fake-peer.cjs');
 const { sealJson } = require('../dist/uc/sealed.js');
-const { ownershipDecision, leaseIsActive, generationFromEnv } = require('../dist/state/lease.js');
+const { ownershipDecision, leaseIsActive, generationFromEnv, pidAlive } = require('../dist/state/lease.js');
 const { unsealJson } = require('../dist/uc/sealed.js');
 
 const ROOT = path.resolve(__dirname, '..');
@@ -205,6 +205,38 @@ describe('generation / lease / ownership helpers', () => {
       }),
       'keep',
     );
+    // Official FDe supersededForMs branch (daemon.formatted.cjs L79885–79886)
+    assert.equal(
+      ownershipDecision({
+        supervisedFresh: true,
+        lease: { until: now + 99999 },
+        inflightCount: 0,
+        supersededForMs: 0,
+        nowMs: now,
+      }),
+      'exit',
+    );
+    assert.equal(
+      ownershipDecision({
+        supervisedFresh: false,
+        lease: null,
+        inflightCount: 1,
+        supersededForMs: 1_000,
+        nowMs: now,
+      }),
+      'keep',
+    );
+    assert.equal(
+      ownershipDecision({
+        supervisedFresh: false,
+        lease: null,
+        inflightCount: 1,
+        supersededForMs: 120_001,
+        nowMs: now,
+      }),
+      'exit',
+    );
+    assert.equal(pidAlive(process.pid), true);
   });
 
   it('lease file shape loadable by daemon data root', async () => {
@@ -219,11 +251,135 @@ describe('generation / lease / ownership helpers', () => {
   });
 });
 
-describe('known gaps (documented skips)', () => {
-  it('generation preempt / dual-daemon race', (t) => {
-    t.skip('requires App-side SAND_LOCAL_EXEC_GENERATION bump or second daemon race under same discovery; generation superseded/pid race not yet instrumented');
+describe('ownership PID superseded + UC busy pressure', () => {
+  it('discovery naming another live pid exits as superseded (FDe/Jae/hce)', { timeout: 15000 }, async () => {
+    const cp = require('node:child_process');
+    const http = require('node:http');
+    const streams = [];
+    const server = http.createServer((req, res) => {
+      req.resume();
+      req.on('end', () => {
+        if (req.method === 'GET') {
+          res.writeHead(200, { 'content-type': 'text/event-stream' });
+          res.write('data: {"kind":"welcome"}\n\n');
+          streams.push(res);
+        } else res.end('{}');
+      });
+    });
+    await new Promise((r) => server.listen(0, '127.0.0.1', r));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'led-super-'));
+    const data = path.join(dir, 'data');
+    fs.mkdirSync(data);
+    fs.writeFileSync(path.join(data, 'settings.json'), JSON.stringify({ version: 1, localToolPermission: 'never' }));
+    // Fresh supervisor so unsupervised path stays keep until superseded fires.
+    fs.writeFileSync(path.join(data, 'local-exec-supervisor.json'), JSON.stringify({ pid: process.pid, at: Date.now() }));
+    fs.writeFileSync(
+      path.join(data, 'local-exec-daemon-connection.json'),
+      JSON.stringify({ baseUrl: `http://127.0.0.1:${server.address().port}` }),
+    );
+    const child = cp.fork(path.resolve(__dirname, '../dist/index.js'), [], {
+      env: { ...process.env, SAND_DATA_ROOT: data, SAND_LOCAL_EXEC_ROOT: dir, SAND_LOCAL_EXEC_GENERATION: '1' },
+      stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+    });
+    child.send({
+      type: 'sand-local-exec-file-key',
+      key: Buffer.alloc(32, 9).toString('base64'),
+      computerId: 'synthetic',
+    });
+    const discoveryPath = path.join(data, 'local-exec-daemon.json');
+    const until = (pred, ms = 8000) =>
+      new Promise((resolve, reject) => {
+        const t0 = Date.now();
+        const tick = () => {
+          try {
+            if (pred()) return resolve();
+          } catch {}
+          if (Date.now() - t0 > ms) return reject(new Error('timeout'));
+          setTimeout(tick, 50);
+        };
+        tick();
+      });
+    try {
+      await until(() => fs.existsSync(discoveryPath) && JSON.parse(fs.readFileSync(discoveryPath, 'utf8')).pid === child.pid);
+      // Pretend a newer live daemon owns discovery (parent test process is alive).
+      const prev = JSON.parse(fs.readFileSync(discoveryPath, 'utf8'));
+      fs.writeFileSync(discoveryPath, JSON.stringify({ ...prev, pid: process.pid, generation: 2 }));
+      await until(() => child.exitCode === 0, 10000);
+      assert.equal(child.exitCode, 0);
+    } finally {
+      if (child.exitCode === null) {
+        const end = new Promise((r) => child.once('exit', r));
+        child.kill('SIGTERM');
+        await end;
+      }
+      streams.forEach((s) => s.destroy());
+      await new Promise((r) => server.close(r));
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
-  it('UC backlog64 / inflight8 busy under load', (t) => {
-    t.skip('happy-path Poll/Submit proven; dedicated busy/backlog pressure oracle not instrumented this round');
+
+  it('UC poll at inflight8+backlog64 rejects with official busy text', { timeout: 5000 }, async () => {
+    const http = require('node:http');
+    const wire = require('./helpers/wire-oracle.cjs');
+    const { UserComputerProvider } = require('../dist/uc/provider');
+    const frame = Buffer.concat([
+      wire.encStr(1, 'overflow-req'),
+      wire.encMsg(2, wire.encStr(1, '{"id":1,"readArgs":{"path":"probe.txt"}}')),
+    ]);
+    const queued = wire.encMsg(
+      1,
+      Buffer.concat([wire.encStr(1, 'queue-overflow'), wire.encMsg(2, frame)]),
+    );
+    const server = http.createServer((req, res) => {
+      const chunks = [];
+      req.on('data', (c) => chunks.push(c));
+      req.on('end', () => {
+        res.writeHead(200, { 'content-type': 'application/proto' });
+        res.end(queued);
+      });
+    });
+    await new Promise((r) => server.listen(0, '127.0.0.1', r));
+    const port = server.address().port;
+    const p = new UserComputerProvider({
+      backendUrl: `http://127.0.0.1:${port}`,
+      machineId: 'synthetic',
+      credential: 'synthetic',
+      root: '/tmp',
+      permission: 'ask',
+      hello: {
+        label: 'lab',
+        localRoot: '/tmp',
+        terminalsFolder: '/tmp',
+        standing: 'ask',
+        variant: 'lab',
+        serverAuthoritative: false,
+      },
+    });
+    const got = [];
+    p.channel = { backendUrl: `http://127.0.0.1:${port}`, machineId: 'synthetic', credential: 'synthetic' };
+    p.replies = { available: true };
+    p.emit = (f) => got.push(f);
+    p.active = new Set(Array.from({ length: 8 }, (_, i) => `active-${i}`));
+    p.backlog = Array.from({ length: 64 }, (_, i) => ({
+      id: `b${i}`,
+      requestId: `b${i}`,
+      kind: 2,
+      serverMessage: {},
+    }));
+    try {
+      await p.pollOnce();
+      assert.ok(
+        got.some(
+          (f) =>
+            f.requestId === 'overflow-req' &&
+            /busy with other requests right now/i.test(f.message?.throw?.error || ''),
+        ),
+        JSON.stringify(got),
+      );
+      assert.equal(p.backlog.length, 64, 'busy rejection must not admit into backlog');
+      assert.ok(p.pendingAcks.includes('queue-overflow'));
+    } finally {
+      await new Promise((r) => server.close(r));
+    }
   });
 });

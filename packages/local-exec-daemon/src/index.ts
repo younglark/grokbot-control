@@ -5,7 +5,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { awaitHandoff, exitFatal } from "./bootstrap/handoff";
 import { loadSettings } from "./settings";
-import { clearDiscovery, isSupervised, publishDiscovery } from "./state/discovery";
+import { clearDiscovery, isSupervised, loadDiscovery, publishDiscovery } from "./state/discovery";
 import { loadConnection } from "./state/connection";
 import { BoxProvider } from "./box/provider";
 import { UserComputerProvider } from "./uc/provider";
@@ -14,6 +14,7 @@ import {
   generationFromEnv,
   loadLease,
   ownershipDecision,
+  pidAlive,
 } from "./state/lease";
 import { localRootFromEnv, logInfo, delay } from "./util";
 
@@ -153,7 +154,9 @@ async function main(): Promise<void> {
     void tryStartUc().catch(() => undefined);
   }, 1000);
 
-  // Lightweight ownership tick (supervisor + lease). Generation preempt skipped.
+  // Ownership tick: supervisor/lease + discovery PID superseded (official FDe/Jae/hce).
+  // Generation is published into discovery from env; daemon does not compare generations.
+  let supersededSinceMs: number | undefined;
   setInterval(() => {
     void (async () => {
       if (shuttingDown) return;
@@ -161,7 +164,25 @@ async function main(): Promise<void> {
       const lease = await loadLease();
       const hb = await readJsonIfExists<{at: number}>(path.join(dataRootFromEnv(), "local-exec-supervisor.json"));
       const staleFor = Date.now() - (hb?.at ?? startedAt) - 90_000;
-      if (ownershipDecision({ supervisedFresh: supervised, lease, inflightCount, supervisorStaleForMs: staleFor }) === "exit") shutdown("unsupervised");
+      const disc = await loadDiscovery();
+      if (disc && disc.pid !== process.pid && pidAlive(disc.pid)) {
+        supersededSinceMs ??= Date.now();
+      } else {
+        if (disc && disc.pid !== process.pid) await publish();
+        supersededSinceMs = undefined;
+      }
+      const supersededForMs = supersededSinceMs == null ? null : Date.now() - supersededSinceMs;
+      if (
+        ownershipDecision({
+          supervisedFresh: supervised,
+          lease,
+          inflightCount,
+          supervisorStaleForMs: staleFor,
+          supersededForMs,
+        }) === "exit"
+      ) {
+        shutdown(supersededSinceMs != null ? "superseded" : "unsupervised");
+      }
     })().catch(() => shutdown("ownership-state-error"));
   }, 2000).unref();
 }

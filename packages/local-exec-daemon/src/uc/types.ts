@@ -30,8 +30,7 @@ export interface UserComputerTransport {
 /** Remaining gaps vs full official UC path. */
 export const UC_P2_GAPS = [
   "ack/dedup persistence across restart",
-  "backlog 64 / inflight 8 busy semantics under load",
-  "generation preempt / ownership race with App",
+  "generation number compare on daemon (official ownership is PID superseded, not generation)",
   "standing/approval/authoritative branches",
   "Credential renew / reject / multi-account scope switch",
   "Capability injection full parity (device/messages/mail)",

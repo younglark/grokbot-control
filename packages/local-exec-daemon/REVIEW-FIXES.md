@@ -104,3 +104,12 @@ Preserved: inner-id reallocation, cancel-by-requestId, accepted_count=0, Watch r
 | Compat implementation | Shallow `readdir` → same JSON camelCase shape via generated `ExecClientMessage.toJson()`; **not** official rg/ignore/character-budget/depth. Not drop-in. |
 | Codec | Removed production interim `{entries}` encode fallback; `isInterimLsListingMessage` retained for regressions that assert rejection. |
 
+## Ownership PID superseded + UC busy (post-5f43dc8)
+
+| Topic | Official evidence | Compat action |
+|-------|-------------------|---------------|
+| PID superseded | `Jae`+`hce` (D:**L79879–79880**, **L81004–81009**); ownership tick sets `supersededForMs` then `FDe` (D:**L179498–179515**, **L79882–79896**) | Implemented: discovery other live pid → `supersededForMs`; exit reason `superseded`. Regression forks daemon and rewrites discovery to parent pid. |
+| Generation | Env `SAND_LOCAL_EXEC_GENERATION` (D:**L78804**, **L187205**) published into discovery (D:**L179215**). No daemon-side generation compare in FDe. | Publish only; **do not** invent generation-exit. Residual gap documented. |
+| Busy 8+64 | `rgt=8`, `_9r=64` (D:**L177859–177860**); when inflight≥8 and backlog≥64 → `F5e` busy string (D:**L135896–135897**, **L178548–178552**) | Already in `pollOnce`; new regression saturates active+backlog and asserts busy text + no admit. |
+| superviseBacklog 15s discard / 5s nudge | D:**L178589–178599** | Still a residual gap (not this commit). |
+
