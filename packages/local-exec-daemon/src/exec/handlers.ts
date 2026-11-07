@@ -1,5 +1,14 @@
 import { proto3 } from "@bufbuild/protobuf";
-import { ShellAbortReason, SandboxPolicy, SandboxPolicy_Type } from "../generated/agent.v1_pb";
+import {
+  ExecClientMessage,
+  LsDirectoryTreeNode,
+  LsDirectoryTreeNode_File,
+  LsResult,
+  LsSuccess,
+  ShellAbortReason,
+  SandboxPolicy,
+  SandboxPolicy_Type,
+} from "../generated/agent.v1_pb";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
@@ -125,24 +134,54 @@ export async function handleLs(args: {
   path: string;
   emit: Emit;
 }): Promise<void> {
-  // Official requires configureRipgrepPath; we implement a simple readdir for
-  // drop-in usefulness and document the difference. Tests assert our shape.
+  // Official LocalLsExecutor builds LsDirectoryTreeNode via ripgrep stream
+  // (daemon.formatted.cjs ~L129447–129609). Without configureRipgrepPath we
+  // emit the same frozen schema shape from a shallow readdir — not a drop-in
+  // of official depth/ignore/budget/rg behavior.
   const { root, requestId, msgId, emit } = args;
   try {
     const abs = assertRealpathUnderRoot(root, args.path);
     const entries = await fs.promises.readdir(abs, { withFileTypes: true });
-    const listing = entries.map((d) => ({
-      name: d.name,
-      type: d.isDirectory() ? "dir" : d.isSymbolicLink() ? "symlink" : "file",
-    }));
+    const childrenDirs: LsDirectoryTreeNode[] = [];
+    const childrenFiles: LsDirectoryTreeNode_File[] = [];
+    for (const d of entries) {
+      if (d.isDirectory()) {
+        childrenDirs.push(
+          new LsDirectoryTreeNode({
+            absPath: path.join(abs, d.name),
+            childrenWereProcessed: false,
+          }),
+        );
+      } else {
+        // Official File is name-only (optional terminal_metadata); non-dir
+        // dirents (files/symlinks) map to children_files.
+        childrenFiles.push(new LsDirectoryTreeNode_File({ name: d.name }));
+      }
+    }
+    childrenDirs.sort((a, b) =>
+      path.basename(a.absPath).localeCompare(path.basename(b.absPath)),
+    );
+    childrenFiles.sort((a, b) => a.name.localeCompare(b.name));
+    const tree = new LsDirectoryTreeNode({
+      absPath: abs,
+      childrenDirs,
+      childrenFiles,
+      childrenWereProcessed: true,
+    });
+    const client = new ExecClientMessage({
+      id: msgId,
+      message: {
+        case: "lsResult",
+        value: new LsResult({
+          result: { case: "success", value: new LsSuccess({ directoryTreeRoot: tree }) },
+        }),
+      },
+      localExecutionTimeMs: 1,
+    });
     await emit({
       kind: "client",
       requestId,
-      message: {
-        id: msgId,
-        lsResult: { success: { path: abs, entries: listing } },
-        localExecutionTimeMs: 1,
-      },
+      message: client.toJson() as Record<string, unknown>,
     });
     await emit({ kind: "control", requestId, message: { streamClose: { id: msgId } } });
   } catch (e) {

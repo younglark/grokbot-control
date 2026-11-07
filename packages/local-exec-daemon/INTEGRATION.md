@@ -37,7 +37,7 @@ Base HEAD remains `2c4a4bf14411f19662610b34af8fe79699ba0ec3`. Only `local-exec-d
 |---|---|
 | `npm ci --ignore-scripts` in subpackage | pass, exact runtime/generator pins in independent lock |
 | `npm run generate` twice / `generate:check` | seven files byte-identical; nonmutating check pass |
-| Subpackage build / test | **64 tests: 62 pass, 0 fail, 2 skip** (Exec JSON codec era; historical rows below unchanged) |
+| Subpackage build / test | **65 tests: 63 pass, 0 fail, 2 skip** (Exec JSON codec era; historical rows below unchanged) |
 | UC / Electron smokes | pass; lab Electron45.x, not official42.x |
 | Original isolated malformed Poll oracle | pass, exit0/no hard timeout; zero frames/acks from corrupt batch, valid read after peer repair |
 | Root build / test | **206 pass, 0 fail, 0 skip** |

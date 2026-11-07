@@ -32,8 +32,8 @@ export function execServerMessageToRecord(msg: ExecServerMessage): Record<string
 }
 
 /**
- * Interim ls adapter still emits `{ success: { path, entries } }` instead of
- * frozen `LsSuccess.directory_tree_root`. Only that shape may bypass encode.
+ * Detect legacy interim ls `{ success: { path, entries } }` (pre-directory_tree_root).
+ * Production encode no longer falls back; kept for regressions that assert rejection.
  */
 export function isInterimLsListingMessage(message: Record<string, unknown>): boolean {
   const lsResult = message.lsResult;
@@ -46,14 +46,9 @@ export function isInterimLsListingMessage(message: Record<string, unknown>): boo
   return hasEntries && !hasTree;
 }
 
-/** Normalize outbound ExecClientMessage object (strict; ls interim may pass through). */
+/** Normalize outbound ExecClientMessage (strict schema encode; no interim fallback). */
 export function encodeExecClientMessage(message: Record<string, unknown>): Record<string, unknown> {
-  try {
-    return ExecClientMessage.fromJson(message as JsonValue).toJson() as Record<string, unknown>;
-  } catch (error) {
-    if (isInterimLsListingMessage(message)) return message;
-    throw error;
-  }
+  return ExecClientMessage.fromJson(message as JsonValue).toJson() as Record<string, unknown>;
 }
 
 export function encodeExecClientMessageJson(message: Record<string, unknown>): string {

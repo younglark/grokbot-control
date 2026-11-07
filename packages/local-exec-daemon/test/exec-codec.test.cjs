@@ -1,12 +1,16 @@
 'use strict';
 /**
- * Independent regressions for Exec* JSON codec.
+ * Independent regressions for Exec* JSON codec + ls directory_tree_root.
  * Official inbound (daemon.formatted.cjs L136313):
  *   kd.fromJsonString(e.serverMessageJson, { ignoreUnknownFields: !0 })
- * Outbound client/control: *.toJson(); box reuses prepareBoxExecFrame.
+ * Official ls success (daemon.formatted.cjs ~L129463 / proto LsSuccess):
+ *   directory_tree_root: LsDirectoryTreeNode { abs_path, children_dirs, children_files, ... }
  */
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const {
   GrokBotUserComputerQueuedRequest,
 } = require('../dist/generated/aiserver.v1_pb');
@@ -20,6 +24,7 @@ const {
   isInterimLsListingMessage,
   prepareBoxExecFrame,
 } = require('../dist/exec/exec-codec');
+const { handleLs, resetExecIdCounter } = require('../dist/exec/handlers');
 const wire = require('./helpers/wire-oracle.cjs');
 
 function queuedExec(requestId, serverMessageJson) {
@@ -83,26 +88,72 @@ test('outbound control throw/streamClose round-trip via generated ExecClientCont
   );
 });
 
-test('outbound client {id:7} golden-stable; ls interim may fall back; non-ls typo must throw', () => {
+test('outbound client {id:7} golden-stable; schema ls encodes; interim/typo throw', () => {
   assert.equal(encodeExecClientMessageJson({ id: 7 }), JSON.stringify({ id: 7 }));
-  const fakeLs = { id: 1, lsResult: { success: { path: '/tmp', entries: [{ name: 'a', type: 'file' }] } } };
-  assert.equal(isInterimLsListingMessage(fakeLs), true);
-  assert.equal(encodeExecClientMessageJson(fakeLs), JSON.stringify(fakeLs));
+
+  const schemaLs = {
+    id: 1,
+    lsResult: {
+      success: {
+        directoryTreeRoot: {
+          absPath: '/tmp/demo',
+          childrenFiles: [{ name: 'a.txt' }],
+          childrenWereProcessed: true,
+        },
+      },
+    },
+  };
+  assert.equal(isInterimLsListingMessage(schemaLs), false);
+  const encoded = encodeExecClientMessage(schemaLs);
+  assert.equal(encoded.lsResult.success.directoryTreeRoot.absPath, '/tmp/demo');
+  assert.equal(encoded.lsResult.success.directoryTreeRoot.childrenFiles[0].name, 'a.txt');
+  assert.equal(encoded.lsResult.success.path, undefined);
+  assert.equal(encoded.lsResult.success.entries, undefined);
+
+  const interim = { id: 1, lsResult: { success: { path: '/tmp', entries: [{ name: 'a', type: 'file' }] } } };
+  assert.equal(isInterimLsListingMessage(interim), true);
+  assert.throws(() => encodeExecClientMessage(interim), (e) => /unknown|cannot decode/i.test(e.message));
 
   const typoExtra = {
     id: 1,
     readResult: { success: { path: '/a', content: 'hi', totalLines: 1, fileSize: '2' } },
     typoExtra: true,
   };
-  assert.equal(isInterimLsListingMessage(typoExtra), false);
-  assert.throws(
-    () => encodeExecClientMessage(typoExtra),
-    (e) => /unknown|cannot decode/i.test(e.message),
-  );
-  assert.throws(
-    () => encodeExecClientMessageJson(typoExtra),
-    (e) => /unknown|cannot decode/i.test(e.message),
-  );
+  assert.throws(() => encodeExecClientMessage(typoExtra), (e) => /unknown|cannot decode/i.test(e.message));
+  assert.throws(() => encodeExecClientMessageJson(typoExtra), (e) => /unknown|cannot decode/i.test(e.message));
+});
+
+test('handleLs success emits directoryTreeRoot that encodes without interim fallback', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'led-ls-'));
+  try {
+    fs.mkdirSync(path.join(root, 'sub'));
+    fs.writeFileSync(path.join(root, 'a.txt'), 'x');
+    fs.writeFileSync(path.join(root, 'b.txt'), 'y');
+    resetExecIdCounter(1);
+    const got = [];
+    await handleLs({ root, requestId: 'ls1', msgId: 1, path: root, emit: (f) => got.push(f) });
+    const client = got.find((f) => f.kind === 'client');
+    assert.ok(client);
+    const tree = client.message.lsResult.success.directoryTreeRoot;
+    assert.equal(tree.absPath, fs.realpathSync(root));
+    assert.equal(tree.childrenWereProcessed, true);
+    assert.deepEqual(
+      (tree.childrenFiles || []).map((f) => f.name).sort(),
+      ['a.txt', 'b.txt'],
+    );
+    assert.equal((tree.childrenDirs || []).length, 1);
+    assert.equal(path.basename(tree.childrenDirs[0].absPath), 'sub');
+    assert.equal(client.message.lsResult.success.entries, undefined);
+    assert.equal(client.message.lsResult.success.path, undefined);
+    // Production path: encode without interim detector
+    const round = encodeExecClientMessage(client.message);
+    assert.equal(round.lsResult.success.directoryTreeRoot.absPath, tree.absPath);
+    assert.equal(isInterimLsListingMessage(client.message), false);
+    const box = prepareBoxExecFrame(client);
+    assert.equal(box.message.lsResult.success.directoryTreeRoot.absPath, tree.absPath);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('prepareBoxExecFrame runs client/control through the same Exec* codec', () => {
@@ -140,7 +191,6 @@ test('prepareBoxExecFrame runs client/control through the same Exec* codec', () 
     (e) => /unknown|cannot decode/i.test(e.message),
   );
 
-  // Box envelope shape preserved for non-exec kinds
   const fileErr = prepareBoxExecFrame({ kind: 'file-error', requestId: 'dl', error: 'nope' });
   assert.deepEqual(fileErr, { kind: 'file-error', requestId: 'dl', error: 'nope' });
 });
