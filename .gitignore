@@ -10,3 +10,4 @@ coverage/
 credentials.json
 *.pem
 dist/
+__pycache__/

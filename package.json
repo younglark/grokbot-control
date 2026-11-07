@@ -16,7 +16,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --import tsx --test test/*.test.ts",
     "gbc": "node dist/cli/main.js",
-    "mcp": "node dist/mcp/main.js"
+    "mcp": "node dist/mcp/main.js",
+    "test:protocol-tools": "python3 -m unittest discover -s tools/protocol"
   },
   "engines": {
     "node": ">=20"

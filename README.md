@@ -56,6 +56,7 @@ node dist/cli/main.js --json auth logout             # 只删本工具自己的�
 |---|---|
 | [docs/requirements.md](docs/requirements.md) | 需求 |
 | [docs/protocol-map.md](docs/protocol-map.md) | 覆盖矩阵 / RPC |
+| [docs/protocol/](docs/protocol/README.md) | 协议基线、静态还原方法、App 更新 runbook、兼容矩阵、`tools/protocol` 脚本 |
 | [docs/architecture.md](docs/architecture.md) | 模块 / 错误 / 写安全 |
 | [docs/implementation-plan.md](docs/implementation-plan.md) | 分期 |
 | [docs/acceptance.md](docs/acceptance.md) | 验收 |

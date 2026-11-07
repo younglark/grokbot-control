@@ -1,0 +1,239 @@
+====================================================================
+messages  2736 -> 2922   (+186 -0 ~71)
+enums     349 -> 387
+services  7 -> 7
+====================================================================
+
+--- new messages ---
+  + agent.v1.ExecuteArgs
+  + agent.v1.ExecuteError
+  + agent.v1.ExecuteRejected
+  + agent.v1.ExecuteResult
+  + agent.v1.ExecuteSuccess
+  + agent.v1.ExecuteToolCall
+  + agent.v1.ManageAccessArgs
+  + agent.v1.ManageAccessError
+  + agent.v1.ManageAccessGrant
+  + agent.v1.ManageAccessResult
+  + agent.v1.ManageAccessSuccess
+  + agent.v1.ManageAccessTarget
+  + agent.v1.ManageAccessToolCall
+  + agent.v1.McpAppDocument
+  + aiserver.v1.ActOnGrokBotMeetingPromptRequest
+  + aiserver.v1.ActOnGrokBotMeetingPromptResponse
+  + aiserver.v1.AdminApplyGrokBotAccountMigrationRequest
+  + aiserver.v1.AdminApplyGrokBotAccountMigrationResponse
+  + aiserver.v1.AdminCancelGrokBotAccountMigrationsRequest
+  + aiserver.v1.AdminCancelGrokBotAccountMigrationsResponse
+  + aiserver.v1.AdminCleanGrokBotAccountMigrationRequest
+  + aiserver.v1.AdminCleanGrokBotAccountMigrationResponse
+  + aiserver.v1.AdminFailGrokBotAccountMigrationExportStartRequest
+  + aiserver.v1.AdminFailGrokBotAccountMigrationExportStartResponse
+  + aiserver.v1.AdminGetGrokBotAccountMigrationHeldSummaryRequest
+  + aiserver.v1.AdminGetGrokBotAccountMigrationHeldSummaryResponse
+  + aiserver.v1.AdminGetGrokBotAccountMigrationRequest
+  + aiserver.v1.AdminGetGrokBotAccountMigrationResponse
+  + aiserver.v1.AdminGetGrokBotAgentResourcesRequest
+  + aiserver.v1.AdminGetGrokBotAgentResourcesResponse
+  + aiserver.v1.AdminGetSandBoxActiveVmRequest
+  + aiserver.v1.AdminGetSandBoxActiveVmResponse
+  + aiserver.v1.AdminListGrokBotAccountMigrationLedgerRequest
+  + aiserver.v1.AdminListGrokBotAccountMigrationLedgerResponse
+  + aiserver.v1.AdminListGrokBotAccountMigrationsRequest
+  + aiserver.v1.AdminListGrokBotAccountMigrationsResponse
+  + aiserver.v1.AdminOverrideGrokBotAccountMigrationItemRequest
+  + aiserver.v1.AdminOverrideGrokBotAccountMigrationItemResponse
+  + aiserver.v1.AdminProposeGrokBotAccountMigrationPairsRequest
+  + aiserver.v1.AdminProposeGrokBotAccountMigrationPairsResponse
+  ... and 146 more
+
+--- removed messages ---
+
+--- changed messages ---
+  ~ agent.v1.McpSuccess
+      +6:mcp_app_document:agent.v1.McpAppDocument
+  ~ agent.v1.NewCloudVmTarget
+      +4:environment_id:string?
+      +5:repo_url:string?
+  ~ agent.v1.ShellArgs
+      +25:smart_mode_classifier_allowed:bool
+  ~ agent.v1.ToolCall
+      +95:manage_access_tool_call:agent.v1.ManageAccessToolCall
+      +1000:execute_tool_call:agent.v1.ExecuteToolCall
+  ~ agent.v1.WriteCanvasSuccess
+      +5:audience_notice:string?
+  ~ aiserver.v1.AdminBreakGlassDeleteSandBoxPodRequest
+      +6:tenant_id:string
+  ~ aiserver.v1.AdminBreakGlassDeleteSandBoxPodResponse
+      +6:recreated_tenant_id:string
+  ~ aiserver.v1.AppsSettings
+      +4:allow_api_key_access:bool?
+  ~ aiserver.v1.AvailableModelsResponse.AvailableModel
+      +49:gateway_published_model_id:string?
+  ~ aiserver.v1.CheckHttpMcpStatusRequest
+      +19:texted_sign_in:bool?
+      +20:grok_bot_session_id:string?
+      +21:connector_suite_capable:bool?
+      +22:connector_suite:aiserver.v1.ConnectorSuiteSelection?
+  ~ aiserver.v1.CheckHttpMcpStatusResponse.ServerStatus
+      +12:cloud_verdict:aiserver.v1.McpCloudVerdict
+      +13:connector_suite_offer:aiserver.v1.ConnectorSuiteOffer?
+      +14:connector_suite_exposure:aiserver.v1.ConnectorSuiteExposure
+  ~ aiserver.v1.CloudCanvasMetadata
+      +18:project_share:aiserver.v1.CanvasProjectShare?
+  ~ aiserver.v1.CommandDescriptor
+      +5:source_repo_url:string?
+  ~ aiserver.v1.CompleteMcpOAuthResponse
+      +5:connector_suite_result:aiserver.v1.ConnectorSuiteMemberResult*
+  ~ aiserver.v1.CompleteOnePasswordOAuthRequest
+      +4:error_description:string
+  ~ aiserver.v1.CreateGrokBotAgentFromTemplateRequest
+      +9:onboarding_connect_screen_shown:bool?
+  ~ aiserver.v1.CreateGrokBotAgentRequest
+      +18:visibility:aiserver.v1.GrokBotAgentVisibility?
+      +19:team_id:int32?
+      +20:bot_builder_requested:bool?
+  ~ aiserver.v1.DeleteMcpOAuthAccountRequest
+      +4:grok_bot_plugin_scope:aiserver.v1.GrokBotPluginScope?
+      +5:grok_bot_agent_id:string?
+      +6:grok_bot_session_id:string?
+  ~ aiserver.v1.ExecuteSandMcpToolRequest
+      +12:refuse_shared_payment_token_arguments:bool
+  ~ aiserver.v1.GetAvailableMcpServersRequest
+      +4:service_account_id:string?
+      +5:grok_bot_session_id:string?
+  ~ aiserver.v1.GetAvailableMcpServersResponse.McpServerInfo
+      +32:disabled_by_cloud_agent_mcp_allowlist:bool?
+  ~ aiserver.v1.GetDailySpendByCategoryRequest
+      +14:ranking_metric:aiserver.v1.DailySpendRankingMetric?
+  ~ aiserver.v1.GetGrokBotAgentAccessRequest
+      +3:query:string?
+      +4:people_cursor:string
+      +5:shows_bot_team_first:bool
+  ~ aiserver.v1.GetGrokBotAgentAccessResponse
+      +8:listed_people:aiserver.v1.GrokBotAccessPersonDirectoryEntry*
+      +9:listed_groups:aiserver.v1.GrokBotAccessGroupDirectoryEntry*
+      +10:candidate_people:aiserver.v1.GrokBotAccessPersonDirectoryEntry*
+      +11:next_people_cursor:string
+      +12:candidate_groups:aiserver.v1.GrokBotAccessGroupDirectoryEntry*
+      +13:candidate_teams:aiserver.v1.GrokBotAccessTeamDirectoryEntry*
+      ... 1 more field diffs
+  ~ aiserver.v1.GetGrokBotAgentPluginsResponse
+      -7:custom_mcp_per_user:bool?
+      +8:offered_service_account_plugin_ids:int64*
+  ~ aiserver.v1.GetGrokBotEgressPolicyResponse
+      +4:private_destination_rules:aiserver.v1.GrokBotPrivateDestinationRule*
+  ~ aiserver.v1.GetGrokBotMessagingLinkStatusResponse
+      +3:disabled_by_team_admin:bool
+  ~ aiserver.v1.GetGrokBotOnboardingDripInternalResponse
+      +3:router:aiserver.v1.GrokBotOnboardingDripRouter
+  ~ aiserver.v1.GetGrokBotTeamsInstallStateRequest
+      +3:check_now:bool?
+  ~ aiserver.v1.GetGrokBotTeamsInstallStateResponse
+      +26:check_outcome:string?
+      +27:checked_at_ms:int64?
+      +28:check_again_after_ms:uint32?
+      +29:teams_admin_center_url:string?
+      +30:teams_home_url:string?
+  ~ aiserver.v1.GetGrokBotUserRuntimeSettingsRequest
+      +1:after_main_agent_change:bool
+  ~ aiserver.v1.GetMeResponse
+      +22:signup_source:string?
+      +23:admin_session_management_enabled:bool
+  ~ aiserver.v1.GetSandAccessStatusResponse
+      +20:grok_connectors_only:bool
+  ~ aiserver.v1.GetSandUsageStatusResponse
+      +27:upgrade_option:aiserver.v1.SandUpgradeOption?
+  ~ aiserver.v1.GetSlackInstallUrlRequest
+      +7:reconnect_slack_team_id:string?
+  ~ aiserver.v1.GetSlackUserSettingsResponse
+      +15:origin_link_unfurls_enabled:bool?
+  ~ aiserver.v1.GetTeamAdminSettingsRequest
+      +2:supports_host_mcp_bridge_exemption:bool?
+  ~ aiserver.v1.GetTeamAdminSettingsResponse
+      +99:cloud_agent_mcp_allowlist_applied:bool?
+      +100:grok_bot_texting_controls:aiserver.v1.GrokBotTextingControls?
+      +101:grok_bot_wall_snapshot_controls:aiserver.v1.GrokBotWallSnapshotControls?
+      +102:sand_box_sudo_not_applied_box_count:uint32?
+  ~ aiserver.v1.GetTeamTailnetResponse
+      +18:allow_unlabeled:bool?
+  ~ aiserver.v1.GrokBotAccessCrossTierDirectory
+      +4:organization_team_count:uint32
+  ... and 31 more
+
+--- enum changes ---
+  ~ aiserver.v1.BackgroundComposerSource
+      38: None -> BACKGROUND_COMPOSER_SOURCE_EMAIL
+  ~ aiserver.v1.BackgroundComposerUpdateKind
+      16: None -> BACKGROUND_COMPOSER_UPDATE_KIND_PROJECT_APPS_CHANGED
+  ~ aiserver.v1.GrokBotUserSettingsField
+      11: None -> GROK_BOT_USER_SETTINGS_FIELD_CART
+  ~ aiserver.v1.SlackConnectSource
+      23: None -> SLACK_CONNECT_SOURCE_GLASS_UNATTRIBUTED
+      24: None -> SLACK_CONNECT_SOURCE_IDE_UNATTRIBUTED
+      25: None -> SLACK_CONNECT_SOURCE_WEB_UNATTRIBUTED
+      26: None -> SLACK_CONNECT_SOURCE_GROK_BOT_UNATTRIBUTED
+  ~ aiserver.v1.SpendGroupByCategory
+      6: None -> SPEND_GROUP_BY_CATEGORY_USER
+  (5 enums changed, +38 new, -0 removed)
+
+--- service / RPC changes ---
+  methods 607 -> 661
+
+  aiserver.v1.DashboardService
+    + GetGrokBotUsageBreakdown(aiserver.v1.GetGrokBotUsageBreakdownRequest) -> aiserver.v1.GetGrokBotUsageBreakdownResponse [Unary]
+    + GetSandEnterpriseSpendLimit(aiserver.v1.GetSandEnterpriseSpendLimitRequest) -> aiserver.v1.GetSandEnterpriseSpendLimitResponse [Unary]
+    + ListSlackLinkedWorkspaces(aiserver.v1.ListSlackLinkedWorkspacesRequest) -> aiserver.v1.ListSlackLinkedWorkspacesResponse [Unary]
+    + RunCanvasConnectorAction(aiserver.v1.RunCanvasConnectorActionRequest) -> aiserver.v1.RunCanvasConnectorActionResponse [Unary]
+    + SetSandAutomationSlackWorkspace(aiserver.v1.SetSandAutomationSlackWorkspaceRequest) -> aiserver.v1.SetSandAutomationSlackWorkspaceResponse [Unary]
+
+  aiserver.v1.GrokBotService
+    + ActOnGrokBotMeetingPrompt(aiserver.v1.ActOnGrokBotMeetingPromptRequest) -> aiserver.v1.ActOnGrokBotMeetingPromptResponse [Unary]
+    + AdminApplyGrokBotAccountMigration(aiserver.v1.AdminApplyGrokBotAccountMigrationRequest) -> aiserver.v1.AdminApplyGrokBotAccountMigrationResponse [Unary]
+    + AdminCancelGrokBotAccountMigrations(aiserver.v1.AdminCancelGrokBotAccountMigrationsRequest) -> aiserver.v1.AdminCancelGrokBotAccountMigrationsResponse [Unary]
+    + AdminCleanGrokBotAccountMigration(aiserver.v1.AdminCleanGrokBotAccountMigrationRequest) -> aiserver.v1.AdminCleanGrokBotAccountMigrationResponse [Unary]
+    + AdminFailGrokBotAccountMigrationExportStart(aiserver.v1.AdminFailGrokBotAccountMigrationExportStartRequest) -> aiserver.v1.AdminFailGrokBotAccountMigrationExportStartResponse [Unary]
+    + AdminGetGrokBotAccountMigration(aiserver.v1.AdminGetGrokBotAccountMigrationRequest) -> aiserver.v1.AdminGetGrokBotAccountMigrationResponse [Unary]
+    + AdminGetGrokBotAccountMigrationHeldSummary(aiserver.v1.AdminGetGrokBotAccountMigrationHeldSummaryRequest) -> aiserver.v1.AdminGetGrokBotAccountMigrationHeldSummaryResponse [Unary]
+    + AdminGetGrokBotAgentResources(aiserver.v1.AdminGetGrokBotAgentResourcesRequest) -> aiserver.v1.AdminGetGrokBotAgentResourcesResponse [Unary]
+    + AdminGetSandBoxActiveVm(aiserver.v1.AdminGetSandBoxActiveVmRequest) -> aiserver.v1.AdminGetSandBoxActiveVmResponse [Unary]
+    + AdminListGrokBotAccountMigrationLedger(aiserver.v1.AdminListGrokBotAccountMigrationLedgerRequest) -> aiserver.v1.AdminListGrokBotAccountMigrationLedgerResponse [Unary]
+    + AdminListGrokBotAccountMigrations(aiserver.v1.AdminListGrokBotAccountMigrationsRequest) -> aiserver.v1.AdminListGrokBotAccountMigrationsResponse [Unary]
+    + AdminOverrideGrokBotAccountMigrationItem(aiserver.v1.AdminOverrideGrokBotAccountMigrationItemRequest) -> aiserver.v1.AdminOverrideGrokBotAccountMigrationItemResponse [Unary]
+    + AdminProposeGrokBotAccountMigrationPairs(aiserver.v1.AdminProposeGrokBotAccountMigrationPairsRequest) -> aiserver.v1.AdminProposeGrokBotAccountMigrationPairsResponse [Unary]
+    + AdminResolveGrokBotAccountMigrationPairs(aiserver.v1.AdminResolveGrokBotAccountMigrationPairsRequest) -> aiserver.v1.AdminResolveGrokBotAccountMigrationPairsResponse [Unary]
+    + AdminRetryGrokBotAccountMigrations(aiserver.v1.AdminRetryGrokBotAccountMigrationsRequest) -> aiserver.v1.AdminRetryGrokBotAccountMigrationsResponse [Unary]
+    + AdminStartGrokBotDream(aiserver.v1.AdminStartGrokBotDreamRequest) -> aiserver.v1.AdminStartGrokBotDreamResponse [Unary]
+    + AdminSubmitGrokBotAccountMigrations(aiserver.v1.AdminSubmitGrokBotAccountMigrationsRequest) -> aiserver.v1.AdminSubmitGrokBotAccountMigrationsResponse [Unary]
+    + AnswerGrokBotLabelerQuestion(aiserver.v1.AnswerGrokBotLabelerQuestionRequest) -> aiserver.v1.AnswerGrokBotLabelerQuestionResponse [Unary]
+    + AnswerGrokBotMessagingCard(aiserver.v1.AnswerGrokBotMessagingCardRequest) -> aiserver.v1.AnswerGrokBotMessagingCardResponse [Unary]
+    + CreateGrokBotOnboardingDripRouteInternal(aiserver.v1.CreateGrokBotOnboardingDripRouteInternalRequest) -> aiserver.v1.GrokBotOnboardingDripRouter [Unary]
+    + DeleteGrokBotUserProfilePhoto(aiserver.v1.DeleteGrokBotUserProfilePhotoRequest) -> aiserver.v1.DeleteGrokBotUserProfilePhotoResponse [Unary]
+    + GenerateGrokBotTryOnImage(aiserver.v1.GenerateGrokBotTryOnImageRequest) -> aiserver.v1.GenerateGrokBotTryOnImageResponse [Unary]
+    + GetGrokBotInviteByEmailAccess(aiserver.v1.GetGrokBotInviteByEmailAccessRequest) -> aiserver.v1.GetGrokBotInviteByEmailAccessResponse [Unary]
+    + GetGrokBotMessagingCard(aiserver.v1.GetGrokBotMessagingCardRequest) -> aiserver.v1.GetGrokBotMessagingCardResponse [Unary]
+    + GetGrokBotPlaceDetails(aiserver.v1.GetGrokBotPlaceDetailsRequest) -> aiserver.v1.GetGrokBotPlaceDetailsResponse [Unary]
+    + GetGrokBotUserProfile(aiserver.v1.GetGrokBotUserProfileRequest) -> aiserver.v1.GetGrokBotUserProfileResponse [Unary]
+    + ListGrokBotCartItems(aiserver.v1.ListGrokBotCartItemsRequest) -> aiserver.v1.ListGrokBotCartItemsResponse [Unary]
+    + ListGrokBotTryOnImages(aiserver.v1.ListGrokBotTryOnImagesRequest) -> aiserver.v1.ListGrokBotTryOnImagesResponse [Unary]
+    + LookupGrokBotShoppingProduct(aiserver.v1.LookupGrokBotShoppingProductRequest) -> aiserver.v1.LookupGrokBotShoppingProductResponse [Unary]
+    + MakeGrokBotAgentFilePrivate(aiserver.v1.MakeGrokBotAgentFilePrivateRequest) -> aiserver.v1.MakeGrokBotAgentFilePrivateResponse [Unary]
+    + MakeGrokBotAgentSkillPrivate(aiserver.v1.MakeGrokBotAgentSkillPrivateRequest) -> aiserver.v1.MakeGrokBotAgentSkillPrivateResponse [Unary]
+    + PollGrokBotCalendarEvents(aiserver.v1.PollGrokBotCalendarEventsRequest) -> aiserver.v1.PollGrokBotCalendarEventsResponse [Unary]
+    + RemoveGrokBotCartItems(aiserver.v1.RemoveGrokBotCartItemsRequest) -> aiserver.v1.RemoveGrokBotCartItemsResponse [Unary]
+    + RemoveGrokBotOnboardingDripRouteInternal(aiserver.v1.RemoveGrokBotOnboardingDripRouteInternalRequest) -> aiserver.v1.GrokBotOnboardingDripRouter [Unary]
+    + ReorderGrokBotOnboardingDripRoutesInternal(aiserver.v1.ReorderGrokBotOnboardingDripRoutesInternalRequest) -> aiserver.v1.GrokBotOnboardingDripRouter [Unary]
+    + ReportGrokBotMessagingCapabilities(aiserver.v1.ReportGrokBotMessagingCapabilitiesRequest) -> aiserver.v1.ReportGrokBotMessagingCapabilitiesResponse [Unary]
+    + ReportSandBoxStoreFlush(aiserver.v1.ReportSandBoxStoreFlushRequest) -> aiserver.v1.ReportSandBoxStoreFlushResponse [Unary]
+    + ResolveGrokBotFlightBookingLink(aiserver.v1.ResolveGrokBotFlightBookingLinkRequest) -> aiserver.v1.ResolveGrokBotFlightBookingLinkResponse [Unary]
+    + SearchGrokBotSimilarProducts(aiserver.v1.SearchGrokBotSimilarProductsRequest) -> aiserver.v1.SearchGrokBotSimilarProductsResponse [Unary]
+    + SearchGrokBotTranscripts(aiserver.v1.SearchGrokBotTranscriptsRequest) -> aiserver.v1.SearchGrokBotTranscriptsResponse [Unary]
+    + SendGrokBotOnboardingDripStepNowInternal(aiserver.v1.SendGrokBotOnboardingDripStepNowInternalRequest) -> aiserver.v1.SendGrokBotOnboardingDripStepNowInternalResponse [Unary]
+    + SetGrokBotAgentRoutineForTeam(aiserver.v1.SetGrokBotAgentRoutineForTeamRequest) -> aiserver.v1.SetGrokBotAgentRoutineForTeamResponse [Unary]
+    + SetGrokBotCartItem(aiserver.v1.SetGrokBotCartItemRequest) -> aiserver.v1.SetGrokBotCartItemResponse [Unary]
+    + SetGrokBotOnboardingDripRouterStatusInternal(aiserver.v1.SetGrokBotOnboardingDripRouterStatusInternalRequest) -> aiserver.v1.GrokBotOnboardingDripRouter [Unary]
+    + SetGrokBotUserProfilePhoto(aiserver.v1.SetGrokBotUserProfilePhotoRequest) -> aiserver.v1.SetGrokBotUserProfilePhotoResponse [Unary]
+    + SummarizeGrokBotTeamReviewItems(aiserver.v1.SummarizeGrokBotTeamReviewItemsRequest) -> aiserver.v1.SummarizeGrokBotTeamReviewItemsResponse [Unary]
+    + UpdateGrokBotMeetingSettings(aiserver.v1.UpdateGrokBotMeetingSettingsRequest) -> aiserver.v1.UpdateGrokBotMeetingSettingsResponse [Unary]
+    + UpdateGrokBotOnboardingDripRouteInternal(aiserver.v1.UpdateGrokBotOnboardingDripRouteInternalRequest) -> aiserver.v1.GrokBotOnboardingDripRouter [Unary]
+    + WatchGrokBotCalendarEvents(aiserver.v1.WatchGrokBotCalendarEventsRequest) -> aiserver.v1.WatchGrokBotCalendarEventsEvent [ServerStreaming]
