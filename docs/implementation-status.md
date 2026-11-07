@@ -10,7 +10,7 @@
 | progress status/todos/tasks/subagents/interrupt | ✅ | ✅ | ✅ | ✅ mock | ❌ |
 | SidebarSections CRUD/move + base | ✅ | ✅ | ✅ | ✅ conflict | ❌ |
 | Room | unsupported | — | — | — | — |
-| Auth begin/poll/refresh（注入 fetch） | 部分 | whoami | — | ✅ fake fetch | ❌ 真实登录未做 |
+| Auth login-begin/complete/poll/refresh/logout（证据驱动，静态逆向） | ✅ | ✅ login_begin/complete/cancel/logout | ✅ | ✅ fake fetch + 本地 fake 后端跨进程 | ✅ 真实浏览器登录 + 只读 RPC（bot list/sidebar list/status）一次人工验证；❌ refresh（需配置 client_id）与写操作未 live 验 |
 | unknown 丢响应 / 不盲重试 | ✅ | ✅ | ✅ | ✅ | — |
 
 `simulated: true` 仅 mock。Live 列始终未验证。

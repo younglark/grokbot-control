@@ -1,5 +1,6 @@
 import { createClient } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-node";
+import { Code, ConnectError } from "@connectrpc/connect";
 import type { Interceptor, Transport } from "@connectrpc/connect";
 import { GrokBotService } from "#proto-gen/GrokBotService";
 import type { AuthProvider } from "../auth/types.js";
@@ -20,8 +21,18 @@ export type ConnectConfig = {
 
 export function createAuthInterceptor(auth: AuthProvider): Interceptor {
   return (next) => async (req) => {
-    const token = await auth.getAccessToken();
-    if (token) req.header.set("authorization", `Bearer ${token}`);
+    let token: string | undefined;
+    try {
+      token = await auth.getAccessToken();
+    } catch (e) {
+      // Fail locally (request NOT sent) as Unauthenticated -> exit 4; never include token text.
+      const msg = e instanceof GbcError ? e.message : "credential load/refresh failed";
+      throw new ConnectError(`${msg} (request not sent)`, Code.Unauthenticated);
+    }
+    if (!token) {
+      throw new ConnectError("not logged in: run `gbc auth login` (request not sent)", Code.Unauthenticated);
+    }
+    req.header.set("authorization", `Bearer ${token}`);
     return next(req);
   };
 }

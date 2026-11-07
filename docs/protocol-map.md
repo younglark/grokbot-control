@@ -69,3 +69,35 @@ App 行为旁证：Linux **0.79.2** `main-app.pretty.cjs`（静态，未登录�
 - Real error code for a stale `sidebar_sections_base` (assumed `failed_precondition`/"conflict").
 - Whether the server reorders `agent_ids` (treated as unordered) or sections (treated as ordered).
 - Sidebar cleanup after bot delete; idempotency of `message_id`/`agent_id` on retry.
+
+## Auth (independent Cursor browser login)
+
+Source: STATIC reverse engineering of Grok Bot Linux 0.79.2 (`/workspace/grokbot-linux-auth-analysis.md`,
+`evidence/main-app.pretty.cjs` = A, `main-core.pretty.cjs` = C). Not official public documentation.
+
+| Step | Implementation | Evidence |
+|---|---|---|
+| Challenge | verifier = base64url(32 random bytes); challenge = base64url(SHA256(verifier)); uuid v4 | A:38644-38657 |
+| Login URL | `https://cursor.com/loginDeepControl?challenge&uuid&mode=login&redirectTarget=cli` | A:38644-38657, A:38845 (library default `cli`; App uses `sand`, A:49834) |
+| Poll | `GET {backend}/auth/poll?uuid&verifier`; 404 pending; 1s×1.2^i ≤10s; ≤150 tries; 3 consecutive non-404 → stop; 403 `sign_in_policy_violation` → denied | A:38720-38816 |
+| Result | `{accessToken, refreshToken}` stored; `{xaiAccessToken,…}` → unsupported | A:38584-38622 |
+| Refresh | `POST {backend}/oauth/token` JSON `{client_id, grant_type:"refresh_token", refresh_token}`; response `{access_token, refresh_token?, shouldLogout?, error?}`; 300s early window | A:56108-56125, A:54459, C:35811 |
+| client_id | App picks a public id per backend (C:35866-35869). **Not embedded**; set `GBT_OAUTH_CLIENT_ID` explicitly | analysis §6 |
+
+CLI: `auth login-begin` → `auth complete [--timeout 1..900]` (cross-process via 0600 pending file, 15 min TTL),
+or `auth login`; `auth poll` (single), `auth cancel`, `auth refresh`, `auth whoami`, `auth logout` (local only).
+MCP: `auth_whoami`, `auth_login_begin`, `auth_login_complete` (≤120 s), `auth_login_cancel`, `auth_logout`
+(available in `GBT_MCP_READONLY=1`). Failure semantics: refresh network/5xx → retryable, creds kept;
+4xx/bad payload → creds kept; `shouldLogout` → local cred removed. Missing/expired token → `unauthenticated`
+(exit 4) before any RPC is sent.
+
+### Live status (2026-11-07, one manual run)
+- Verified live: browser login (`loginDeepControl`, `redirectTarget=cli`) → `GET /auth/poll` → Cursor token (kind `cursor`, backend api2);
+  read-only RPCs `ListGrokBotAgents`, `GetGrokBotUserRuntimeSettings` (sidebar), `ListGrokBotAgentStatuses` succeeded with only `authorization: Bearer`.
+- NOT verified live: token refresh (`GBT_OAUTH_CLIENT_ID` still must be configured), all write RPCs, history/session/todos/tasks.
+
+### Auth items still unverified live
+- Whether `supportsSelectedTeamLogin` / team selection (`x-cursor-team-id`) is needed for Grok Bot RPCs.
+- Whether write RPCs need App headers (`x-cursor-client-type`, version, `x-ghost-mode`, …); reads worked with Bearer only.
+- Which public client_id is appropriate for a third-party tool; refresh is off until configured.
+- Login/refresh device-policy header `x-cursor-mdm-signin-policy` is not sent (not forged).

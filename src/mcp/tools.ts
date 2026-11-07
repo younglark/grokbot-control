@@ -10,7 +10,10 @@ export type ToolDef = {
   description: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   inputSchema: z.ZodObject<any>;
+  /** Does not mutate Grok Bot server state (safe in read-only toolsets). */
   readOnly?: boolean;
+  /** Local auth-state tool (changes only this tool's own credential files). */
+  authTool?: boolean;
   handler: (plane: ControlPlane, args: Record<string, unknown>) => Promise<ResultEnvelope>;
 };
 
@@ -252,33 +255,44 @@ export function buildTools(opts?: { readOnly?: boolean }): ToolDef[] {
     },
     {
       name: "auth_whoami",
-      description: "Local credential presence (does not print tokens)",
+      description: "Local credential status (no network; never returns tokens)",
       readOnly: true,
       inputSchema: z.object({}),
-      handler: async (p) => {
-        if (!p.auth) {
-          return {
-            schema_version: "1.0.0",
-            ok: false,
-            outcome: "known_failure",
-            code: "auth",
-            retryable: false,
-            request_id: crypto.randomUUID(),
-            error: { message: "no auth provider" },
-          };
-        }
-        const w = await p.auth.whoamiLocal();
-        return {
-          schema_version: "1.0.0",
-          ok: true,
-          outcome: "known_success",
-          code: "ok",
-          retryable: false,
-          request_id: crypto.randomUUID(),
-          data: w,
-          simulated: p.simulated,
-        };
-      },
+      handler: (p) => p.authOps.whoami(),
+    },
+    {
+      name: "auth_login_begin",
+      description:
+        "Start independent Cursor browser login. Returns authorization_url for the user to open; verifier stays in a 0600 pending file.",
+      readOnly: true,
+      authTool: true,
+      inputSchema: z.object({}),
+      handler: (p) => p.authOps.begin(),
+    },
+    {
+      name: "auth_login_complete",
+      description:
+        "Poll the pending login until signed in or timeout (default 60s, max 120s). Returns auth_pending (retryable) if not yet signed in.",
+      readOnly: true,
+      authTool: true,
+      inputSchema: z.object({ timeout_seconds: z.number().int().min(1).max(120).optional() }),
+      handler: (p, a) => p.authOps.complete((a.timeout_seconds as number | undefined) ?? 60),
+    },
+    {
+      name: "auth_login_cancel",
+      description: "Discard the pending login (local only)",
+      readOnly: true,
+      authTool: true,
+      inputSchema: z.object({}),
+      handler: (p) => p.authOps.cancel(),
+    },
+    {
+      name: "auth_logout",
+      description: "Remove this tool's own local credential (does not revoke server session or touch the App)",
+      readOnly: true,
+      authTool: true,
+      inputSchema: z.object({}),
+      handler: (p) => p.authOps.logout(),
     },
   ];
   if (opts?.readOnly) return all.filter((t) => t.readOnly);

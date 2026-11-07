@@ -1,5 +1,6 @@
 import type { AuthProvider } from "../auth/types.js";
 import { createGrokBotClient, type ConnectConfig, type GrokBotClient } from "../connect/client.js";
+import { AuthOps } from "./auth.js";
 import { BotOps } from "./bot.js";
 import { MessageOps } from "./message.js";
 import { ProgressOps } from "./progress.js";
@@ -19,6 +20,7 @@ export class ControlPlane {
   readonly progress: ProgressOps;
   readonly sidebar: SidebarOps;
   readonly auth?: AuthProvider;
+  readonly authOps: AuthOps;
   readonly simulated: boolean;
 
   constructor(opts: ControlPlaneOptions) {
@@ -26,6 +28,7 @@ export class ControlPlane {
     this.simulated = Boolean(opts.simulated);
     this.client = createGrokBotClient(opts);
     const f = { simulated: this.simulated };
+    this.authOps = new AuthOps(this.auth, f);
     this.bot = new BotOps(this.client, f);
     this.message = new MessageOps(this.client, f);
     this.session = new SessionOps(this.client, f);

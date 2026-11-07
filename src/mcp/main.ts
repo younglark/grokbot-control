@@ -33,7 +33,9 @@ async function main() {
         title: t.name,
         description: t.description,
         inputSchema: t.inputSchema.shape,
-        annotations: t.readOnly
+        annotations: t.authTool
+          ? { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true }
+          : t.readOnly
           ? { readOnlyHint: true, openWorldHint: true }
           : { readOnlyHint: false, destructiveHint: t.name.includes("delete"), openWorldHint: true },
       },

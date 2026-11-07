@@ -25,29 +25,47 @@ async function main(): Promise<number> {
     };
 
     let code = 0;
-    if (noun === "auth" && verb === "whoami") {
-      if (!plane.auth) usageExit("no auth provider");
-      code = emitResult(okResult(await plane.auth.whoamiLocal()), asJson);
-    } else if (noun === "auth" && verb === "login-begin") {
-      if (!plane.auth) usageExit("no auth provider");
-      if (globals.mock) {
-        code = emitResult(
-          failResult("unsupported", "auth login-begin against mock is a stub; inject fetch for unit tests", {
-            hint: "Live browser login is incomplete/unverified.",
-          }),
-          asJson,
-        );
+    if (noun === "auth") {
+      const ops = plane.authOps;
+      if (verb === "whoami" || verb === "status") {
+        code = emitResult(await ops.whoami(), asJson);
+      } else if (verb === "login-begin") {
+        code = emitResult(await ops.begin(), asJson);
+      } else if (verb === "poll") {
+        code = emitResult(await ops.poll(), asJson);
+      } else if (verb === "complete" || verb === "login") {
+        const timeout = flag(rest, "--timeout");
+        if (timeout !== undefined && !/^\d+$/.test(timeout)) usageExit("--timeout must be an integer number of seconds", "--timeout=300");
+        if (verb === "login") {
+          const begin = await ops.begin();
+          if (!begin.ok) {
+            code = emitResult(begin, asJson);
+            persistMockState();
+            return code;
+          }
+          // Human-facing URL goes to stderr; stdout carries only the final result.
+          process.stderr.write(
+            JSON.stringify({ event: "open_browser", authorization_url: (begin.data as { authorization_url: string }).authorization_url }) + "\n",
+          );
+        }
+        const ac = new AbortController();
+        const onSig = () => ac.abort();
+        process.once("SIGINT", onSig);
+        process.once("SIGTERM", onSig);
+        try {
+          code = emitResult(await ops.complete(timeout === undefined ? undefined : Number(timeout), ac.signal), asJson);
+        } finally {
+          process.off("SIGINT", onSig);
+          process.off("SIGTERM", onSig);
+        }
+      } else if (verb === "cancel") {
+        code = emitResult(await ops.cancel(), asJson);
+      } else if (verb === "refresh") {
+        code = emitResult(await ops.refresh(), asJson);
+      } else if (verb === "logout") {
+        code = emitResult(await ops.logout(), asJson);
       } else {
-        const begin = await plane.auth.beginLogin();
-        code = emitResult(
-          okResult({
-            authorization_url: begin.authorization_url,
-            state: begin.state,
-            note: begin.note,
-            poll_token: "[held-in-memory-only-not-returned-in-cli]",
-          }),
-          asJson,
-        );
+        usageExit(`unknown command: auth ${verb}`, "gbc auth whoami|login|login-begin|complete|poll|cancel|refresh|logout");
       }
     } else if (noun === "bot" && verb === "list") {
       code = emitResult(await plane.bot.list({ limit: parseCliLimit(flag(rest, "--limit")) }), asJson);

@@ -28,14 +28,27 @@ node dist/cli/main.js --mock --json --allow-writes bot delete --agent-id <id> --
 GBT_MOCK=1 node dist/mcp/main.js
 ```
 
-Live Connect（需另授真实登录）：
+Live Connect（真实登录需用户本人在浏览器授权；本仓库测试只用本地 fake 后端）：
 
 ```bash
-export GBT_BASE_URL=https://api2.cursor.sh
-export GBT_AUTH_KIND=cursor
-# 完成独立 auth 后：
-node dist/cli/main.js --json --allow-writes bot list
+# 不要设置 GBT_MOCK / GBT_ALLOW_WRITES；默认 backend https://api2.cursor.sh，网站 https://cursor.com
+node dist/cli/main.js --json auth login-begin        # stdout: authorization_url（不含 verifier）
+#   → 用户在浏览器打开该 URL 并登录
+node dist/cli/main.js --json auth complete --timeout 300   # 轮询 GET /auth/poll；成功后凭据写入 ~/.gbc（0600）
+# 或单命令：auth login --timeout 300（URL 走 stderr 的 open_browser 事件，stdout 只放结果）
+node dist/cli/main.js --json auth whoami             # 本地状态，不联网、不打印 token
+node dist/cli/main.js --json bot list --limit 20     # 只读
+node dist/cli/main.js --json sidebar list
+node dist/cli/main.js --json bot status --agent-id <agent_id>
+node dist/cli/main.js --json auth logout             # 只删本工具自己的本地凭据
 ```
+
+鉴权限制（详见 docs/protocol-map.md「Auth」）：
+- 协议来自 Grok Bot Linux 0.79.2 **静态逆向**，非官方公开 API。2026-11-07 已人工验证一次：浏览器登录 + 只读 `bot list` / `sidebar list` / `bot status` 成功；刷新与所有写操作**未** live 验证。
+- 仅支持 Cursor token；xAI identity 登录结果返回 `unsupported`。
+- 刷新需显式配置公开 OAuth client_id：`GBT_OAUTH_CLIENT_ID`（本工具不内置）。未配置时 token 过期后需重新登录。
+- 凭据独立于 App（不读取、不复用 App 的 sand-secrets.json）。logout 只删本地文件，不吊销服务端会话。
+- MCP：`GBT_MCP_READONLY=1 node dist/mcp/main.js` 提供 `auth_whoami / auth_login_begin / auth_login_complete(≤120s) / auth_login_cancel / auth_logout` + 只读工具。
 
 ## 文档
 
