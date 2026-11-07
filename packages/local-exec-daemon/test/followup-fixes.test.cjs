@@ -1,7 +1,7 @@
 'use strict';
 const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const path=require('node:path');const os=require('node:os');
 const {loadSettings}=require('../dist/settings');const {UserComputerProvider}=require('../dist/uc/provider');const {ReplyQueue,HttpStatusError}=require('../dist/transport/replies');
-const {handleShellStream,shutdownShells}=require('../dist/exec/handlers');
+const {handleShellStream,shutdownShells}=require('../dist/exec/handlers'); const {resetExecIdCounter}=require('../dist/exec/handlers');
 const {startUcFakePeer,SYN_CRED,SYN_MACHINE}=require('./helpers/uc-fake-peer.cjs');const wire=require('./helpers/wire-oracle.cjs');
 const delay=ms=>new Promise(r=>setTimeout(r,ms));async function until(f,ms=6000){const end=Date.now()+ms;while(Date.now()<end){if(f())return;await delay(20)}throw Error('deadline')}
 function temp(){return fs.mkdtempSync(path.join(os.tmpdir(),'local-exec-daemon-followup-'))}
@@ -92,6 +92,7 @@ test('Poll limit follows admission capacity; queue IDs acknowledged separately f
  try{await p.pollOnce();assert.equal(limit,2);assert.deepEqual(p.pendingAcks,['queue-a','queue-b']);assert.equal(p.backlog.length,62);assert.equal(got.length,0,'official startRequest suppresses in-flight duplicate without extra response')}finally{await new Promise(r=>server.close(r))}
 });
 test('outer malformed throw-only versus inner unsupported throw+close matches isolated original oracle', {timeout:5000},async()=>{
+ resetExecIdCounter(1); // server sends id=1; official nextExecId starts at 1 so reply id stays 1
  const expected=require('../scripts/oracles/uc-bad-frames-result.json').frames;const root=temp();setup(root);const old=process.env.SAND_DATA_ROOT;process.env.SAND_DATA_ROOT=root;const peer=startUcFakePeer();await peer.listen();const p=provider(peer,root),run=p.start();
  try{await until(()=>peer.log.some(x=>x.kind==='watch'));peer.enqueueRaw('outer-unknown',wire.encStr(1,'outer-unknown'));peer.enqueueBad('bad-json');peer.enqueueExec('inner-unsupported',{id:1,writeShellStdinArgs:{shellId:'1',chars:'x'}});await until(()=>peer.log.some(x=>x.kind==='submit'&&x.frames.some(f=>f.requestId==='inner-unsupported'&&f.message?.streamClose)));await delay(200);
  const observed=peer.log.filter(x=>x.kind==='submit').flatMap(x=>x.frames);

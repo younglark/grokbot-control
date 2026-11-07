@@ -1,0 +1,17 @@
+syntax = "proto3";
+package aiserver.v1;
+
+import "aiserver.v1.proto";
+
+// 0 messages, 0 enums, 1 services -- reconstructed from proto.cjs
+
+service AnalyticsService {
+  rpc TrackEvents(aiserver.v1.TrackEventsRequest) returns (aiserver.v1.TrackEventsResponse);
+  rpc Batch(aiserver.v1.BatchRequest) returns (aiserver.v1.BatchResponse);
+  rpc BootstrapStatsig(aiserver.v1.BootstrapStatsigRequest) returns (aiserver.v1.BootstrapStatsigResponse);
+  rpc GetFirstWindowStatsigDecision(aiserver.v1.GetFirstWindowStatsigDecisionRequest) returns (aiserver.v1.GetFirstWindowStatsigDecisionResponse);
+  rpc SubmitLogs(aiserver.v1.SubmitLogsRequest) returns (aiserver.v1.SubmitLogsResponse);
+  rpc IngestConversation(aiserver.v1.IngestConversationRequest) returns (aiserver.v1.IngestConversationResponse);
+  rpc UploadIssueTrace(aiserver.v1.UploadIssueTraceRequest) returns (aiserver.v1.UploadIssueTraceResponse);
+  rpc DownloadIssueTraces(aiserver.v1.DownloadIssueTracesRequest) returns (aiserver.v1.DownloadIssueTracesResponse);
+}

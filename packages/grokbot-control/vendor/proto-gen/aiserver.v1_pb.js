@@ -5,7 +5,7 @@
 
 import { Empty, proto3, Struct, Timestamp, Value } from "@bufbuild/protobuf";
 import { AgentMode, AiAttributionResult, ApiKeyCredentials, ApplyAgentDiffResult, AzureCredentials, BedrockCredentials, BugfixResultItem, ClientLlmGatewayCredential, CommandClassifierResult, ComputerUseAction, ComputerUseError, ComputerUseSuccess, ConversationAction, CustomModeDescriptor, DebugModeConfig, GenerateImageResult, InteractionResponseMetadata, McpResult, McpToolDefinition, MessageSender, RecordScreenArgs, RecordScreenResult, ReplyAudience, ReportBugfixResultsError, ReportBugfixResultsSuccess, RequestedModel, RequestedModel_ModelParameterValue, SandboxPolicy, SelectedCursorCommand, SelectedPastChat, SimulatedMsgReason, SubscriptionEventDisplay, SubscriptionSource, TaskMode, TerminalMetadata, TodoItem as TodoItem$1, TriggeringUserInfo, WriteShellStdinArgs, WriteShellStdinResult } from "./agent.v1_pb.js";
-import { CodeBlock, CodeResult, CursorRange, FileGit } from "./aiserver.v1_2_pb.js";
+import { CodeBlock, CodeResult, CursorRange, FileDiff, FileGit, GitDiff } from "./aiserver.v1_2_pb.js";
 import { BlobDataPerMessage } from "./internapi.v1_pb.js";
 import { EnvironmentBuildBootInfo } from "./anyrun.v1_pb.js";
 
@@ -13181,41 +13181,6 @@ export const File = /*@__PURE__*/ proto3.makeMessageType(
 );
 
 /**
- * @generated from message aiserver.v1.FileDiff
- */
-export const FileDiff = /*@__PURE__*/ proto3.makeMessageType(
-  "aiserver.v1.FileDiff",
-  () => [
-    { no: 4, name: "added", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
-    { no: 5, name: "removed", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
-    { no: 1, name: "from", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 2, name: "to", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 3, name: "chunks", kind: "message", T: FileDiff_Chunk, repeated: true },
-    { no: 6, name: "before_file_contents", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
-    { no: 7, name: "after_file_contents", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
-    { no: 8, name: "is_generated", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
-    { no: 9, name: "old_mode", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
-    { no: 10, name: "new_mode", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
-  ],
-);
-
-/**
- * @generated from message aiserver.v1.FileDiff.Chunk
- */
-export const FileDiff_Chunk = /*@__PURE__*/ proto3.makeMessageType(
-  "aiserver.v1.FileDiff.Chunk",
-  () => [
-    { no: 1, name: "content", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 2, name: "lines", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
-    { no: 3, name: "old_start", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
-    { no: 4, name: "old_lines", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
-    { no: 5, name: "new_start", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
-    { no: 6, name: "new_lines", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
-  ],
-  {localName: "FileDiff_Chunk"},
-);
-
-/**
  * @generated from message aiserver.v1.FinancialAccount
  */
 export const FinancialAccount = /*@__PURE__*/ proto3.makeMessageType(
@@ -16252,30 +16217,6 @@ export const GetXaiCommerceBearerTokenResponse = /*@__PURE__*/ proto3.makeMessag
   () => [
     { no: 1, name: "credential", kind: "message", T: XaiCommerceBearerCredential, oneof: "result" },
     { no: 2, name: "refusal", kind: "message", T: XaiCommerceBearerRefusal, oneof: "result" },
-  ],
-);
-
-/**
- * @generated from message aiserver.v1.GitDiff
- */
-export const GitDiff = /*@__PURE__*/ proto3.makeMessageType(
-  "aiserver.v1.GitDiff",
-  () => [
-    { no: 1, name: "diffs", kind: "message", T: FileDiff, repeated: true },
-    { no: 2, name: "diff_type", kind: "enum", T: proto3.getEnumType(GitDiff_DiffType) },
-    { no: 3, name: "file_contents_omitted", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
-  ],
-);
-
-/**
- * @generated from enum aiserver.v1.GitDiff.DiffType
- */
-export const GitDiff_DiffType = /*@__PURE__*/ proto3.makeEnum(
-  "aiserver.v1.GitDiff.DiffType",
-  [
-    {no: 0, name: "DIFF_TYPE_UNSPECIFIED", localName: "UNSPECIFIED"},
-    {no: 1, name: "DIFF_TYPE_DIFF_TO_HEAD", localName: "DIFF_TO_HEAD"},
-    {no: 2, name: "DIFF_TYPE_DIFF_FROM_BRANCH_TO_MAIN", localName: "DIFF_FROM_BRANCH_TO_MAIN"},
   ],
 );
 

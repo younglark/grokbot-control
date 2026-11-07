@@ -11,6 +11,7 @@ import { GrokBotUserComputerQueuedRequest, GrokBotUserComputerRequestFrame,
   GrokBotUserComputerMessagesError, GrokBotUserComputerFileError,
   SubmitGrokBotUserComputerResponsesRequest } from "../generated/aiserver.v1_pb";
 import {
+  allocateExecId,
   cancelRequest,
   dispatchExec,
   type Emit,
@@ -46,7 +47,7 @@ export function parseQueued(item: GrokBotUserComputerQueuedRequest): Queued {
     const kind = GrokBotUserComputerRequestFrame.fields.list().find(f => f.localName === frame.frame.case)!.no;
     let serverMessage: Record<string, unknown> = {};
     if (frame.frame.case === "exec") {
-      // These JSON payload types are absent from the frozen schema. Do not invent a proto.
+      // Inner ExecServerMessage is now in the frozen schema; wire still arrives as serverMessageJson.
       const value = JSON.parse(frame.frame.value.serverMessageJson);
       if (value === null || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid exec JSON object");
       serverMessage = value;
@@ -272,7 +273,7 @@ export class UserComputerProvider implements UserComputerTransport {
       const q = this.backlog.shift()!;
       if (this.active.has(q.requestId)) continue;
       this.active.add(q.requestId); this.bump(1);
-      const job = this.handleQueued(q).catch(e => requestError(q.requestId, Number(q.serverMessage.id) || 1, e, this.emit))
+      const job = this.handleQueued(q).catch(e => requestError(q.requestId, allocateExecId(), e, this.emit))
         .catch(() => { console.error("[user-computer-provider] request reply failed"); })
         .then(() => undefined).finally(() => { this.activeJobs.delete(job); this.active.delete(q.requestId); this.bump(-1); this.runBacklog(); });
       this.activeJobs.add(job);

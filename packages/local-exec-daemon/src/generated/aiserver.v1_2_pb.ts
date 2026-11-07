@@ -404,3 +404,501 @@ export class GitCommit extends Message<GitCommit> {
   }
 }
 
+/**
+ * @generated from message aiserver.v1.FileDiff
+ */
+export class FileDiff extends Message<FileDiff> {
+  /**
+   * @generated from field: repeated aiserver.v1.FileDiff.ChunkDiff chunks = 1;
+   */
+  chunks: FileDiff_ChunkDiff[] = [];
+
+  /**
+   * @generated from field: aiserver.v1.FileDiff.Editor editor = 2;
+   */
+  editor = FileDiff_Editor.UNSPECIFIED;
+
+  /**
+   * @generated from field: bool hit_timeout = 3;
+   */
+  hitTimeout = false;
+
+  constructor(data?: PartialMessage<FileDiff>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "aiserver.v1.FileDiff";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "chunks", kind: "message", T: FileDiff_ChunkDiff, repeated: true },
+    { no: 2, name: "editor", kind: "enum", T: proto3.getEnumType(FileDiff_Editor) },
+    { no: 3, name: "hit_timeout", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): FileDiff {
+    return new FileDiff().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): FileDiff {
+    return new FileDiff().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): FileDiff {
+    return new FileDiff().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: FileDiff | PlainMessage<FileDiff> | undefined, b: FileDiff | PlainMessage<FileDiff> | undefined): boolean {
+    return proto3.util.equals(FileDiff, a, b);
+  }
+}
+
+/**
+ * @generated from enum aiserver.v1.FileDiff.Editor
+ */
+export enum FileDiff_Editor {
+  /**
+   * @generated from enum value: EDITOR_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: EDITOR_AI = 1;
+   */
+  AI = 1,
+
+  /**
+   * @generated from enum value: EDITOR_HUMAN = 2;
+   */
+  HUMAN = 2,
+}
+// Retrieve enum metadata with: proto3.getEnumType(FileDiff_Editor)
+proto3.util.setEnumType(FileDiff_Editor, "aiserver.v1.FileDiff.Editor", [
+  { no: 0, name: "EDITOR_UNSPECIFIED" },
+  { no: 1, name: "EDITOR_AI" },
+  { no: 2, name: "EDITOR_HUMAN" },
+]);
+
+/**
+ * @generated from message aiserver.v1.FileDiff.ChunkDiff
+ */
+export class FileDiff_ChunkDiff extends Message<FileDiff_ChunkDiff> {
+  /**
+   * @generated from field: string diff_string = 1;
+   */
+  diffString = "";
+
+  /**
+   * @generated from field: int32 old_start = 2;
+   */
+  oldStart = 0;
+
+  /**
+   * @generated from field: int32 new_start = 3;
+   */
+  newStart = 0;
+
+  /**
+   * @generated from field: int32 old_lines = 4;
+   */
+  oldLines = 0;
+
+  /**
+   * @generated from field: int32 new_lines = 5;
+   */
+  newLines = 0;
+
+  /**
+   * @generated from field: int32 lines_removed = 6;
+   */
+  linesRemoved = 0;
+
+  /**
+   * @generated from field: int32 lines_added = 7;
+   */
+  linesAdded = 0;
+
+  constructor(data?: PartialMessage<FileDiff_ChunkDiff>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "aiserver.v1.FileDiff.ChunkDiff";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "diff_string", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "old_start", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 3, name: "new_start", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 4, name: "old_lines", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 5, name: "new_lines", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 6, name: "lines_removed", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 7, name: "lines_added", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): FileDiff_ChunkDiff {
+    return new FileDiff_ChunkDiff().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): FileDiff_ChunkDiff {
+    return new FileDiff_ChunkDiff().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): FileDiff_ChunkDiff {
+    return new FileDiff_ChunkDiff().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: FileDiff_ChunkDiff | PlainMessage<FileDiff_ChunkDiff> | undefined, b: FileDiff_ChunkDiff | PlainMessage<FileDiff_ChunkDiff> | undefined): boolean {
+    return proto3.util.equals(FileDiff_ChunkDiff, a, b);
+  }
+}
+
+/**
+ * @generated from message aiserver.v1.GitDiff
+ */
+export class GitDiff extends Message<GitDiff> {
+  /**
+   * @generated from field: repeated aiserver.v1.FileDiff diffs = 1;
+   */
+  diffs: FileDiff[] = [];
+
+  /**
+   * @generated from field: aiserver.v1.GitDiff.DiffType diff_type = 2;
+   */
+  diffType = GitDiff_DiffType.UNSPECIFIED;
+
+  /**
+   * @generated from field: optional bool file_contents_omitted = 3;
+   */
+  fileContentsOmitted?: boolean;
+
+  constructor(data?: PartialMessage<GitDiff>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "aiserver.v1.GitDiff";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "diffs", kind: "message", T: FileDiff, repeated: true },
+    { no: 2, name: "diff_type", kind: "enum", T: proto3.getEnumType(GitDiff_DiffType) },
+    { no: 3, name: "file_contents_omitted", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GitDiff {
+    return new GitDiff().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): GitDiff {
+    return new GitDiff().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): GitDiff {
+    return new GitDiff().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: GitDiff | PlainMessage<GitDiff> | undefined, b: GitDiff | PlainMessage<GitDiff> | undefined): boolean {
+    return proto3.util.equals(GitDiff, a, b);
+  }
+}
+
+/**
+ * @generated from enum aiserver.v1.GitDiff.DiffType
+ */
+export enum GitDiff_DiffType {
+  /**
+   * @generated from enum value: DIFF_TYPE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: DIFF_TYPE_DIFF_TO_HEAD = 1;
+   */
+  DIFF_TO_HEAD = 1,
+
+  /**
+   * @generated from enum value: DIFF_TYPE_DIFF_FROM_BRANCH_TO_MAIN = 2;
+   */
+  DIFF_FROM_BRANCH_TO_MAIN = 2,
+}
+// Retrieve enum metadata with: proto3.getEnumType(GitDiff_DiffType)
+proto3.util.setEnumType(GitDiff_DiffType, "aiserver.v1.GitDiff.DiffType", [
+  { no: 0, name: "DIFF_TYPE_UNSPECIFIED" },
+  { no: 1, name: "DIFF_TYPE_DIFF_TO_HEAD" },
+  { no: 2, name: "DIFF_TYPE_DIFF_FROM_BRANCH_TO_MAIN" },
+]);
+
+/**
+ * @generated from message aiserver.v1.GetDiffRequest
+ */
+export class GetDiffRequest extends Message<GetDiffRequest> {
+  /**
+   * @generated from field: string cwd = 1;
+   */
+  cwd = "";
+
+  /**
+   * @generated from field: string ref = 2;
+   */
+  ref = "";
+
+  /**
+   * @generated from field: string base_ref = 3;
+   */
+  baseRef = "";
+
+  /**
+   * @generated from field: bool merge_base = 4;
+   */
+  mergeBase = false;
+
+  /**
+   * @generated from field: repeated string target_paths = 5;
+   */
+  targetPaths: string[] = [];
+
+  /**
+   * @generated from field: optional int32 unified_context_lines = 6;
+   */
+  unifiedContextLines?: number;
+
+  /**
+   * @generated from field: int32 max_untracked_files = 7;
+   */
+  maxUntrackedFiles = 0;
+
+  /**
+   * @generated from field: optional aiserver.v1.GetDiffRequest.OutputFormat output_format = 8;
+   */
+  outputFormat?: GetDiffRequest_OutputFormat;
+
+  /**
+   * @generated from field: int32 submodule_recurse_depth = 9;
+   */
+  submoduleRecurseDepth = 0;
+
+  /**
+   * @generated from field: bool include_space_changes = 10;
+   */
+  includeSpaceChanges = false;
+
+  /**
+   * @generated from field: bool committed_only = 11;
+   */
+  committedOnly = false;
+
+  /**
+   * @generated from field: bool compute_patch_id = 12;
+   */
+  computePatchId = false;
+
+  /**
+   * @generated from field: optional bool return_head_sha = 13;
+   */
+  returnHeadSha?: boolean;
+
+  /**
+   * @generated from field: optional int32 max_response_bytes = 14;
+   */
+  maxResponseBytes?: number;
+
+  /**
+   * @generated from field: optional uint32 max_files_with_contents = 15;
+   */
+  maxFilesWithContents?: number;
+
+  /**
+   * @generated from field: optional uint32 max_content_bytes = 16;
+   */
+  maxContentBytes?: number;
+
+  constructor(data?: PartialMessage<GetDiffRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "aiserver.v1.GetDiffRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "cwd", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "ref", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "base_ref", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "merge_base", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 5, name: "target_paths", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 6, name: "unified_context_lines", kind: "scalar", T: 5 /* ScalarType.INT32 */, opt: true },
+    { no: 7, name: "max_untracked_files", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 8, name: "output_format", kind: "enum", T: proto3.getEnumType(GetDiffRequest_OutputFormat), opt: true },
+    { no: 9, name: "submodule_recurse_depth", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 10, name: "include_space_changes", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 11, name: "committed_only", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 12, name: "compute_patch_id", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 13, name: "return_head_sha", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+    { no: 14, name: "max_response_bytes", kind: "scalar", T: 5 /* ScalarType.INT32 */, opt: true },
+    { no: 15, name: "max_files_with_contents", kind: "scalar", T: 13 /* ScalarType.UINT32 */, opt: true },
+    { no: 16, name: "max_content_bytes", kind: "scalar", T: 13 /* ScalarType.UINT32 */, opt: true },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GetDiffRequest {
+    return new GetDiffRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): GetDiffRequest {
+    return new GetDiffRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): GetDiffRequest {
+    return new GetDiffRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: GetDiffRequest | PlainMessage<GetDiffRequest> | undefined, b: GetDiffRequest | PlainMessage<GetDiffRequest> | undefined): boolean {
+    return proto3.util.equals(GetDiffRequest, a, b);
+  }
+}
+
+/**
+ * @generated from enum aiserver.v1.GetDiffRequest.OutputFormat
+ */
+export enum GetDiffRequest_OutputFormat {
+  /**
+   * @generated from enum value: UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: NAME_STATUS = 1;
+   */
+  NAME_STATUS = 1,
+
+  /**
+   * @generated from enum value: NAME_STATUS_AND_NUMSTAT = 2;
+   */
+  NAME_STATUS_AND_NUMSTAT = 2,
+
+  /**
+   * @generated from enum value: FILE_DIFFS = 3;
+   */
+  FILE_DIFFS = 3,
+
+  /**
+   * @generated from enum value: DIFFS_WITH_BEFORE_AND_AFTER = 4;
+   */
+  DIFFS_WITH_BEFORE_AND_AFTER = 4,
+}
+// Retrieve enum metadata with: proto3.getEnumType(GetDiffRequest_OutputFormat)
+proto3.util.setEnumType(GetDiffRequest_OutputFormat, "aiserver.v1.GetDiffRequest.OutputFormat", [
+  { no: 0, name: "UNSPECIFIED" },
+  { no: 1, name: "NAME_STATUS" },
+  { no: 2, name: "NAME_STATUS_AND_NUMSTAT" },
+  { no: 3, name: "FILE_DIFFS" },
+  { no: 4, name: "DIFFS_WITH_BEFORE_AND_AFTER" },
+]);
+
+/**
+ * @generated from message aiserver.v1.GetDiffResponse
+ */
+export class GetDiffResponse extends Message<GetDiffResponse> {
+  /**
+   * @generated from field: aiserver.v1.GitDiff diff = 1;
+   */
+  diff?: GitDiff;
+
+  /**
+   * @generated from field: repeated aiserver.v1.GetDiffResponse.SubmoduleDiff submodule_diffs = 2;
+   */
+  submoduleDiffs: GetDiffResponse_SubmoduleDiff[] = [];
+
+  /**
+   * @generated from field: optional string patch_id = 3;
+   */
+  patchId?: string;
+
+  /**
+   * @generated from field: optional string head_sha = 4;
+   */
+  headSha?: string;
+
+  /**
+   * @generated from field: optional bool has_uncommitted_changes = 5;
+   */
+  hasUncommittedChanges?: boolean;
+
+  constructor(data?: PartialMessage<GetDiffResponse>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "aiserver.v1.GetDiffResponse";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "diff", kind: "message", T: GitDiff },
+    { no: 2, name: "submodule_diffs", kind: "message", T: GetDiffResponse_SubmoduleDiff, repeated: true },
+    { no: 3, name: "patch_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 4, name: "head_sha", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 5, name: "has_uncommitted_changes", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GetDiffResponse {
+    return new GetDiffResponse().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): GetDiffResponse {
+    return new GetDiffResponse().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): GetDiffResponse {
+    return new GetDiffResponse().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: GetDiffResponse | PlainMessage<GetDiffResponse> | undefined, b: GetDiffResponse | PlainMessage<GetDiffResponse> | undefined): boolean {
+    return proto3.util.equals(GetDiffResponse, a, b);
+  }
+}
+
+/**
+ * @generated from message aiserver.v1.GetDiffResponse.SubmoduleDiff
+ */
+export class GetDiffResponse_SubmoduleDiff extends Message<GetDiffResponse_SubmoduleDiff> {
+  /**
+   * @generated from field: string relative_path = 1;
+   */
+  relativePath = "";
+
+  /**
+   * @generated from field: aiserver.v1.GitDiff diff = 2;
+   */
+  diff?: GitDiff;
+
+  /**
+   * @generated from field: bool errored = 3;
+   */
+  errored = false;
+
+  constructor(data?: PartialMessage<GetDiffResponse_SubmoduleDiff>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "aiserver.v1.GetDiffResponse.SubmoduleDiff";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "relative_path", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "diff", kind: "message", T: GitDiff },
+    { no: 3, name: "errored", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GetDiffResponse_SubmoduleDiff {
+    return new GetDiffResponse_SubmoduleDiff().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): GetDiffResponse_SubmoduleDiff {
+    return new GetDiffResponse_SubmoduleDiff().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): GetDiffResponse_SubmoduleDiff {
+    return new GetDiffResponse_SubmoduleDiff().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: GetDiffResponse_SubmoduleDiff | PlainMessage<GetDiffResponse_SubmoduleDiff> | undefined, b: GetDiffResponse_SubmoduleDiff | PlainMessage<GetDiffResponse_SubmoduleDiff> | undefined): boolean {
+    return proto3.util.equals(GetDiffResponse_SubmoduleDiff, a, b);
+  }
+}
+

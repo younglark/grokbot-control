@@ -4,7 +4,7 @@
 // @ts-nocheck
 
 import { proto3, Struct, Timestamp, Value } from "@bufbuild/protobuf";
-import { CodeResult } from "./aiserver.v1_2_pb.js";
+import { CodeResult, GetDiffRequest, GetDiffResponse } from "./aiserver.v1_2_pb.js";
 
 /**
  * @generated from enum agent.v1.AgentMode
@@ -574,6 +574,92 @@ export const WriteCanvasFailReason = /*@__PURE__*/ proto3.makeEnum(
     {no: 4, name: "WRITE_CANVAS_FAIL_REASON_UNAVAILABLE", localName: "UNAVAILABLE"},
     {no: 5, name: "WRITE_CANVAS_FAIL_REASON_NOT_FOUND", localName: "NOT_FOUND"},
     {no: 6, name: "WRITE_CANVAS_FAIL_REASON_REFUSED", localName: "REFUSED"},
+  ],
+);
+
+/**
+ * --- additive Exec* closure restored from App 0.79.3 daemon compact descriptors (t98u) ---
+ *
+ * @generated from enum agent.v1.ForceBackgroundShellStatus
+ */
+export const ForceBackgroundShellStatus = /*@__PURE__*/ proto3.makeEnum(
+  "agent.v1.ForceBackgroundShellStatus",
+  [
+    {no: 0, name: "FORCE_BACKGROUND_SHELL_STATUS_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "FORCE_BACKGROUND_SHELL_STATUS_ACCEPTED", localName: "ACCEPTED"},
+    {no: 2, name: "FORCE_BACKGROUND_SHELL_STATUS_NOT_FOUND", localName: "NOT_FOUND"},
+  ],
+);
+
+/**
+ * @generated from enum agent.v1.McpRefreshPolicy
+ */
+export const McpRefreshPolicy = /*@__PURE__*/ proto3.makeEnum(
+  "agent.v1.McpRefreshPolicy",
+  [
+    {no: 0, name: "MCP_REFRESH_POLICY_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "MCP_REFRESH_POLICY_FORCE_IF_MISSING", localName: "FORCE_IF_MISSING"},
+    {no: 2, name: "MCP_REFRESH_POLICY_FORCE", localName: "FORCE"},
+  ],
+);
+
+/**
+ * @generated from enum agent.v1.McpServerTransport
+ */
+export const McpServerTransport = /*@__PURE__*/ proto3.makeEnum(
+  "agent.v1.McpServerTransport",
+  [
+    {no: 0, name: "MCP_SERVER_TRANSPORT_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "MCP_SERVER_TRANSPORT_STDIO", localName: "STDIO"},
+    {no: 2, name: "MCP_SERVER_TRANSPORT_HTTP", localName: "HTTP"},
+  ],
+);
+
+/**
+ * @generated from enum agent.v1.ForceBackgroundSubagentStatus
+ */
+export const ForceBackgroundSubagentStatus = /*@__PURE__*/ proto3.makeEnum(
+  "agent.v1.ForceBackgroundSubagentStatus",
+  [
+    {no: 0, name: "FORCE_BACKGROUND_SUBAGENT_STATUS_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "FORCE_BACKGROUND_SUBAGENT_STATUS_ACCEPTED", localName: "ACCEPTED"},
+    {no: 2, name: "FORCE_BACKGROUND_SUBAGENT_STATUS_NOT_FOUND", localName: "NOT_FOUND"},
+  ],
+);
+
+/**
+ * @generated from enum agent.v1.SmartModeClassifierDecision
+ */
+export const SmartModeClassifierDecision = /*@__PURE__*/ proto3.makeEnum(
+  "agent.v1.SmartModeClassifierDecision",
+  [
+    {no: 0, name: "SMART_MODE_CLASSIFIER_DECISION_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "SMART_MODE_CLASSIFIER_DECISION_ALLOW", localName: "ALLOW"},
+    {no: 2, name: "SMART_MODE_CLASSIFIER_DECISION_BLOCK", localName: "BLOCK"},
+  ],
+);
+
+/**
+ * @generated from enum agent.v1.SmartModeClassifierRuleEffect
+ */
+export const SmartModeClassifierRuleEffect = /*@__PURE__*/ proto3.makeEnum(
+  "agent.v1.SmartModeClassifierRuleEffect",
+  [
+    {no: 0, name: "SMART_MODE_CLASSIFIER_RULE_EFFECT_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "SMART_MODE_CLASSIFIER_RULE_EFFECT_ALLOW", localName: "ALLOW"},
+    {no: 2, name: "SMART_MODE_CLASSIFIER_RULE_EFFECT_ASK_FIRST", localName: "ASK_FIRST"},
+  ],
+);
+
+/**
+ * @generated from enum agent.v1.SmartModeClassifierRuleSource
+ */
+export const SmartModeClassifierRuleSource = /*@__PURE__*/ proto3.makeEnum(
+  "agent.v1.SmartModeClassifierRuleSource",
+  [
+    {no: 0, name: "SMART_MODE_CLASSIFIER_RULE_SOURCE_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "SMART_MODE_CLASSIFIER_RULE_SOURCE_CUSTOM_RULE", localName: "CUSTOM_RULE"},
+    {no: 2, name: "SMART_MODE_CLASSIFIER_RULE_SOURCE_TEAM_RULE", localName: "TEAM_RULE"},
   ],
 );
 
@@ -9498,6 +9584,1647 @@ export const XSearchToolCall = /*@__PURE__*/ proto3.makeMessageType(
   () => [
     { no: 1, name: "args", kind: "message", T: XSearchArgs },
     { no: 2, name: "result", kind: "message", T: XSearchResult },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ForceBackgroundShellArgs
+ */
+export const ForceBackgroundShellArgs = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ForceBackgroundShellArgs",
+  () => [
+    { no: 1, name: "tool_call_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ForceBackgroundShellResult
+ */
+export const ForceBackgroundShellResult = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ForceBackgroundShellResult",
+  () => [
+    { no: 1, name: "status", kind: "enum", T: proto3.getEnumType(ForceBackgroundShellStatus) },
+    { no: 2, name: "shell_result", kind: "message", T: ShellResult, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ShellStreamStdout
+ */
+export const ShellStreamStdout = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ShellStreamStdout",
+  () => [
+    { no: 1, name: "data", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ShellStreamStderr
+ */
+export const ShellStreamStderr = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ShellStreamStderr",
+  () => [
+    { no: 1, name: "data", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ShellStreamExit
+ */
+export const ShellStreamExit = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ShellStreamExit",
+  () => [
+    { no: 1, name: "code", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 2, name: "cwd", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "output_location", kind: "message", T: OutputLocation, opt: true },
+    { no: 4, name: "aborted", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 5, name: "abort_reason", kind: "enum", T: proto3.getEnumType(ShellAbortReason), opt: true },
+    { no: 6, name: "local_execution_time_ms", kind: "scalar", T: 5 /* ScalarType.INT32 */, opt: true },
+    { no: 7, name: "oom_kill", kind: "message", T: ShellOomKill, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ShellStreamStart
+ */
+export const ShellStreamStart = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ShellStreamStart",
+  () => [
+    { no: 1, name: "sandbox_policy", kind: "message", T: SandboxPolicy, opt: true },
+    { no: 2, name: "command", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ShellStreamBackgrounded
+ */
+export const ShellStreamBackgrounded = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ShellStreamBackgrounded",
+  () => [
+    { no: 1, name: "shell_id", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 2, name: "command", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "working_directory", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "pid", kind: "scalar", T: 13 /* ScalarType.UINT32 */, opt: true },
+    { no: 5, name: "ms_to_wait", kind: "scalar", T: 5 /* ScalarType.INT32 */, opt: true },
+    { no: 6, name: "reason", kind: "enum", T: proto3.getEnumType(ShellBackgroundReason), opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ShellStreamHookContext
+ */
+export const ShellStreamHookContext = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ShellStreamHookContext",
+  () => [
+    { no: 1, name: "hook_additional_contexts", kind: "message", T: HookAdditionalContext, repeated: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ShellSandboxUnsupported
+ */
+export const ShellSandboxUnsupported = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ShellSandboxUnsupported",
+  () => [
+    { no: 1, name: "command", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "working_directory", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "sandbox_policy_type", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "reason", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "is_readonly", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ShellStream
+ */
+export const ShellStream = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ShellStream",
+  () => [
+    { no: 1, name: "stdout", kind: "message", T: ShellStreamStdout, oneof: "event" },
+    { no: 2, name: "stderr", kind: "message", T: ShellStreamStderr, oneof: "event" },
+    { no: 3, name: "exit", kind: "message", T: ShellStreamExit, oneof: "event" },
+    { no: 4, name: "start", kind: "message", T: ShellStreamStart, oneof: "event" },
+    { no: 5, name: "rejected", kind: "message", T: ShellRejected, oneof: "event" },
+    { no: 6, name: "permission_denied", kind: "message", T: ShellPermissionDenied, oneof: "event" },
+    { no: 7, name: "backgrounded", kind: "message", T: ShellStreamBackgrounded, oneof: "event" },
+    { no: 8, name: "hook_context", kind: "message", T: ShellStreamHookContext, oneof: "event" },
+    { no: 9, name: "sandbox_unsupported", kind: "message", T: ShellSandboxUnsupported, oneof: "event" },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.WriteArgs
+ */
+export const WriteArgs = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.WriteArgs",
+  () => [
+    { no: 1, name: "path", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "file_text", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "tool_call_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "return_file_content_after_write", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 5, name: "file_bytes", kind: "scalar", T: 12 /* ScalarType.BYTES */ },
+    { no: 6, name: "encoding_hint", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 7, name: "plan_mode", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.WriteResult
+ */
+export const WriteResult = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.WriteResult",
+  () => [
+    { no: 1, name: "success", kind: "message", T: WriteSuccess, oneof: "result" },
+    { no: 3, name: "permission_denied", kind: "message", T: WritePermissionDenied, oneof: "result" },
+    { no: 4, name: "no_space", kind: "message", T: WriteNoSpace, oneof: "result" },
+    { no: 5, name: "error", kind: "message", T: WriteError, oneof: "result" },
+    { no: 6, name: "rejected", kind: "message", T: WriteRejected, oneof: "result" },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.WriteSuccess
+ */
+export const WriteSuccess = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.WriteSuccess",
+  () => [
+    { no: 1, name: "path", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "lines_created", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 3, name: "file_size", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 4, name: "file_content_after_write", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.WritePermissionDenied
+ */
+export const WritePermissionDenied = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.WritePermissionDenied",
+  () => [
+    { no: 1, name: "path", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "directory", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "operation", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "error", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "is_readonly", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.WriteNoSpace
+ */
+export const WriteNoSpace = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.WriteNoSpace",
+  () => [
+    { no: 1, name: "path", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.WriteError
+ */
+export const WriteError = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.WriteError",
+  () => [
+    { no: 1, name: "path", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "error", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.WriteRejected
+ */
+export const WriteRejected = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.WriteRejected",
+  () => [
+    { no: 1, name: "path", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "reason", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ReadArgs
+ */
+export const ReadArgs = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ReadArgs",
+  () => [
+    { no: 1, name: "path", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "tool_call_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "offset", kind: "scalar", T: 5 /* ScalarType.INT32 */, opt: true },
+    { no: 5, name: "limit", kind: "scalar", T: 13 /* ScalarType.UINT32 */, opt: true },
+    { no: 6, name: "encoding_hint", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 7, name: "digest_only", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+    { no: 8, name: "max_chars", kind: "scalar", T: 13 /* ScalarType.UINT32 */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ReadResult
+ */
+export const ReadResult = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ReadResult",
+  () => [
+    { no: 1, name: "success", kind: "message", T: ReadSuccess, oneof: "result" },
+    { no: 2, name: "error", kind: "message", T: ReadError, oneof: "result" },
+    { no: 3, name: "rejected", kind: "message", T: ReadRejected, oneof: "result" },
+    { no: 4, name: "file_not_found", kind: "message", T: ReadFileNotFound, oneof: "result" },
+    { no: 5, name: "permission_denied", kind: "message", T: ReadPermissionDenied, oneof: "result" },
+    { no: 6, name: "invalid_file", kind: "message", T: ReadInvalidFile, oneof: "result" },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ReadSuccess
+ */
+export const ReadSuccess = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ReadSuccess",
+  () => [
+    { no: 2, name: "content", kind: "scalar", T: 9 /* ScalarType.STRING */, oneof: "output" },
+    { no: 5, name: "data", kind: "scalar", T: 12 /* ScalarType.BYTES */, oneof: "output" },
+    { no: 1, name: "path", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "total_lines", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 4, name: "file_size", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 6, name: "truncated", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 7, name: "output_blob_id", kind: "scalar", T: 12 /* ScalarType.BYTES */, opt: true },
+    { no: 8, name: "range_applied", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 9, name: "sha256", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 10, name: "size_bytes", kind: "scalar", T: 3 /* ScalarType.INT64 */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ReadError
+ */
+export const ReadError = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ReadError",
+  () => [
+    { no: 1, name: "path", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "error", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ReadRejected
+ */
+export const ReadRejected = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ReadRejected",
+  () => [
+    { no: 1, name: "path", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "reason", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ReadFileNotFound
+ */
+export const ReadFileNotFound = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ReadFileNotFound",
+  () => [
+    { no: 1, name: "path", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ReadPermissionDenied
+ */
+export const ReadPermissionDenied = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ReadPermissionDenied",
+  () => [
+    { no: 1, name: "path", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ReadInvalidFile
+ */
+export const ReadInvalidFile = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ReadInvalidFile",
+  () => [
+    { no: 1, name: "path", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "reason", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.DiagnosticsArgs
+ */
+export const DiagnosticsArgs = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.DiagnosticsArgs",
+  () => [
+    { no: 1, name: "path", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "tool_call_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.DiagnosticsResult
+ */
+export const DiagnosticsResult = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.DiagnosticsResult",
+  () => [
+    { no: 1, name: "success", kind: "message", T: DiagnosticsSuccess, oneof: "result" },
+    { no: 2, name: "error", kind: "message", T: DiagnosticsError, oneof: "result" },
+    { no: 3, name: "rejected", kind: "message", T: DiagnosticsRejected, oneof: "result" },
+    { no: 4, name: "file_not_found", kind: "message", T: DiagnosticsFileNotFound, oneof: "result" },
+    { no: 5, name: "permission_denied", kind: "message", T: DiagnosticsPermissionDenied, oneof: "result" },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.DiagnosticsSuccess
+ */
+export const DiagnosticsSuccess = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.DiagnosticsSuccess",
+  () => [
+    { no: 1, name: "path", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "diagnostics", kind: "message", T: Diagnostic, repeated: true },
+    { no: 3, name: "total_diagnostics", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.Diagnostic
+ */
+export const Diagnostic = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.Diagnostic",
+  () => [
+    { no: 1, name: "severity", kind: "enum", T: proto3.getEnumType(DiagnosticSeverity) },
+    { no: 2, name: "range", kind: "message", T: Range },
+    { no: 3, name: "message", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "source", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "code", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 6, name: "is_stale", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.DiagnosticsError
+ */
+export const DiagnosticsError = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.DiagnosticsError",
+  () => [
+    { no: 1, name: "path", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "error", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.DiagnosticsRejected
+ */
+export const DiagnosticsRejected = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.DiagnosticsRejected",
+  () => [
+    { no: 1, name: "path", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "reason", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.DiagnosticsFileNotFound
+ */
+export const DiagnosticsFileNotFound = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.DiagnosticsFileNotFound",
+  () => [
+    { no: 1, name: "path", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.DiagnosticsPermissionDenied
+ */
+export const DiagnosticsPermissionDenied = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.DiagnosticsPermissionDenied",
+  () => [
+    { no: 1, name: "path", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.VoiceCallNotes
+ */
+export const VoiceCallNotes = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.VoiceCallNotes",
+  () => [
+    { no: 1, name: "request", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "message_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.RequestContextArgs
+ */
+export const RequestContextArgs = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.RequestContextArgs",
+  () => [
+    { no: 2, name: "notes_session_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 3, name: "workspace_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 4, name: "read_only_pinned_tree_sha", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 5, name: "read_only_plugin_cache_root", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 7, name: "use_cached", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+    { no: 8, name: "wait_for_workspace_cache", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.RequestContextResult
+ */
+export const RequestContextResult = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.RequestContextResult",
+  () => [
+    { no: 1, name: "success", kind: "message", T: RequestContextSuccess, oneof: "result" },
+    { no: 2, name: "error", kind: "message", T: RequestContextError, oneof: "result" },
+    { no: 3, name: "rejected", kind: "message", T: RequestContextRejected, oneof: "result" },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.RequestContextSuccess
+ */
+export const RequestContextSuccess = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.RequestContextSuccess",
+  () => [
+    { no: 1, name: "request_context", kind: "message", T: RequestContext },
+    { no: 2, name: "served_from_disk_cache", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.RequestContextError
+ */
+export const RequestContextError = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.RequestContextError",
+  () => [
+    { no: 1, name: "error", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.RequestContextRejected
+ */
+export const RequestContextRejected = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.RequestContextRejected",
+  () => [
+    { no: 1, name: "reason", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.McpStateExecArgs
+ */
+export const McpStateExecArgs = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.McpStateExecArgs",
+  () => [
+    { no: 1, name: "server_identifiers", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 2, name: "kick_only", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 3, name: "refresh_policy", kind: "enum", T: proto3.getEnumType(McpRefreshPolicy), opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.McpStateExecResult
+ */
+export const McpStateExecResult = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.McpStateExecResult",
+  () => [
+    { no: 1, name: "success", kind: "message", T: McpStateSuccess, oneof: "result" },
+    { no: 2, name: "error", kind: "message", T: McpStateError, oneof: "result" },
+    { no: 3, name: "rejected", kind: "message", T: McpStateRejected, oneof: "result" },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.McpStateServer
+ */
+export const McpStateServer = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.McpStateServer",
+  () => [
+    { no: 1, name: "server_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "server_identifier", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "plugin", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 4, name: "marketplace", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 5, name: "tools", kind: "message", T: McpToolDefinition, repeated: true },
+    { no: 6, name: "instructions", kind: "message", T: McpInstructions, repeated: true },
+    { no: 7, name: "status", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 8, name: "error_message", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 9, name: "pending_sign_in", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+    { no: 10, name: "transport", kind: "enum", T: proto3.getEnumType(McpServerTransport), opt: true },
+    { no: 11, name: "account_label", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.McpStateSuccess
+ */
+export const McpStateSuccess = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.McpStateSuccess",
+  () => [
+    { no: 1, name: "servers", kind: "message", T: McpStateServer, repeated: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.McpStateError
+ */
+export const McpStateError = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.McpStateError",
+  () => [
+    { no: 1, name: "error", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.McpStateRejected
+ */
+export const McpStateRejected = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.McpStateRejected",
+  () => [
+    { no: 1, name: "reason", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.BackgroundShellSpawnArgs
+ */
+export const BackgroundShellSpawnArgs = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.BackgroundShellSpawnArgs",
+  () => [
+    { no: 1, name: "command", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "working_directory", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "tool_call_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "parsing_result", kind: "message", T: ShellCommandParsingResult },
+    { no: 5, name: "sandbox_policy", kind: "message", T: SandboxPolicy, opt: true },
+    { no: 6, name: "enable_write_shell_stdin_tool", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 7, name: "description", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 8, name: "classifier_result", kind: "message", T: CommandClassifierResult, opt: true },
+    { no: 9, name: "output_notification", kind: "message", T: ShellOutputNotificationConfig, opt: true },
+    { no: 10, name: "smart_mode_approval", kind: "message", T: SmartModeApproval, opt: true },
+    { no: 11, name: "hook_approval_requirement", kind: "message", T: ShellHookApprovalRequirement, opt: true },
+    { no: 12, name: "skip_approval", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 13, name: "conversation_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 14, name: "admin_command_denylist", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 15, name: "request_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 16, name: "suppress_stdin_logging", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 17, name: "secret_scope_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 18, name: "smart_mode_classifier_allowed", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.BackgroundShellSpawnResult
+ */
+export const BackgroundShellSpawnResult = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.BackgroundShellSpawnResult",
+  () => [
+    { no: 1, name: "success", kind: "message", T: BackgroundShellSpawnSuccess, oneof: "result" },
+    { no: 2, name: "error", kind: "message", T: BackgroundShellSpawnError, oneof: "result" },
+    { no: 3, name: "rejected", kind: "message", T: ShellRejected, oneof: "result" },
+    { no: 4, name: "permission_denied", kind: "message", T: ShellPermissionDenied, oneof: "result" },
+    { no: 5, name: "sandbox_unsupported", kind: "message", T: ShellSandboxUnsupported, oneof: "result" },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.BackgroundShellSpawnSuccess
+ */
+export const BackgroundShellSpawnSuccess = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.BackgroundShellSpawnSuccess",
+  () => [
+    { no: 1, name: "shell_id", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 2, name: "command", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "working_directory", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "pid", kind: "scalar", T: 13 /* ScalarType.UINT32 */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.BackgroundShellSpawnError
+ */
+export const BackgroundShellSpawnError = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.BackgroundShellSpawnError",
+  () => [
+    { no: 1, name: "command", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "working_directory", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "error", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.SubagentArgs
+ */
+export const SubagentArgs = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.SubagentArgs",
+  () => [
+    { no: 10, name: "api_key_credentials", kind: "message", T: ApiKeyCredentials, oneof: "credentials" },
+    { no: 11, name: "azure_credentials", kind: "message", T: AzureCredentials, oneof: "credentials" },
+    { no: 12, name: "bedrock_credentials", kind: "message", T: BedrockCredentials, oneof: "credentials" },
+    { no: 1, name: "tool_call_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "subagent_type", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "model_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "prompt", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "readonly", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 6, name: "resume_agent_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 7, name: "run_in_background", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+    { no: 8, name: "continuation_config", kind: "message", T: ClientContinuationConfig },
+    { no: 9, name: "parent_conversation_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 13, name: "interrupt", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+    { no: 14, name: "mode", kind: "enum", T: proto3.getEnumType(TaskMode) },
+    { no: 15, name: "fork_agent_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 16, name: "root_parent_conversation_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 17, name: "selected_context", kind: "message", T: SelectedContext, opt: true },
+    { no: 18, name: "direct_meta_parent_child_subagent", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+    { no: 19, name: "environment", kind: "enum", T: proto3.getEnumType(SubagentExecutionEnvironment) },
+    { no: 20, name: "cloud_base_branch", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 21, name: "model_parameters", kind: "message", T: RequestedModel_ModelParameterValue, repeated: true },
+    { no: 22, name: "voice_call_notes", kind: "message", T: VoiceCallNotes, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ClientContinuationConfig
+ */
+export const ClientContinuationConfig = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ClientContinuationConfig",
+  () => [
+    { no: 1, name: "idle_threshold", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 2, name: "max_loops", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 3, name: "nudge_message", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "escape_message_template", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "collect_background_children", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 6, name: "children_completed_message_template", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 7, name: "continuation_round_delay_ms", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.SubagentResult
+ */
+export const SubagentResult = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.SubagentResult",
+  () => [
+    { no: 1, name: "success", kind: "message", T: SubagentSuccess, oneof: "result" },
+    { no: 2, name: "error", kind: "message", T: SubagentError, oneof: "result" },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.SubagentAwaitArgs
+ */
+export const SubagentAwaitArgs = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.SubagentAwaitArgs",
+  () => [
+    { no: 1, name: "agent_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "timeout_ms", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.SubagentAwaitResult
+ */
+export const SubagentAwaitResult = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.SubagentAwaitResult",
+  () => [
+    { no: 1, name: "complete", kind: "message", T: SubagentAwaitComplete, oneof: "result" },
+    { no: 2, name: "still_running", kind: "message", T: SubagentAwaitStillRunning, oneof: "result" },
+    { no: 3, name: "not_found", kind: "message", T: SubagentAwaitNotFound, oneof: "result" },
+    { no: 4, name: "error", kind: "message", T: SubagentAwaitError, oneof: "result" },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.SubagentAwaitComplete
+ */
+export const SubagentAwaitComplete = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.SubagentAwaitComplete",
+  () => [
+    { no: 1, name: "agent_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "transcript_path", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 3, name: "tool_call_count", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 4, name: "final_message", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.SubagentAwaitStillRunning
+ */
+export const SubagentAwaitStillRunning = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.SubagentAwaitStillRunning",
+  () => [
+    { no: 1, name: "agent_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "transcript_path", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.SubagentAwaitNotFound
+ */
+export const SubagentAwaitNotFound = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.SubagentAwaitNotFound",
+  () => [
+    { no: 1, name: "agent_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.SubagentAwaitError
+ */
+export const SubagentAwaitError = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.SubagentAwaitError",
+  () => [
+    { no: 1, name: "agent_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 2, name: "error", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.SubagentSuccess
+ */
+export const SubagentSuccess = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.SubagentSuccess",
+  () => [
+    { no: 1, name: "agent_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "final_message", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 3, name: "tool_call_count", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 4, name: "background_reason", kind: "enum", T: proto3.getEnumType(SubagentBackgroundReason) },
+    { no: 5, name: "transcript_path", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.SubagentError
+ */
+export const SubagentError = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.SubagentError",
+  () => [
+    { no: 1, name: "agent_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 2, name: "error", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ForceBackgroundSubagentArgs
+ */
+export const ForceBackgroundSubagentArgs = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ForceBackgroundSubagentArgs",
+  () => [
+    { no: 1, name: "tool_call_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ForceBackgroundSubagentResult
+ */
+export const ForceBackgroundSubagentResult = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ForceBackgroundSubagentResult",
+  () => [
+    { no: 1, name: "status", kind: "enum", T: proto3.getEnumType(ForceBackgroundSubagentStatus) },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.SmartModeClassifierConversationMessage
+ */
+export const SmartModeClassifierConversationMessage = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.SmartModeClassifierConversationMessage",
+  () => [
+    { no: 1, name: "role", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "content", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "position", kind: "scalar", T: 13 /* ScalarType.UINT32 */, opt: true },
+    { no: 4, name: "invoked_files", kind: "message", T: SmartModeClassifierInvokedFile, repeated: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.SmartModeClassifierInvokedFile
+ */
+export const SmartModeClassifierInvokedFile = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.SmartModeClassifierInvokedFile",
+  () => [
+    { no: 1, name: "path", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "content", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.SmartModeClassifierArgs
+ */
+export const SmartModeClassifierArgs = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.SmartModeClassifierArgs",
+  () => [
+    { no: 1, name: "tool_call_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "parent_conversation_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 3, name: "target", kind: "message", T: SmartModeRiskTarget },
+    { no: 4, name: "conversation_context", kind: "message", T: SmartModeClassifierConversationMessage, repeated: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.SmartModeRiskTarget
+ */
+export const SmartModeRiskTarget = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.SmartModeRiskTarget",
+  () => [
+    { no: 1, name: "action", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "arguments", kind: "message", T: NetworkPolicyLoggingConfig },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.SmartModeClassifierResult
+ */
+export const SmartModeClassifierResult = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.SmartModeClassifierResult",
+  () => [
+    { no: 1, name: "success", kind: "message", T: SmartModeClassifierSuccess, oneof: "result" },
+    { no: 2, name: "error", kind: "message", T: SmartModeClassifierError, oneof: "result" },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.SmartModeClassifierSuccess
+ */
+export const SmartModeClassifierSuccess = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.SmartModeClassifierSuccess",
+  () => [
+    { no: 1, name: "decision", kind: "enum", T: proto3.getEnumType(SmartModeClassifierDecision) },
+    { no: 2, name: "block_reason", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 3, name: "proposed_allow_rule", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 4, name: "applied_rules", kind: "message", T: SmartModeClassifierAppliedRule, repeated: true },
+    { no: 5, name: "proposed_allow_rule_replaces", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 6, name: "blocked_effect", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 7, name: "irreversible", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+    { no: 8, name: "action_description", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 9, name: "block_reason_category", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 10, name: "jev_path", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 11, name: "high_stakes", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.SmartModeClassifierAppliedRule
+ */
+export const SmartModeClassifierAppliedRule = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.SmartModeClassifierAppliedRule",
+  () => [
+    { no: 1, name: "effect", kind: "enum", T: proto3.getEnumType(SmartModeClassifierRuleEffect) },
+    { no: 2, name: "text", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "source", kind: "enum", T: proto3.getEnumType(SmartModeClassifierRuleSource) },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.SmartModeClassifierError
+ */
+export const SmartModeClassifierError = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.SmartModeClassifierError",
+  () => [
+    { no: 1, name: "error", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.CanvasDiagnosticsArgs
+ */
+export const CanvasDiagnosticsArgs = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.CanvasDiagnosticsArgs",
+  () => [
+    { no: 1, name: "path", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "tool_call_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.CanvasDiagnosticsResult
+ */
+export const CanvasDiagnosticsResult = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.CanvasDiagnosticsResult",
+  () => [
+    { no: 1, name: "success", kind: "message", T: CanvasDiagnosticsSuccess, oneof: "result" },
+    { no: 2, name: "error", kind: "message", T: CanvasDiagnosticsError, oneof: "result" },
+    { no: 3, name: "canvas_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 4, name: "title", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 5, name: "save_state", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 6, name: "save_detail", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.CanvasDiagnosticsSuccess
+ */
+export const CanvasDiagnosticsSuccess = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.CanvasDiagnosticsSuccess",
+  () => [
+    { no: 1, name: "path", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "diagnostics", kind: "message", T: Diagnostic, repeated: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.CanvasDiagnosticsError
+ */
+export const CanvasDiagnosticsError = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.CanvasDiagnosticsError",
+  () => [
+    { no: 1, name: "path", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "error", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ShellAllowlistPrecheckArgs
+ */
+export const ShellAllowlistPrecheckArgs = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ShellAllowlistPrecheckArgs",
+  () => [
+    { no: 1, name: "command", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "working_directory", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "parsing_result", kind: "message", T: ShellCommandParsingResult },
+    { no: 4, name: "classifier_result", kind: "message", T: CommandClassifierResult, opt: true },
+    { no: 5, name: "tool_call_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ShellAllowlistPrecheckResult
+ */
+export const ShellAllowlistPrecheckResult = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ShellAllowlistPrecheckResult",
+  () => [
+    { no: 1, name: "allowlisted", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.McpAllowlistPrecheckArgs
+ */
+export const McpAllowlistPrecheckArgs = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.McpAllowlistPrecheckArgs",
+  () => [
+    { no: 1, name: "provider_identifier", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "tool_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "tool_call_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 4, name: "annotations_json", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.McpAllowlistPrecheckResult
+ */
+export const McpAllowlistPrecheckResult = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.McpAllowlistPrecheckResult",
+  () => [
+    { no: 1, name: "allowlisted", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.WebFetchAllowlistPrecheckArgs
+ */
+export const WebFetchAllowlistPrecheckArgs = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.WebFetchAllowlistPrecheckArgs",
+  () => [
+    { no: 1, name: "url", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "tool_call_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.WebFetchAllowlistPrecheckResult
+ */
+export const WebFetchAllowlistPrecheckResult = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.WebFetchAllowlistPrecheckResult",
+  () => [
+    { no: 1, name: "allowlisted", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.AgentStoreConflictCursor
+ */
+export const AgentStoreConflictCursor = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.AgentStoreConflictCursor",
+  () => [
+    { no: 1, name: "journal_epoch", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "seq", kind: "scalar", T: 4 /* ScalarType.UINT64 */ },
+    { no: 3, name: "last_event_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.AgentStoreConflictArgs
+ */
+export const AgentStoreConflictArgs = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.AgentStoreConflictArgs",
+  () => [
+    { no: 1, name: "cursor", kind: "message", T: AgentStoreConflictCursor, opt: true },
+    { no: 2, name: "advance", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+    { no: 3, name: "include_quota_notices", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.AgentStoreConflictEvent
+ */
+export const AgentStoreConflictEvent = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.AgentStoreConflictEvent",
+  () => [
+    { no: 1, name: "v", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 2, name: "event_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "journal_epoch", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "seq", kind: "scalar", T: 4 /* ScalarType.UINT64 */ },
+    { no: 5, name: "ts_ms", kind: "scalar", T: 4 /* ScalarType.UINT64 */ },
+    { no: 6, name: "kind", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 7, name: "store_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 8, name: "original_rel_path", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 9, name: "conflict_rel_path", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 10, name: "original_abs_path", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 11, name: "conflict_abs_path", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 12, name: "preserved_bytes", kind: "scalar", T: 4 /* ScalarType.UINT64 */, opt: true },
+    { no: 13, name: "scope_kind", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 14, name: "limit_bytes", kind: "scalar", T: 4 /* ScalarType.UINT64 */, opt: true },
+    { no: 15, name: "usage_bytes", kind: "scalar", T: 4 /* ScalarType.UINT64 */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.AgentStoreConflictResult
+ */
+export const AgentStoreConflictResult = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.AgentStoreConflictResult",
+  () => [
+    { no: 1, name: "success", kind: "message", T: AgentStoreConflictSuccess, oneof: "result" },
+    { no: 2, name: "error", kind: "message", T: AgentStoreConflictError, oneof: "result" },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.AgentStoreConflictSuccess
+ */
+export const AgentStoreConflictSuccess = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.AgentStoreConflictSuccess",
+  () => [
+    { no: 1, name: "events", kind: "message", T: AgentStoreConflictEvent, repeated: true },
+    { no: 2, name: "next_cursor", kind: "message", T: AgentStoreConflictCursor },
+    { no: 3, name: "gap", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.AgentStoreConflictError
+ */
+export const AgentStoreConflictError = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.AgentStoreConflictError",
+  () => [
+    { no: 1, name: "error", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.PreCompactRequestQuery
+ */
+export const PreCompactRequestQuery = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.PreCompactRequestQuery",
+  () => [
+    { no: 1, name: "trigger", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "context_usage_percent", kind: "scalar", T: 1 /* ScalarType.DOUBLE */ },
+    { no: 3, name: "context_tokens", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 4, name: "context_window_size", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 5, name: "message_count", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 6, name: "messages_to_compact", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 7, name: "is_first_compaction", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 8, name: "conversation_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 9, name: "generation_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 10, name: "model", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 11, name: "model_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 12, name: "model_params", kind: "message", T: RequestedModel_ModelParameterValue, repeated: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.PreCompactRequestResponse
+ */
+export const PreCompactRequestResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.PreCompactRequestResponse",
+  () => [
+    { no: 1, name: "user_message", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.SubagentStartRequestQuery
+ */
+export const SubagentStartRequestQuery = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.SubagentStartRequestQuery",
+  () => [
+    { no: 1, name: "subagent_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "subagent_type", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "task", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "parent_conversation_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "tool_call_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 6, name: "subagent_model", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 7, name: "is_parallel_worker", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 8, name: "git_branch", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 9, name: "conversation_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 10, name: "generation_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 11, name: "model", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 12, name: "model_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 13, name: "model_params", kind: "message", T: RequestedModel_ModelParameterValue, repeated: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.SubagentStartRequestResponse
+ */
+export const SubagentStartRequestResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.SubagentStartRequestResponse",
+  () => [
+    { no: 1, name: "permission", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 2, name: "user_message", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 3, name: "additional_context", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.SubagentStopRequestQuery
+ */
+export const SubagentStopRequestQuery = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.SubagentStopRequestQuery",
+  () => [
+    { no: 1, name: "subagent_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "subagent_type", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "status", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "duration_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 5, name: "summary", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 6, name: "parent_conversation_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 7, name: "message_count", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 8, name: "tool_call_count", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 9, name: "error_message", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 10, name: "modified_files", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 11, name: "git_branch", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 12, name: "conversation_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 13, name: "generation_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 14, name: "model", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 15, name: "loop_count", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 16, name: "task", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 17, name: "description", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 18, name: "model_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 19, name: "model_params", kind: "message", T: RequestedModel_ModelParameterValue, repeated: true },
+    { no: 20, name: "child_conversation_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.SubagentStopRequestResponse
+ */
+export const SubagentStopRequestResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.SubagentStopRequestResponse",
+  () => [
+    { no: 1, name: "followup_message", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 2, name: "additional_context", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.BeforeSubmitPromptAttachment
+ */
+export const BeforeSubmitPromptAttachment = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.BeforeSubmitPromptAttachment",
+  () => [
+    { no: 1, name: "type", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "file_path", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.BeforeSubmitPromptRequestQuery
+ */
+export const BeforeSubmitPromptRequestQuery = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.BeforeSubmitPromptRequestQuery",
+  () => [
+    { no: 1, name: "prompt", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "attachments", kind: "message", T: BeforeSubmitPromptAttachment, repeated: true },
+    { no: 3, name: "composer_mode", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 4, name: "conversation_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 5, name: "generation_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 6, name: "model", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 7, name: "model_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 8, name: "model_params", kind: "message", T: RequestedModel_ModelParameterValue, repeated: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.BeforeSubmitPromptRequestResponse
+ */
+export const BeforeSubmitPromptRequestResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.BeforeSubmitPromptRequestResponse",
+  () => [
+    { no: 1, name: "continue", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+    { no: 2, name: "user_message", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 3, name: "additional_context", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.AfterAgentResponseRequestQuery
+ */
+export const AfterAgentResponseRequestQuery = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.AfterAgentResponseRequestQuery",
+  () => [
+    { no: 1, name: "text", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "conversation_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 3, name: "generation_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 4, name: "model", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 5, name: "model_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 6, name: "model_params", kind: "message", T: RequestedModel_ModelParameterValue, repeated: true },
+    { no: 7, name: "input_tokens", kind: "scalar", T: 3 /* ScalarType.INT64 */, opt: true },
+    { no: 8, name: "output_tokens", kind: "scalar", T: 3 /* ScalarType.INT64 */, opt: true },
+    { no: 9, name: "cache_read_tokens", kind: "scalar", T: 3 /* ScalarType.INT64 */, opt: true },
+    { no: 10, name: "cache_write_tokens", kind: "scalar", T: 3 /* ScalarType.INT64 */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.AfterAgentResponseRequestResponse
+ */
+export const AfterAgentResponseRequestResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.AfterAgentResponseRequestResponse",
+  [],
+);
+
+/**
+ * @generated from message agent.v1.AfterAgentThoughtRequestQuery
+ */
+export const AfterAgentThoughtRequestQuery = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.AfterAgentThoughtRequestQuery",
+  () => [
+    { no: 1, name: "text", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "duration_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */, opt: true },
+    { no: 3, name: "conversation_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 4, name: "generation_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 5, name: "model", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 6, name: "model_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 7, name: "model_params", kind: "message", T: RequestedModel_ModelParameterValue, repeated: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.AfterAgentThoughtRequestResponse
+ */
+export const AfterAgentThoughtRequestResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.AfterAgentThoughtRequestResponse",
+  [],
+);
+
+/**
+ * @generated from message agent.v1.StopRequestQuery
+ */
+export const StopRequestQuery = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.StopRequestQuery",
+  () => [
+    { no: 1, name: "status", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "loop_count", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 3, name: "conversation_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 4, name: "generation_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 5, name: "model", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 6, name: "model_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 7, name: "model_params", kind: "message", T: RequestedModel_ModelParameterValue, repeated: true },
+    { no: 8, name: "input_tokens", kind: "scalar", T: 3 /* ScalarType.INT64 */, opt: true },
+    { no: 9, name: "output_tokens", kind: "scalar", T: 3 /* ScalarType.INT64 */, opt: true },
+    { no: 10, name: "cache_read_tokens", kind: "scalar", T: 3 /* ScalarType.INT64 */, opt: true },
+    { no: 11, name: "cache_write_tokens", kind: "scalar", T: 3 /* ScalarType.INT64 */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.StopRequestResponse
+ */
+export const StopRequestResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.StopRequestResponse",
+  () => [
+    { no: 1, name: "followup_message", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.PreToolUseRequestQuery
+ */
+export const PreToolUseRequestQuery = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.PreToolUseRequestQuery",
+  () => [
+    { no: 1, name: "tool_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "tool_input", kind: "message", T: NetworkPolicyLoggingConfig },
+    { no: 3, name: "tool_use_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "cwd", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 5, name: "conversation_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 6, name: "generation_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 7, name: "model", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 8, name: "model_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 9, name: "model_params", kind: "message", T: RequestedModel_ModelParameterValue, repeated: true },
+    { no: 10, name: "parent_tool_call_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.PreToolUseRequestResponse
+ */
+export const PreToolUseRequestResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.PreToolUseRequestResponse",
+  () => [
+    { no: 1, name: "permission", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 2, name: "user_message", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 3, name: "agent_message", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 4, name: "updated_input", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 5, name: "additional_context", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.PostToolUseRequestQuery
+ */
+export const PostToolUseRequestQuery = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.PostToolUseRequestQuery",
+  () => [
+    { no: 1, name: "tool_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "tool_input", kind: "message", T: NetworkPolicyLoggingConfig },
+    { no: 3, name: "tool_output", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "duration_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 5, name: "tool_use_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 6, name: "cwd", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 7, name: "conversation_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 8, name: "generation_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 9, name: "model", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 10, name: "model_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 11, name: "model_params", kind: "message", T: RequestedModel_ModelParameterValue, repeated: true },
+    { no: 12, name: "parent_tool_call_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.PostToolUseRequestResponse
+ */
+export const PostToolUseRequestResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.PostToolUseRequestResponse",
+  () => [
+    { no: 1, name: "additional_context", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.PostToolUseFailureRequestQuery
+ */
+export const PostToolUseFailureRequestQuery = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.PostToolUseFailureRequestQuery",
+  () => [
+    { no: 1, name: "tool_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "tool_input", kind: "message", T: NetworkPolicyLoggingConfig },
+    { no: 3, name: "error_message", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "failure_type", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "duration_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 6, name: "tool_use_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 7, name: "is_interrupt", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 8, name: "conversation_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 9, name: "generation_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 10, name: "model", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 11, name: "model_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 12, name: "model_params", kind: "message", T: RequestedModel_ModelParameterValue, repeated: true },
+    { no: 13, name: "parent_tool_call_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.PostToolUseFailureRequestResponse
+ */
+export const PostToolUseFailureRequestResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.PostToolUseFailureRequestResponse",
+  () => [
+    { no: 1, name: "additional_context", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ExecClientStreamClose
+ */
+export const ExecClientStreamClose = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ExecClientStreamClose",
+  () => [
+    { no: 1, name: "id", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ExecClientThrow
+ */
+export const ExecClientThrow = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ExecClientThrow",
+  () => [
+    { no: 1, name: "id", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 2, name: "error", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "stack_trace", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 4, name: "error_code", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ExecClientHeartbeat
+ */
+export const ExecClientHeartbeat = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ExecClientHeartbeat",
+  () => [
+    { no: 1, name: "id", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ExecClientControlMessage
+ */
+export const ExecClientControlMessage = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ExecClientControlMessage",
+  () => [
+    { no: 1, name: "stream_close", kind: "message", T: ExecClientStreamClose, oneof: "message" },
+    { no: 2, name: "throw", kind: "message", T: ExecClientThrow, oneof: "message" },
+    { no: 3, name: "heartbeat", kind: "message", T: ExecClientHeartbeat, oneof: "message" },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ExecServerAbort
+ */
+export const ExecServerAbort = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ExecServerAbort",
+  () => [
+    { no: 1, name: "id", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ExecServerControlMessage
+ */
+export const ExecServerControlMessage = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ExecServerControlMessage",
+  () => [
+    { no: 1, name: "abort", kind: "message", T: ExecServerAbort, oneof: "message" },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.SpanContext
+ */
+export const SpanContext = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.SpanContext",
+  () => [
+    { no: 1, name: "trace_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "span_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "trace_flags", kind: "scalar", T: 13 /* ScalarType.UINT32 */, opt: true },
+    { no: 4, name: "trace_state", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ExecServerMessage
+ */
+export const ExecServerMessage = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ExecServerMessage",
+  () => [
+    { no: 2, name: "shell_args", kind: "message", T: ShellArgs, oneof: "message" },
+    { no: 3, name: "write_args", kind: "message", T: WriteArgs, oneof: "message" },
+    { no: 4, name: "delete_args", kind: "message", T: DeleteArgs, oneof: "message" },
+    { no: 5, name: "grep_args", kind: "message", T: GrepArgs, oneof: "message" },
+    { no: 7, name: "read_args", kind: "message", T: ReadArgs, oneof: "message" },
+    { no: 8, name: "ls_args", kind: "message", T: LsArgs, oneof: "message" },
+    { no: 9, name: "diagnostics_args", kind: "message", T: DiagnosticsArgs, oneof: "message" },
+    { no: 10, name: "request_context_args", kind: "message", T: RequestContextArgs, oneof: "message" },
+    { no: 11, name: "mcp_args", kind: "message", T: McpArgs, oneof: "message" },
+    { no: 14, name: "shell_stream_args", kind: "message", T: ShellArgs, oneof: "message" },
+    { no: 16, name: "background_shell_spawn_args", kind: "message", T: BackgroundShellSpawnArgs, oneof: "message" },
+    { no: 17, name: "list_mcp_resources_exec_args", kind: "message", T: ListMcpResourcesExecArgs, oneof: "message" },
+    { no: 18, name: "read_mcp_resource_exec_args", kind: "message", T: ReadMcpResourceExecArgs, oneof: "message" },
+    { no: 20, name: "fetch_args", kind: "message", T: FetchArgs, oneof: "message" },
+    { no: 21, name: "record_screen_args", kind: "message", T: RecordScreenArgs, oneof: "message" },
+    { no: 22, name: "computer_use_args", kind: "message", T: ComputerUseArgs, oneof: "message" },
+    { no: 23, name: "write_shell_stdin_args", kind: "message", T: WriteShellStdinArgs, oneof: "message" },
+    { no: 27, name: "execute_hook_args", kind: "message", T: ExecuteHookArgs, oneof: "message" },
+    { no: 28, name: "subagent_args", kind: "message", T: SubagentArgs, oneof: "message" },
+    { no: 29, name: "redacted_read_args", kind: "message", T: ReadArgs, oneof: "message" },
+    { no: 30, name: "force_background_shell_args", kind: "message", T: ForceBackgroundShellArgs, oneof: "message" },
+    { no: 31, name: "force_background_subagent_args", kind: "message", T: ForceBackgroundSubagentArgs, oneof: "message" },
+    { no: 36, name: "mcp_state_exec_args", kind: "message", T: McpStateExecArgs, oneof: "message" },
+    { no: 37, name: "subagent_await_args", kind: "message", T: SubagentAwaitArgs, oneof: "message" },
+    { no: 38, name: "smart_mode_classifier_args", kind: "message", T: SmartModeClassifierArgs, oneof: "message" },
+    { no: 40, name: "canvas_diagnostics_args", kind: "message", T: CanvasDiagnosticsArgs, oneof: "message" },
+    { no: 41, name: "shell_allowlist_precheck_args", kind: "message", T: ShellAllowlistPrecheckArgs, oneof: "message" },
+    { no: 42, name: "mcp_allowlist_precheck_args", kind: "message", T: McpAllowlistPrecheckArgs, oneof: "message" },
+    { no: 43, name: "web_fetch_allowlist_precheck_args", kind: "message", T: WebFetchAllowlistPrecheckArgs, oneof: "message" },
+    { no: 44, name: "git_diff_request", kind: "message", T: GetDiffRequest, oneof: "message" },
+    { no: 52, name: "mini_swe_agent_bash_args", kind: "message", T: ShellArgs, oneof: "message" },
+    { no: 53, name: "conversation_search_args", kind: "message", T: ConversationSearchArgs, oneof: "message" },
+    { no: 54, name: "agent_store_conflict_args", kind: "message", T: AgentStoreConflictArgs, oneof: "message" },
+    { no: 1, name: "id", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 15, name: "exec_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 19, name: "span_context", kind: "message", T: SpanContext, opt: true },
+    { no: 55, name: "accept_hook_additional_contexts", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+    { no: 57, name: "machine_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ExecClientMessage
+ */
+export const ExecClientMessage = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ExecClientMessage",
+  () => [
+    { no: 2, name: "shell_result", kind: "message", T: ShellResult, oneof: "message" },
+    { no: 3, name: "write_result", kind: "message", T: WriteResult, oneof: "message" },
+    { no: 4, name: "delete_result", kind: "message", T: DeleteResult, oneof: "message" },
+    { no: 5, name: "grep_result", kind: "message", T: GrepResult, oneof: "message" },
+    { no: 7, name: "read_result", kind: "message", T: ReadResult, oneof: "message" },
+    { no: 8, name: "ls_result", kind: "message", T: LsResult, oneof: "message" },
+    { no: 9, name: "diagnostics_result", kind: "message", T: DiagnosticsResult, oneof: "message" },
+    { no: 10, name: "request_context_result", kind: "message", T: RequestContextResult, oneof: "message" },
+    { no: 11, name: "mcp_result", kind: "message", T: McpResult, oneof: "message" },
+    { no: 14, name: "shell_stream", kind: "message", T: ShellStream, oneof: "message" },
+    { no: 16, name: "background_shell_spawn_result", kind: "message", T: BackgroundShellSpawnResult, oneof: "message" },
+    { no: 17, name: "list_mcp_resources_exec_result", kind: "message", T: ListMcpResourcesExecResult, oneof: "message" },
+    { no: 18, name: "read_mcp_resource_exec_result", kind: "message", T: ReadMcpResourceExecResult, oneof: "message" },
+    { no: 20, name: "fetch_result", kind: "message", T: FetchResult, oneof: "message" },
+    { no: 21, name: "record_screen_result", kind: "message", T: RecordScreenResult, oneof: "message" },
+    { no: 22, name: "computer_use_result", kind: "message", T: ComputerUseResult, oneof: "message" },
+    { no: 23, name: "write_shell_stdin_result", kind: "message", T: WriteShellStdinResult, oneof: "message" },
+    { no: 27, name: "execute_hook_result", kind: "message", T: ExecuteHookResult, oneof: "message" },
+    { no: 28, name: "subagent_result", kind: "message", T: SubagentResult, oneof: "message" },
+    { no: 29, name: "redacted_read_result", kind: "message", T: ReadResult, oneof: "message" },
+    { no: 30, name: "force_background_shell_result", kind: "message", T: ForceBackgroundShellResult, oneof: "message" },
+    { no: 31, name: "force_background_subagent_result", kind: "message", T: ForceBackgroundSubagentResult, oneof: "message" },
+    { no: 36, name: "mcp_state_exec_result", kind: "message", T: McpStateExecResult, oneof: "message" },
+    { no: 37, name: "subagent_await_result", kind: "message", T: SubagentAwaitResult, oneof: "message" },
+    { no: 38, name: "smart_mode_classifier_result", kind: "message", T: SmartModeClassifierResult, oneof: "message" },
+    { no: 40, name: "canvas_diagnostics_result", kind: "message", T: CanvasDiagnosticsResult, oneof: "message" },
+    { no: 41, name: "shell_allowlist_precheck_result", kind: "message", T: ShellAllowlistPrecheckResult, oneof: "message" },
+    { no: 42, name: "mcp_allowlist_precheck_result", kind: "message", T: McpAllowlistPrecheckResult, oneof: "message" },
+    { no: 43, name: "web_fetch_allowlist_precheck_result", kind: "message", T: WebFetchAllowlistPrecheckResult, oneof: "message" },
+    { no: 44, name: "git_diff_response", kind: "message", T: GetDiffResponse, oneof: "message" },
+    { no: 53, name: "conversation_search_result", kind: "message", T: ConversationSearchResult, oneof: "message" },
+    { no: 54, name: "agent_store_conflict_result", kind: "message", T: AgentStoreConflictResult, oneof: "message" },
+    { no: 55, name: "mini_swe_agent_bash_result", kind: "message", T: ShellResult, oneof: "message" },
+    { no: 1, name: "id", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 15, name: "exec_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 39, name: "local_execution_time_ms", kind: "scalar", T: 5 /* ScalarType.INT32 */, opt: true },
+    { no: 45, name: "hook_additional_contexts", kind: "message", T: HookAdditionalContext, repeated: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ExecuteHookArgs
+ */
+export const ExecuteHookArgs = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ExecuteHookArgs",
+  () => [
+    { no: 1, name: "request", kind: "message", T: ExecuteHookRequest },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ExecuteHookResult
+ */
+export const ExecuteHookResult = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ExecuteHookResult",
+  () => [
+    { no: 1, name: "response", kind: "message", T: ExecuteHookResponse },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ExecuteHookRequest
+ */
+export const ExecuteHookRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ExecuteHookRequest",
+  () => [
+    { no: 1, name: "pre_compact", kind: "message", T: PreCompactRequestQuery, oneof: "request" },
+    { no: 2, name: "subagent_start", kind: "message", T: SubagentStartRequestQuery, oneof: "request" },
+    { no: 3, name: "subagent_stop", kind: "message", T: SubagentStopRequestQuery, oneof: "request" },
+    { no: 4, name: "pre_tool_use", kind: "message", T: PreToolUseRequestQuery, oneof: "request" },
+    { no: 5, name: "post_tool_use", kind: "message", T: PostToolUseRequestQuery, oneof: "request" },
+    { no: 6, name: "post_tool_use_failure", kind: "message", T: PostToolUseFailureRequestQuery, oneof: "request" },
+    { no: 7, name: "before_submit_prompt", kind: "message", T: BeforeSubmitPromptRequestQuery, oneof: "request" },
+    { no: 8, name: "after_agent_response", kind: "message", T: AfterAgentResponseRequestQuery, oneof: "request" },
+    { no: 9, name: "after_agent_thought", kind: "message", T: AfterAgentThoughtRequestQuery, oneof: "request" },
+    { no: 11, name: "stop", kind: "message", T: StopRequestQuery, oneof: "request" },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ExecuteHookResponse
+ */
+export const ExecuteHookResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ExecuteHookResponse",
+  () => [
+    { no: 1, name: "pre_compact", kind: "message", T: PreCompactRequestResponse, oneof: "response" },
+    { no: 2, name: "subagent_start", kind: "message", T: SubagentStartRequestResponse, oneof: "response" },
+    { no: 3, name: "subagent_stop", kind: "message", T: SubagentStopRequestResponse, oneof: "response" },
+    { no: 4, name: "pre_tool_use", kind: "message", T: PreToolUseRequestResponse, oneof: "response" },
+    { no: 5, name: "post_tool_use", kind: "message", T: PostToolUseRequestResponse, oneof: "response" },
+    { no: 6, name: "post_tool_use_failure", kind: "message", T: PostToolUseFailureRequestResponse, oneof: "response" },
+    { no: 7, name: "before_submit_prompt", kind: "message", T: BeforeSubmitPromptRequestResponse, oneof: "response" },
+    { no: 8, name: "after_agent_response", kind: "message", T: AfterAgentResponseRequestResponse, oneof: "response" },
+    { no: 9, name: "after_agent_thought", kind: "message", T: AfterAgentThoughtRequestResponse, oneof: "response" },
+    { no: 11, name: "stop", kind: "message", T: StopRequestResponse, oneof: "response" },
   ],
 );
 

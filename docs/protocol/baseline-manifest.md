@@ -4,7 +4,7 @@
 
 `vendor/proto-gen` is **本仓库从App恢复生成** (regenerated in this repo from the App; not a byte copy of upstream).
 
-**唯一冻结协议源 = [packages/protocol/baselines/schema-0.79.3](../../packages/protocol/baselines/schema-0.79.3/)**. t95u moved the original archive byte-for-byte and removed redundant identical root proto copies; all 14 hashes are pinned in the sibling SHA256 manifest.
+**Immutable App proto.cjs archive = [packages/protocol/baselines/schema-0.79.3](../../packages/protocol/baselines/schema-0.79.3/)** (t95u; sibling SHA256). **Current generator input (t98u) = [schema-0.79.3-daemon-exec](../../packages/protocol/baselines/schema-0.79.3-daemon-exec/)** — additive Exec* closure from daemon compact descriptors; parent archive untouched.
 
 | Item | Value | Level |
 |---|---|---|

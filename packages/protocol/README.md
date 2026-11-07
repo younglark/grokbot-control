@@ -1,6 +1,6 @@
 # Protocol workspace (private build tooling, not a runtime package)
 
-The only canonical schema is [baselines/schema-0.79.3](baselines/schema-0.79.3/). All 14 archived files were moved byte-for-byte during t95u. A later reviewed P3 corrects README links only and updates its documentation hash; all .proto and snapshot bytes/hashes remain original. Current hashes are pinned in `baselines/schema-0.79.3.sha256.json`. The former `proto/*.proto` were checked byte-identical and removed as redundant source copies. **Never overwrite an existing frozen version**: upgrades create a new version directory/hash manifest and explicit generator target change.
+Immutable App proto.cjs archive remains [baselines/schema-0.79.3](baselines/schema-0.79.3/) (hashes in `baselines/schema-0.79.3.sha256.json`). **t98u generator input:** [baselines/schema-0.79.3-daemon-exec](baselines/schema-0.79.3-daemon-exec/) — additive ExecServerMessage/ExecClientMessage (+closure) from daemon compact descriptors; parent `schema-0.79.3` untouched. Hashes: `baselines/schema-0.79.3-daemon-exec.sha256.json`. **Never overwrite an existing frozen version**: upgrades create a new version directory/hash manifest and explicit generator target change.
 
 Provenance: [NOTICE.md](NOTICE.md), [original restore record](RESTORE.md), [method/upgrade evidence](../../docs/protocol/README.md). The restore record is historical, not a current command recipe.
 
@@ -22,4 +22,4 @@ Both SOURCE.json files are identical: same canonical input path, input SHA256 an
 
 Generated **artifacts may be duplicated** per consumer/module format. Hand-maintained schema/tooling is not duplicated. Neither public package may have a `workspace:`/`file:` or private protocol runtime dependency. This is essential for independent npm installation.
 
-The current frozen archive lacks inner ExecServerMessage/ExecClientMessage coverage; investigating that is a separate work item, NOT repaired by this layout change. Existing schema-license and compatibility limits remain.
+**t98u:** inner ExecServerMessage/ExecClientMessage (+closure) restored in `schema-0.79.3-daemon-exec` (daemon `$()`/`ee()` evidence; not hand-copied field numbers). Parent `schema-0.79.3` unchanged. Existing schema-license and compatibility limits remain; not a drop-in claim.

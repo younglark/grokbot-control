@@ -1,12 +1,12 @@
 {
-  "source": "packages/protocol/baselines/schema-0.79.3",
+  "source": "packages/protocol/baselines/schema-0.79.3-daemon-exec",
   "buf": "1.50.0",
   "protobufEs": "1.10.1",
   "connectEs": "1.6.1",
   "sha256": {
-    "agent.v1.proto": "9cb54e70200637741dcd61ae4c2c4fb6bda760c5857bf31c04a4d10fa0e22bf0",
-    "aiserver.v1.proto": "056916b2f377efb78888fcb6a3e1dc12845b2356046fc17da46904bb6c7cb7bd",
-    "aiserver.v1_2.proto": "1fbf0e0e2923233d8550b5629d41a90d49b743e35dac49902dc646bc9c87739d",
+    "agent.v1.proto": "e813fefde6bb0a317719cc2c5b0e6719029569d30c1f32e099b37e1f5ad80364",
+    "aiserver.v1.proto": "abbd3e40bcbfd105ab1684e00f7953d4b6cfe56778c624d2d80f5ccd2ab87d43",
+    "aiserver.v1_2.proto": "80f1f68f19314149384af8a549a0149624bd717de8486eb4f7f0689aa3fdf8bb",
     "anyrun.v1.proto": "0626f1e66216e2ef6136787bfd99cb7b62fcf23cee849f083439aa74f0ce9ab6",
     "internapi.v1.proto": "c3648bab2a4e837b7b137250c22359f3ef7d98f3776cb2551c34d4e99350f433",
     "svc_aiserver.v1.GrokBotService.proto": "9ca0c3d88bb28a517263f2c01c8424fa439a4452c6c05875f95d29c4d605e9dc"

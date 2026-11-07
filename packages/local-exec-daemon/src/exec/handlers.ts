@@ -15,6 +15,15 @@ export type Emit = (frame: ExecFrameOut) => void | Promise<void>;
 
 type ShellJob = { abort: (reason: ShellAbortReason) => void; done: Promise<void> };
 const shells = new Map<string, ShellJob>();
+/** Official daemon allocates inner exec message ids locally: nextExecId=1 then o.id=a. */
+let nextExecId = 1;
+export function allocateExecId(): number {
+  return nextExecId++;
+}
+/** Test-only: reset sequential inner ids to match a fresh daemon instance. */
+export function resetExecIdCounter(value = 1): void {
+  nextExecId = value;
+}
 export async function requestError(requestId: string, msgId: number, error: unknown, emit: Emit): Promise<void> {
   await emit({ kind: "control", requestId, message: { throw: { id: msgId, error: String(error instanceof Error ? error.message : error) } }, cwdState: "unset" });
   await emit({ kind: "control", requestId, message: { streamClose: { id: msgId } } });
@@ -273,7 +282,8 @@ export async function dispatchExec(args: {
   emit: Emit;
 }): Promise<void> {
   const { root, requestId, serverMessage, permission, emit } = args;
-  const msgId = typeof serverMessage.id === "number" ? serverMessage.id : 1;
+  // Do not echo serverMessage.id — official maps e.g. server id=7 → local sequential id starting at 1.
+  const msgId = allocateExecId();
 
   if (serverMessage.readArgs && typeof serverMessage.readArgs === "object") {
     if (refuseByPermission(permission, requestId, emit)) return;

@@ -103,3 +103,134 @@ export const GitCommit = /*@__PURE__*/ proto3.makeMessageType(
   ],
 );
 
+/**
+ * @generated from message aiserver.v1.FileDiff
+ */
+export const FileDiff = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.FileDiff",
+  () => [
+    { no: 1, name: "chunks", kind: "message", T: FileDiff_ChunkDiff, repeated: true },
+    { no: 2, name: "editor", kind: "enum", T: proto3.getEnumType(FileDiff_Editor) },
+    { no: 3, name: "hit_timeout", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ],
+);
+
+/**
+ * @generated from enum aiserver.v1.FileDiff.Editor
+ */
+export const FileDiff_Editor = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.FileDiff.Editor",
+  [
+    {no: 0, name: "EDITOR_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "EDITOR_AI", localName: "AI"},
+    {no: 2, name: "EDITOR_HUMAN", localName: "HUMAN"},
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.FileDiff.ChunkDiff
+ */
+export const FileDiff_ChunkDiff = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.FileDiff.ChunkDiff",
+  () => [
+    { no: 1, name: "diff_string", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "old_start", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 3, name: "new_start", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 4, name: "old_lines", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 5, name: "new_lines", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 6, name: "lines_removed", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 7, name: "lines_added", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+  ],
+  {localName: "FileDiff_ChunkDiff"},
+);
+
+/**
+ * @generated from message aiserver.v1.GitDiff
+ */
+export const GitDiff = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GitDiff",
+  () => [
+    { no: 1, name: "diffs", kind: "message", T: FileDiff, repeated: true },
+    { no: 2, name: "diff_type", kind: "enum", T: proto3.getEnumType(GitDiff_DiffType) },
+    { no: 3, name: "file_contents_omitted", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+  ],
+);
+
+/**
+ * @generated from enum aiserver.v1.GitDiff.DiffType
+ */
+export const GitDiff_DiffType = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.GitDiff.DiffType",
+  [
+    {no: 0, name: "DIFF_TYPE_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "DIFF_TYPE_DIFF_TO_HEAD", localName: "DIFF_TO_HEAD"},
+    {no: 2, name: "DIFF_TYPE_DIFF_FROM_BRANCH_TO_MAIN", localName: "DIFF_FROM_BRANCH_TO_MAIN"},
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GetDiffRequest
+ */
+export const GetDiffRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GetDiffRequest",
+  () => [
+    { no: 1, name: "cwd", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "ref", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "base_ref", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "merge_base", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 5, name: "target_paths", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 6, name: "unified_context_lines", kind: "scalar", T: 5 /* ScalarType.INT32 */, opt: true },
+    { no: 7, name: "max_untracked_files", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 8, name: "output_format", kind: "enum", T: proto3.getEnumType(GetDiffRequest_OutputFormat), opt: true },
+    { no: 9, name: "submodule_recurse_depth", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 10, name: "include_space_changes", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 11, name: "committed_only", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 12, name: "compute_patch_id", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 13, name: "return_head_sha", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+    { no: 14, name: "max_response_bytes", kind: "scalar", T: 5 /* ScalarType.INT32 */, opt: true },
+    { no: 15, name: "max_files_with_contents", kind: "scalar", T: 13 /* ScalarType.UINT32 */, opt: true },
+    { no: 16, name: "max_content_bytes", kind: "scalar", T: 13 /* ScalarType.UINT32 */, opt: true },
+  ],
+);
+
+/**
+ * @generated from enum aiserver.v1.GetDiffRequest.OutputFormat
+ */
+export const GetDiffRequest_OutputFormat = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.GetDiffRequest.OutputFormat",
+  [
+    {no: 0, name: "UNSPECIFIED"},
+    {no: 1, name: "NAME_STATUS"},
+    {no: 2, name: "NAME_STATUS_AND_NUMSTAT"},
+    {no: 3, name: "FILE_DIFFS"},
+    {no: 4, name: "DIFFS_WITH_BEFORE_AND_AFTER"},
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GetDiffResponse
+ */
+export const GetDiffResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GetDiffResponse",
+  () => [
+    { no: 1, name: "diff", kind: "message", T: GitDiff },
+    { no: 2, name: "submodule_diffs", kind: "message", T: GetDiffResponse_SubmoduleDiff, repeated: true },
+    { no: 3, name: "patch_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 4, name: "head_sha", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 5, name: "has_uncommitted_changes", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GetDiffResponse.SubmoduleDiff
+ */
+export const GetDiffResponse_SubmoduleDiff = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GetDiffResponse.SubmoduleDiff",
+  () => [
+    { no: 1, name: "relative_path", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "diff", kind: "message", T: GitDiff },
+    { no: 3, name: "errored", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ],
+  {localName: "GetDiffResponse_SubmoduleDiff"},
+);
+
