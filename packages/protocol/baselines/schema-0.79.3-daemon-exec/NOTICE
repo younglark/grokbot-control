@@ -6,3 +6,5 @@ Restored protocol messages for compatibility research.
 - Additive Exec* closure: static text parse of App daemon compact descriptors; not executed.
 - Not official Google/Cursor protobuf sources; no publisher schema license claimed beyond App EULA analysis limits.
 - See SOURCE.json for descriptor anchors and added type list.
+
+- P1 FileDiff shape fix: top-level FileDiff restored to parent/daemon field numbers; distinct from nested EditFileResult.FileDiff.

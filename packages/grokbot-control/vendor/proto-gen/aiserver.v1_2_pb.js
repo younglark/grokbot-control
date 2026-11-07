@@ -109,39 +109,33 @@ export const GitCommit = /*@__PURE__*/ proto3.makeMessageType(
 export const FileDiff = /*@__PURE__*/ proto3.makeMessageType(
   "aiserver.v1.FileDiff",
   () => [
-    { no: 1, name: "chunks", kind: "message", T: FileDiff_ChunkDiff, repeated: true },
-    { no: 2, name: "editor", kind: "enum", T: proto3.getEnumType(FileDiff_Editor) },
-    { no: 3, name: "hit_timeout", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 1, name: "from", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "to", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "chunks", kind: "message", T: FileDiff_Chunk, repeated: true },
+    { no: 4, name: "added", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 5, name: "removed", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 6, name: "before_file_contents", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 7, name: "after_file_contents", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 8, name: "is_generated", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+    { no: 9, name: "old_mode", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 10, name: "new_mode", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
   ],
 );
 
 /**
- * @generated from enum aiserver.v1.FileDiff.Editor
+ * @generated from message aiserver.v1.FileDiff.Chunk
  */
-export const FileDiff_Editor = /*@__PURE__*/ proto3.makeEnum(
-  "aiserver.v1.FileDiff.Editor",
-  [
-    {no: 0, name: "EDITOR_UNSPECIFIED", localName: "UNSPECIFIED"},
-    {no: 1, name: "EDITOR_AI", localName: "AI"},
-    {no: 2, name: "EDITOR_HUMAN", localName: "HUMAN"},
-  ],
-);
-
-/**
- * @generated from message aiserver.v1.FileDiff.ChunkDiff
- */
-export const FileDiff_ChunkDiff = /*@__PURE__*/ proto3.makeMessageType(
-  "aiserver.v1.FileDiff.ChunkDiff",
+export const FileDiff_Chunk = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.FileDiff.Chunk",
   () => [
-    { no: 1, name: "diff_string", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 2, name: "old_start", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
-    { no: 3, name: "new_start", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 1, name: "content", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "lines", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 3, name: "old_start", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
     { no: 4, name: "old_lines", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
-    { no: 5, name: "new_lines", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
-    { no: 6, name: "lines_removed", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
-    { no: 7, name: "lines_added", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 5, name: "new_start", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 6, name: "new_lines", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
   ],
-  {localName: "FileDiff_ChunkDiff"},
+  {localName: "FileDiff_Chunk"},
 );
 
 /**

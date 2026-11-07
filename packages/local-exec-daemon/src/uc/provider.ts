@@ -11,7 +11,7 @@ import { GrokBotUserComputerQueuedRequest, GrokBotUserComputerRequestFrame,
   GrokBotUserComputerMessagesError, GrokBotUserComputerFileError,
   SubmitGrokBotUserComputerResponsesRequest } from "../generated/aiserver.v1_pb";
 import {
-  allocateExecId,
+  lastAllocatedExecIdOrZero,
   cancelRequest,
   dispatchExec,
   type Emit,
@@ -273,7 +273,7 @@ export class UserComputerProvider implements UserComputerTransport {
       const q = this.backlog.shift()!;
       if (this.active.has(q.requestId)) continue;
       this.active.add(q.requestId); this.bump(1);
-      const job = this.handleQueued(q).catch(e => requestError(q.requestId, allocateExecId(), e, this.emit))
+      const job = this.handleQueued(q).catch(e => requestError(q.requestId, lastAllocatedExecIdOrZero(), e, this.emit))
         .catch(() => { console.error("[user-computer-provider] request reply failed"); })
         .then(() => undefined).finally(() => { this.activeJobs.delete(job); this.active.delete(q.requestId); this.bump(-1); this.runBacklog(); });
       this.activeJobs.add(job);

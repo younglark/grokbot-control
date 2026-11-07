@@ -409,19 +409,54 @@ export class GitCommit extends Message<GitCommit> {
  */
 export class FileDiff extends Message<FileDiff> {
   /**
-   * @generated from field: repeated aiserver.v1.FileDiff.ChunkDiff chunks = 1;
+   * @generated from field: string from = 1;
    */
-  chunks: FileDiff_ChunkDiff[] = [];
+  from = "";
 
   /**
-   * @generated from field: aiserver.v1.FileDiff.Editor editor = 2;
+   * @generated from field: string to = 2;
    */
-  editor = FileDiff_Editor.UNSPECIFIED;
+  to = "";
 
   /**
-   * @generated from field: bool hit_timeout = 3;
+   * @generated from field: repeated aiserver.v1.FileDiff.Chunk chunks = 3;
    */
-  hitTimeout = false;
+  chunks: FileDiff_Chunk[] = [];
+
+  /**
+   * @generated from field: int32 added = 4;
+   */
+  added = 0;
+
+  /**
+   * @generated from field: int32 removed = 5;
+   */
+  removed = 0;
+
+  /**
+   * @generated from field: optional string before_file_contents = 6;
+   */
+  beforeFileContents?: string;
+
+  /**
+   * @generated from field: optional string after_file_contents = 7;
+   */
+  afterFileContents?: string;
+
+  /**
+   * @generated from field: optional bool is_generated = 8;
+   */
+  isGenerated?: boolean;
+
+  /**
+   * @generated from field: optional string old_mode = 9;
+   */
+  oldMode?: string;
+
+  /**
+   * @generated from field: optional string new_mode = 10;
+   */
+  newMode?: string;
 
   constructor(data?: PartialMessage<FileDiff>) {
     super();
@@ -431,9 +466,16 @@ export class FileDiff extends Message<FileDiff> {
   static readonly runtime: typeof proto3 = proto3;
   static readonly typeName = "aiserver.v1.FileDiff";
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
-    { no: 1, name: "chunks", kind: "message", T: FileDiff_ChunkDiff, repeated: true },
-    { no: 2, name: "editor", kind: "enum", T: proto3.getEnumType(FileDiff_Editor) },
-    { no: 3, name: "hit_timeout", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 1, name: "from", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "to", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "chunks", kind: "message", T: FileDiff_Chunk, repeated: true },
+    { no: 4, name: "added", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 5, name: "removed", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 6, name: "before_file_contents", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 7, name: "after_file_contents", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 8, name: "is_generated", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+    { no: 9, name: "old_mode", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 10, name: "new_mode", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): FileDiff {
@@ -454,49 +496,23 @@ export class FileDiff extends Message<FileDiff> {
 }
 
 /**
- * @generated from enum aiserver.v1.FileDiff.Editor
+ * @generated from message aiserver.v1.FileDiff.Chunk
  */
-export enum FileDiff_Editor {
+export class FileDiff_Chunk extends Message<FileDiff_Chunk> {
   /**
-   * @generated from enum value: EDITOR_UNSPECIFIED = 0;
+   * @generated from field: string content = 1;
    */
-  UNSPECIFIED = 0,
+  content = "";
 
   /**
-   * @generated from enum value: EDITOR_AI = 1;
+   * @generated from field: repeated string lines = 2;
    */
-  AI = 1,
+  lines: string[] = [];
 
   /**
-   * @generated from enum value: EDITOR_HUMAN = 2;
-   */
-  HUMAN = 2,
-}
-// Retrieve enum metadata with: proto3.getEnumType(FileDiff_Editor)
-proto3.util.setEnumType(FileDiff_Editor, "aiserver.v1.FileDiff.Editor", [
-  { no: 0, name: "EDITOR_UNSPECIFIED" },
-  { no: 1, name: "EDITOR_AI" },
-  { no: 2, name: "EDITOR_HUMAN" },
-]);
-
-/**
- * @generated from message aiserver.v1.FileDiff.ChunkDiff
- */
-export class FileDiff_ChunkDiff extends Message<FileDiff_ChunkDiff> {
-  /**
-   * @generated from field: string diff_string = 1;
-   */
-  diffString = "";
-
-  /**
-   * @generated from field: int32 old_start = 2;
+   * @generated from field: int32 old_start = 3;
    */
   oldStart = 0;
-
-  /**
-   * @generated from field: int32 new_start = 3;
-   */
-  newStart = 0;
 
   /**
    * @generated from field: int32 old_lines = 4;
@@ -504,51 +520,45 @@ export class FileDiff_ChunkDiff extends Message<FileDiff_ChunkDiff> {
   oldLines = 0;
 
   /**
-   * @generated from field: int32 new_lines = 5;
+   * @generated from field: int32 new_start = 5;
+   */
+  newStart = 0;
+
+  /**
+   * @generated from field: int32 new_lines = 6;
    */
   newLines = 0;
 
-  /**
-   * @generated from field: int32 lines_removed = 6;
-   */
-  linesRemoved = 0;
-
-  /**
-   * @generated from field: int32 lines_added = 7;
-   */
-  linesAdded = 0;
-
-  constructor(data?: PartialMessage<FileDiff_ChunkDiff>) {
+  constructor(data?: PartialMessage<FileDiff_Chunk>) {
     super();
     proto3.util.initPartial(data, this);
   }
 
   static readonly runtime: typeof proto3 = proto3;
-  static readonly typeName = "aiserver.v1.FileDiff.ChunkDiff";
+  static readonly typeName = "aiserver.v1.FileDiff.Chunk";
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
-    { no: 1, name: "diff_string", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 2, name: "old_start", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
-    { no: 3, name: "new_start", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 1, name: "content", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "lines", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 3, name: "old_start", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
     { no: 4, name: "old_lines", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
-    { no: 5, name: "new_lines", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
-    { no: 6, name: "lines_removed", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
-    { no: 7, name: "lines_added", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 5, name: "new_start", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 6, name: "new_lines", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
   ]);
 
-  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): FileDiff_ChunkDiff {
-    return new FileDiff_ChunkDiff().fromBinary(bytes, options);
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): FileDiff_Chunk {
+    return new FileDiff_Chunk().fromBinary(bytes, options);
   }
 
-  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): FileDiff_ChunkDiff {
-    return new FileDiff_ChunkDiff().fromJson(jsonValue, options);
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): FileDiff_Chunk {
+    return new FileDiff_Chunk().fromJson(jsonValue, options);
   }
 
-  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): FileDiff_ChunkDiff {
-    return new FileDiff_ChunkDiff().fromJsonString(jsonString, options);
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): FileDiff_Chunk {
+    return new FileDiff_Chunk().fromJsonString(jsonString, options);
   }
 
-  static equals(a: FileDiff_ChunkDiff | PlainMessage<FileDiff_ChunkDiff> | undefined, b: FileDiff_ChunkDiff | PlainMessage<FileDiff_ChunkDiff> | undefined): boolean {
-    return proto3.util.equals(FileDiff_ChunkDiff, a, b);
+  static equals(a: FileDiff_Chunk | PlainMessage<FileDiff_Chunk> | undefined, b: FileDiff_Chunk | PlainMessage<FileDiff_Chunk> | undefined): boolean {
+    return proto3.util.equals(FileDiff_Chunk, a, b);
   }
 }
 

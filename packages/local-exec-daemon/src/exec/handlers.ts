@@ -17,12 +17,19 @@ type ShellJob = { abort: (reason: ShellAbortReason) => void; done: Promise<void>
 const shells = new Map<string, ShellJob>();
 /** Official daemon allocates inner exec message ids locally: nextExecId=1 then o.id=a. */
 let nextExecId = 1;
+let lastAllocatedExecId = 0;
 export function allocateExecId(): number {
-  return nextExecId++;
+  lastAllocatedExecId = nextExecId++;
+  return lastAllocatedExecId;
+}
+/** Most recent allocateExecId() result (0 if none since reset). For catch paths that must not double-allocate. */
+export function lastAllocatedExecIdOrZero(): number {
+  return lastAllocatedExecId;
 }
 /** Test-only: reset sequential inner ids to match a fresh daemon instance. */
 export function resetExecIdCounter(value = 1): void {
   nextExecId = value;
+  lastAllocatedExecId = 0;
 }
 export async function requestError(requestId: string, msgId: number, error: unknown, emit: Emit): Promise<void> {
   await emit({ kind: "control", requestId, message: { throw: { id: msgId, error: String(error instanceof Error ? error.message : error) } }, cwdState: "unset" });

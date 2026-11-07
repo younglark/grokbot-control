@@ -167,5 +167,28 @@
       "ExecClientHeartbeat": "ExecClientHeartbeat|1 id 13"
     }
   },
-  "cycle_break": "moved top-level FileDiff+GitDiff to aiserver.v1_2.proto; appended GetDiffRequest/Response there"
+  "cycle_break": "moved top-level FileDiff+GitDiff to aiserver.v1_2.proto; appended GetDiffRequest/Response there. P1 fix (post-e0bf830): top-level FileDiff must match parent/daemon shape (from=1,to=2,chunks=3/FileDiff.Chunk,added=4,removed=5,...) \u2014 NOT EditFileResult.FileDiff (chunks/editor/hit_timeout). Nested EditFileResult.FileDiff remains in aiserver.v1.proto. Evidence: parent aiserver.v1.proto:5601; daemon.formatted.cjs FileDiff| ~L95399, FileDiff.Chunk ~L95429.",
+  "filediff_shape_fix": {
+    "issue": "e0bf830 incorrectly used EditFileResult.FileDiff field layout for top-level FileDiff",
+    "correct_fields": {
+      "from": 1,
+      "to": 2,
+      "chunks": 3,
+      "added": 4,
+      "removed": 5,
+      "before_file_contents": 6,
+      "after_file_contents": 7,
+      "is_generated": 8,
+      "old_mode": 9,
+      "new_mode": 10,
+      "Chunk": {
+        "content": 1,
+        "lines": 2,
+        "old_start": 3,
+        "old_lines": 4,
+        "new_start": 5,
+        "new_lines": 6
+      }
+    }
+  }
 }

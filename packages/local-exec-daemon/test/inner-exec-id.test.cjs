@@ -16,6 +16,8 @@ const {
   shutdownShells,
 } = require('../dist/exec/handlers');
 const { ExecServerMessage, ExecClientMessage } = require('../dist/generated/agent.v1_pb');
+const ai = require('../dist/generated/aiserver.v1_2_pb');
+const aiMain = require('../dist/generated/aiserver.v1_pb');
 
 test('generated ExecServerMessage/ExecClientMessage exist with official field numbers', () => {
   const serverFields = Object.fromEntries(ExecServerMessage.fields.list().map(f => [f.name, f.no]));
@@ -29,6 +31,34 @@ test('generated ExecServerMessage/ExecClientMessage exist with official field nu
   assert.equal(clientFields.exec_id, 15);
   assert.equal(clientFields.shell_result, 2);
   assert.equal(clientFields.shell_stream, 14);
+});
+
+
+test('top-level FileDiff shape matches parent/daemon, not EditFileResult.FileDiff', () => {
+  const top = Object.fromEntries(ai.FileDiff.fields.list().map(f => [f.name, f.no]));
+  assert.equal(top.from, 1);
+  assert.equal(top.to, 2);
+  assert.equal(top.chunks, 3);
+  assert.equal(top.added, 4);
+  assert.equal(top.removed, 5);
+  assert.equal(top.before_file_contents, 6);
+  assert.equal(top.after_file_contents, 7);
+  // Nested Chunk under top-level FileDiff
+  const chunk = Object.fromEntries(ai.FileDiff_Chunk.fields.list().map(f => [f.name, f.no]));
+  assert.equal(chunk.content, 1);
+  assert.equal(chunk.lines, 2);
+  assert.equal(chunk.old_start, 3);
+  assert.equal(chunk.old_lines, 4);
+  assert.equal(chunk.new_start, 5);
+  assert.equal(chunk.new_lines, 6);
+  // Nested EditFileResult.FileDiff must remain the other shape
+  const nested = Object.fromEntries(aiMain.EditFileResult_FileDiff.fields.list().map(f => [f.name, f.no]));
+  assert.equal(nested.chunks, 1);
+  assert.equal(nested.editor, 2);
+  assert.equal(nested.hit_timeout, 3);
+  assert.notEqual(top.chunks, nested.chunks, 'top-level chunks field number must differ from EditFileResult.FileDiff');
+  assert.ok(!('from' in nested));
+  assert.ok(!('editor' in top));
 });
 
 test('server inner id≠1 reallocates reply id to sequential local ids starting at 1', async () => {

@@ -54,24 +54,24 @@ message GitCommit {
 }
 
 message FileDiff {
-  repeated aiserver.v1.FileDiff.ChunkDiff chunks = 1;
-  aiserver.v1.FileDiff.Editor editor = 2;
-  bool hit_timeout = 3;
+  string from = 1;
+  string to = 2;
+  repeated aiserver.v1.FileDiff.Chunk chunks = 3;
+  int32 added = 4;
+  int32 removed = 5;
+  optional string before_file_contents = 6;
+  optional string after_file_contents = 7;
+  optional bool is_generated = 8;
+  optional string old_mode = 9;
+  optional string new_mode = 10;
 
-  message ChunkDiff {
-    string diff_string = 1;
-    int32 old_start = 2;
-    int32 new_start = 3;
+  message Chunk {
+    string content = 1;
+    repeated string lines = 2;
+    int32 old_start = 3;
     int32 old_lines = 4;
-    int32 new_lines = 5;
-    int32 lines_removed = 6;
-    int32 lines_added = 7;
-  }
-
-  enum Editor {
-    EDITOR_UNSPECIFIED = 0;
-    EDITOR_AI = 1;
-    EDITOR_HUMAN = 2;
+    int32 new_start = 5;
+    int32 new_lines = 6;
   }
 }
 

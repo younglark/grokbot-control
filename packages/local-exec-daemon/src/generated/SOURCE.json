@@ -6,7 +6,7 @@
   "sha256": {
     "agent.v1.proto": "e813fefde6bb0a317719cc2c5b0e6719029569d30c1f32e099b37e1f5ad80364",
     "aiserver.v1.proto": "abbd3e40bcbfd105ab1684e00f7953d4b6cfe56778c624d2d80f5ccd2ab87d43",
-    "aiserver.v1_2.proto": "80f1f68f19314149384af8a549a0149624bd717de8486eb4f7f0689aa3fdf8bb",
+    "aiserver.v1_2.proto": "a4077e90d3db8818eda4e4c3b6029c6bc4b70dbac850d46889acde163a741867",
     "anyrun.v1.proto": "0626f1e66216e2ef6136787bfd99cb7b62fcf23cee849f083439aa74f0ce9ab6",
     "internapi.v1.proto": "c3648bab2a4e837b7b137250c22359f3ef7d98f3776cb2551c34d4e99350f433",
     "svc_aiserver.v1.GrokBotService.proto": "9ca0c3d88bb28a517263f2c01c8424fa439a4452c6c05875f95d29c4d605e9dc"
