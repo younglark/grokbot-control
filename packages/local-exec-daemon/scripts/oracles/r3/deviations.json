@@ -1,0 +1,9 @@
+{
+  "sh-ident": "official env adds NODE_PATH=<official install deps dir> and empty __CURSOR_SANDBOX_ENV_RESTORE (bundle/sandbox artifacts); not mimicked",
+  "cwd-save": "SECURITY: official exit.cwd keeps only the first line of a newline-containing cwd; ours reports the full path",
+  "cwd-check": "SECURITY: official executes the 2nd line of a newline-containing cwd on the next call (injection); ours does not",
+  "multicwd": "SECURITY: same newline-cwd truncation as cwd-save",
+  "cwd-next": "SECURITY: official runs 'break' injected from the previous cwd; ours does not",
+  "path-save": "official dump needs external grep; with PATH=/nonexistent it fails (stderr) and keeps old state. Ours dumps with builtins only and commits atomically",
+  "path-read": "consequence of path-save: official LAST=unset (old state), ours LAST=x (complete new state); functions/aliases preserved in both"
+}

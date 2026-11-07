@@ -9,7 +9,7 @@ cmd=['/usr/bin/bwrap','--unshare-all','--die-with-parent','--new-session','--ro-
 for e in extra:
   if e.startswith('BIND:'): _,a,b=e.split(':'); cmd+=['--ro-bind',a,b]
   else: k,v=e.split('=',1); cmd+=['--setenv',k,v]
-cmd+=['--chdir','/state','/runtime/node','/scripts/probe_r3.cjs']
+cmd+=['--chdir','/state','/runtime/node','/scripts/probes/probe_'+_o.environ.get('PROBE','main')+'.cjs']
 p=subprocess.Popen(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,start_new_session=True,env={'PATH':'/usr/bin:/bin'})
 try: out,err=p.communicate(timeout=90)
 except subprocess.TimeoutExpired: os.killpg(p.pid,signal.SIGKILL); out,err=p.communicate()
