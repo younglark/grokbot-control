@@ -1,161 +1,257 @@
 # grokbot-control
 
-**人通过 Grok Bot App 驱动 → agent CLI 经 MCP/CLI 驱动同一 Bot。**  
-可编程控制面（原生 Connect RPC），非自建任务系统。
+**人通过 Grok Bot App 驱动 → agent CLI 经 MCP / CLI 驱动同一 Bot。**
 
-CLI 暂称 **`gbc`**；MCP stdio 入口 **`gbc-mcp`**。
+可编程控制面（原生 Connect RPC），不是另建任务系统。CLI 入口 **`gbc`**，MCP stdio 入口 **`gbc-mcp`**。当前 npm 版本 **0.1.3**。
 
-> Live auth / production RPC **未在本轮验证**。默认 `--mock` 仅用于显式仿真（结果带 `simulated: true`），不是在线成功。
+> 非官方产品。协议来自 Grok Bot 桌面 App 的静态逆向，**不是**公开 API。自动化测试以 mock 为主；部分选定 RPC 曾做过隔离 live 验收，范围见 [docs/implementation-status.md](docs/implementation-status.md)，不能据此推定全部 RPC / OAuth 刷新已验证。
 
-## 快速开始
+## Why
+
+App 里能做的 Bot 生命周期、发消息、侧边栏、进度与中断，希望由上层 agent / 脚本以同一后端能力完成，而不是再造一套 task 状态机。
+
+## Features
+
+- **Bot**：create / list / get（list 筛选）/ update / delete
+- **消息与会话**：send、send status、history、sessions
+- **侧边栏**：SidebarSections CRUD、移动成员（删除分组 ≠ 删除 Bot）
+- **进度**：status、原生 todos / tasks / subagents、interrupt
+- **鉴权**：独立 Cursor 浏览器登录；凭据存 `~/.gbc`（0600）；不读取 App 的 `sand-secrets.json`
+- **文件同步**：`sync pull|status|render|attachments`（无 SQLite；细节见 [docs/sync-format.md](docs/sync-format.md)）
+- **双入口**：同一 shared SDK → CLI（`gbc`）与 MCP（`gbc-mcp`）
+- **写安全**：远端写需 `--allow-writes`；危险操作需 `--confirm=<id>`；`--dry-run` 纯本地计划
+
+## Install
+
+需要 **Node.js ≥ 20**。
+
+### npx（推荐）
+
+```bash
+npx --yes --package=grokbot-control@0.1.3 gbc --help
+npx --yes --package=grokbot-control@0.1.3 gbc --mock --json bot list
+npx --yes --package=grokbot-control@0.1.3 gbc-mcp
+```
+
+也可用 `@latest`；MCP 建议钉版本，避免宿主静默升级。
+
+### 全局安装
+
+```bash
+npm install --global grokbot-control@0.1.3
+gbc --help
+gbc-mcp
+```
+
+### 从源码
+
+```bash
+git clone https://github.com/younglark/grokbot-control.git
+cd grokbot-control
+npm ci
+npm run build
+npm test
+node dist/cli/main.js --help
+```
+
+## Quick start
+
+### Mock（离线仿真）
+
+结果带 `simulated: true`，不是在线成功。跨进程状态：`GBT_MOCK_STATE` 或 `~/.gbc/mock-state.json`。
+
+```bash
+npx --yes --package=grokbot-control@0.1.3 gbc --mock --json --allow-writes \
+  bot create --name demo --description "test"
+npx --yes --package=grokbot-control@0.1.3 gbc --mock --json bot list
+npx --yes --package=grokbot-control@0.1.3 gbc --mock --json --allow-writes \
+  message send --agent-id <id> --session-id <sid> --text "hello"
+npx --yes --package=grokbot-control@0.1.3 gbc --mock --json bot status --agent-id <id>
+```
+
+### Live（真实后端）
+
+默认 backend `https://api2.cursor.sh`，网站 `https://cursor.com`。不要设置 `GBT_MOCK`。
+
+```bash
+gbc --json auth login --timeout 300
+# URL 走 stderr 的 open_browser 事件；也可分步：
+#   gbc --json auth login-begin
+#   gbc --json auth complete --timeout 300
+
+gbc --json auth whoami          # 离线本地状态，不打印 token
+gbc --json bot list --limit 20  # 只读
+gbc --json sidebar list
+gbc --json auth logout          # 只删本工具本地凭据，不吊销服务端会话
+```
+
+Token 刷新需自行配置公开的 `GBT_OAUTH_CLIENT_ID`（本工具**不内置**，也不从 JWT 猜测），或登录时已持久化的绑定。详见下方 Auth。
+
+## MCP 配置
+
+stdio；**stdout 仅协议帧**，不要把 CLI 日志打到 stdout。
+
+```json
+{
+  "mcpServers": {
+    "grokbot-control": {
+      "command": "npx",
+      "args": ["--yes", "--package=grokbot-control@0.1.3", "gbc-mcp"],
+      "env": {
+        "GBT_OAUTH_CLIENT_ID": "<your-public-oauth-client-id>"
+      }
+    }
+  }
+}
+```
+
+常用环境变量：
+
+| 变量 | 说明 |
+|---|---|
+| `GBT_MCP_READONLY=1` | 仅 `auth_whoami` + 只读业务工具（不含 login/logout/cancel/refresh 及写工具） |
+| `GBT_ALLOW_WRITES=1` | 允许远端写工具 |
+| `GBT_OAUTH_CLIENT_ID` | 公开 OAuth client id（刷新用；不内置） |
+| `GBT_CREDENTIALS_DIR` | 凭据目录，默认 `~/.gbc` |
+| `GBT_SYNC_ROOT` | 设置后才提供 `sync_status` |
+| `GBT_SYNC_ALLOW_LOCAL_WRITES=1` | 另需才提供 `sync_pull` / `sync_render` / `sync_attachments` |
+| `GBT_SYNC_ACCOUNT_ID` / `GBT_SYNC_TEAM_ID` / `GBT_SYNC_ACK_UNVERIFIED_SCOPE=1` | sync pull 作用域（操作者声明，非服务端验证） |
+
+只读试跑：
+
+```bash
+GBT_MCP_READONLY=1 npx --yes --package=grokbot-control@0.1.3 gbc-mcp
+```
+
+主要工具：`list_bots`、`get_bot`、`create_bot`、`update_bot`、`delete_bot`、`send_message`、`get_send_status`、`list_transcript`、`list_sessions`、`get_bot_status`、`list_agent_todos`、`list_agent_tasks`、`list_agent_subagents`、`interrupt_run`、sidebar 系列、`auth_*`、可选 `sync_*`。完整契约见 [docs/protocol-map.md](docs/protocol-map.md)。
+
+## Auth
+
+独立 Cursor 浏览器登录（静态逆向协议，非官方公开 API）。仅支持 Cursor token；xAI identity 返回 `unsupported`。
+
+| 命令 | 作用 |
+|---|---|
+| `gbc --json auth login-begin` | 输出 `authorization_url`（不含 verifier） |
+| `gbc --json auth complete --timeout 300` | 轮询 `/auth/poll`；成功后写入 `~/.gbc`（0600） |
+| `gbc --json auth login --timeout 300` | begin + complete；URL 经 stderr |
+| `gbc --json auth whoami` | 离线本地状态，不联网、不打印 token |
+| `gbc --json auth refresh [--force]` | 临期 / 缺非法 exp / `--force` 才刷新 |
+| `gbc --json auth logout` | 只删本工具本地凭据 |
+
+要点：
+
+- **不内置 `client_id`**；刷新依赖 `GBT_OAUTH_CLIENT_ID` 或登录持久化绑定。旧凭据可用 `GBT_AUTH_CONFIRM_MIGRATE=1` 确认迁移。
+- 凭据独立于 App；logout 不吊销服务端会话。
+- 跨进程 refresh 使用原生 OS advisory lock（`fs-native-extensions`）；缺失 binding 则 fail closed。升级前请停止全部旧 MCP 进程。详见 [docs/auth-lock.md](docs/auth-lock.md)。
+- 协议与证据：[docs/protocol/auth-flow.md](docs/protocol/auth-flow.md)、[docs/protocol-map.md](docs/protocol-map.md)。
+
+示例环境变量见 [.env.example](.env.example)。
+
+## CLI 概览
+
+```text
+gbc [--json] [--mock] [--allow-writes] [--dry-run] [--base-url URL] [--auth-kind cursor|xai] <noun> <verb> [flags]
+```
+
+| 名词 | 动词（摘要） |
+|---|---|
+| `auth` | `login-begin` / `complete` / `login` / `whoami` / `poll` / `cancel` / `refresh` / `logout` |
+| `bot` | `create` / `list` / `get` / `update` / `delete` / `status` / `todos` / `tasks` / `subagents` / `interrupt` |
+| `message` | `send` / `status` / `history` |
+| `session` | `list` |
+| `sidebar` | `list` / `create` / `rename` / `delete` / `move` |
+| `sync` | `pull` / `status` / `render` / `attachments` |
+
+危险写操作（`bot delete`、`sidebar delete`、`interrupt` 等）需要 `--confirm=<resource-id>` 精确匹配。远端写需要 `--allow-writes` 或 `GBT_ALLOW_WRITES=1`；`sync` 的本地归档写由命令本身授权，不要求远端 `--allow-writes`。
+
+### 退出码
+
+| 码 | 含义 |
+|---:|---|
+| 0 | success |
+| 2 | usage |
+| 4 | auth |
+| 5 | not_found |
+| 6 | conflict |
+| 7 | denied |
+| 8 | retryable |
+| 9 | known_failure |
+| 10 | unknown outcome（写后无法排除副作用时勿盲目重试） |
+| 1 | other |
+
+统一 JSON 结果契约见 [docs/architecture.md](docs/architecture.md)。
+
+### Sync（摘要）
+
+```bash
+gbc sync pull --agent-id <id> --dir /absolute/private/root \
+  --account-id <stable-id> --team-id none --ack-unverified-scope
+gbc sync status --dir /absolute/private/root
+gbc sync render --dir /absolute/private/root
+gbc sync attachments --dir /absolute/private/root \
+  --account-id <stable-id> --team-id none --ack-unverified-scope
+```
+
+身份是操作者显式声明，不是服务端验证；请用稳定 ID，不要用邮箱 / token 哈希。格式、预算与恢复步骤见 [docs/sync-format.md](docs/sync-format.md)。
+
+## Docs
+
+| 文档 | 内容 |
+|---|---|
+| [docs/requirements.md](docs/requirements.md) | 需求与非目标 |
+| [docs/architecture.md](docs/architecture.md) | 模块、错误、写安全 |
+| [docs/protocol-map.md](docs/protocol-map.md) | 覆盖矩阵 / RPC / Auth 契约 |
+| [docs/protocol/](docs/protocol/README.md) | 协议基线、静态还原、App 更新 runbook |
+| [docs/sync-format.md](docs/sync-format.md) | 文件同步格式与限制 |
+| [docs/auth-lock.md](docs/auth-lock.md) | 原生跨进程 refresh 锁 |
+| [docs/implementation-status.md](docs/implementation-status.md) | 实现状态与验收边界 |
+| [docs/implementation-plan.md](docs/implementation-plan.md) | 分期计划 |
+| [docs/acceptance.md](docs/acceptance.md) | 验收 |
+| [docs/review.md](docs/review.md) | 审查 |
+| [docs/references.md](docs/references.md) | 一手来源 |
+| [vendor/proto-gen/NOTICE.md](vendor/proto-gen/NOTICE.md) | 生成客户端来源与许可说明 |
+
+## Development
 
 ```bash
 npm ci
 npm run build
 npm test
-
-# 显式 mock 仿真（跨进程状态：GBT_MOCK_STATE 或 ~/.gbc/mock-state.json）
-node dist/cli/main.js --mock --json --allow-writes bot create --name demo --description "test"
-node dist/cli/main.js --mock --json bot list
-node dist/cli/main.js --mock --json --allow-writes message send \
-  --agent-id <id> --session-id <sid> --text "hello"
-node dist/cli/main.js --mock --json bot status --agent-id <id>
-node dist/cli/main.js --mock --json --allow-writes sidebar create --name Work
-node dist/cli/main.js --mock --json --allow-writes sidebar move --agent-id <id> --section-id <sid>
-node dist/cli/main.js --mock --json --allow-writes bot delete --agent-id <id> --confirm <id>
-
-# MCP（stdio；stdout 仅协议帧）
-GBT_MOCK=1 node dist/mcp/main.js
+npm run typecheck
+npm run test:protocol-tools   # 可选：协议工具 Python 单测
 ```
 
-Live Connect（真实登录需用户本人在浏览器授权；本仓库测试只用本地 fake 后端）：
+本地入口：
 
 ```bash
-# 不要设置 GBT_MOCK / GBT_ALLOW_WRITES；默认 backend https://api2.cursor.sh，网站 https://cursor.com
-node dist/cli/main.js --json auth login-begin        # stdout: authorization_url（不含 verifier）
-#   → 用户在浏览器打开该 URL 并登录
-node dist/cli/main.js --json auth complete --timeout 300   # 轮询 GET /auth/poll；成功后凭据写入 ~/.gbc（0600）
-# 或单命令：auth login --timeout 300（URL 走 stderr 的 open_browser 事件，stdout 只放结果）
-node dist/cli/main.js --json auth whoami             # 本地状态，不联网、不打印 token
-node dist/cli/main.js --json auth refresh            # 临期才联网；足够新则 refreshed:false
-node dist/cli/main.js --json auth refresh --force    # 强制刷新（验证/401恢复）
-node dist/cli/main.js --json bot list --limit 20     # 只读
-node dist/cli/main.js --json sidebar list
-node dist/cli/main.js --json bot status --agent-id <agent_id>
-node dist/cli/main.js --json auth logout             # 只删本工具自己的本地凭据
+npm run gbc -- --mock --json bot list
+npm run mcp                   # 或：GBT_MOCK=1 node dist/mcp/main.js
 ```
 
-鉴权限制（详见 docs/protocol-map.md「Auth」）：
-- 协议来自 Grok Bot Linux App **静态逆向**，非官方公开 API。`vendor/proto-gen` 现为 **0.79.3**（本仓库从App恢复生成，离线校验）。较早人工登录验证使用旧0.78.4 vendor；0.79.3 的选定正常RPC已进行隔离临时bot验收，范围/skip见 implementation-status。不能由此推定所有RPC或OAuth刷新已验证。
-- 仅支持 Cursor token；xAI identity 登录结果返回 `unsupported`。
-- 刷新需显式配置公开 OAuth client_id：`GBT_OAUTH_CLIENT_ID`（本工具不内置，也不从 JWT 猜测），或登录时已持久化的绑定；旧凭据可用 `GBT_AUTH_CONFIRM_MIGRATE=1` 确认迁移。临期（<5min）/缺非法 exp / `--force` 才刷新；进程内 singleflight + 跨进程锁；`shouldLogout` 不回退已撤销 token。
-- 凭据独立于 App（不读取、不复用 App 的 sand-secrets.json）。logout 只删本地文件，不吊销服务端会话。
-- MCP：`GBT_MCP_READONLY=1 node dist/mcp/main.js` 仅提供 `auth_whoami` + 只读业务工具（不含 login/logout/cancel/refresh 凭据写工具）。非 READONLY 另有 `auth_refresh`（仅非 secret 元数据）。
+源码布局概览：`src/auth`、`src/connect`、`src/ops`、`src/sync`、`src/cli`、`src/mcp`；正式 `.proto` 在 `proto/`，生成客户端在 `vendor/proto-gen/`。
 
-## Publish / npx
+## Publish / Release
 
-本包可发布到 [npm](https://www.npmjs.com/)（包名 `grokbot-control`）。**未声明 SPDX `license`**：`vendor/proto-gen` 来自逆向恢复的 schema，许可不清，见该目录 `NOTICE.md`；请自行评估分发风险。
+包名 [`grokbot-control`](https://www.npmjs.com/package/grokbot-control)。**未声明 SPDX `license`**：`vendor/proto-gen` 来自逆向恢复的 schema，许可不清，见 [vendor/proto-gen/NOTICE.md](vendor/proto-gen/NOTICE.md)；请自行评估分发风险。
 
-### 一次性准备（首发）
+后续发版走 **GitHub Actions + npm Trusted Publishing（OIDC）**，无需仓库里的 `NPM_TOKEN`：
 
-1. 在 [npmjs.com](https://www.npmjs.com/) 创建账号并开启 2FA。
-2. 首个版本手动发布一次（包不存在时无法配置 Trusted Publisher）：
+1. 工作区干净，本地 `npm run build && npm test` 通过。
+2. `npm version patch`（或 `minor` / `major`）更新 `package.json` 并打 `vX.Y.Z` tag。
+3. `git push origin main --follow-tags`。
+4. [`.github/workflows/publish.yml`](.github/workflows/publish.yml) 在推送 `v*` tag 时：`npm ci` → build → test → `npm publish --access public`。
 
-   ```bash
-   npm login --auth-type=web --registry=https://registry.npmjs.org
-   npm ci && npm test
-   npm publish --access public --registry=https://registry.npmjs.org
-   ```
+Trusted Publisher（npm 包 Settings）应对齐：
 
-3. 在 npmjs.com → `grokbot-control` → **Settings → Trusted Publisher** 选 GitHub Actions，填写：
-   - Organization or user：`younglark`
-   - Repository：`grokbot-control`
-   - Workflow filename：`publish.yml`
+- Organization or user：`younglark`
+- Repository：`grokbot-control`
+- Workflow filename：`publish.yml`
 
-   新建配置需在 2 天内完成第一次成功发布，否则过期。配置后可在 **Publishing access** 选择禁止 token 发布。
+GitHub Release **不会**触发发布；可在 tag 推送后再基于该 tag 建 Release，不会重复 publish。已发布版本不要重推同名 tag。
 
-### 后续发版（GitHub Actions + OIDC）
+## License / NOTICE
 
-`.github/workflows/publish.yml` 仅在推送 tag `v*` 时运行（Node 24、npm ≥ 11.5.1、`id-token: write`）：`npm ci` → `npm run build` → `npm test` → `npm publish --access public`。无需 npm token 或仓库 secret。
-
-```bash
-# 工作区干净、已通过本地 build/test
-npm version patch   # 或 minor / major；会改 package.json 并打 vX.Y.Z tag
-git push origin main --follow-tags
-```
-
-GitHub Release 不会触发发布，可在 tag 推送后基于该 tag 创建 Release，不会重复 publish。首版 0.1.0 已手动发布，不要再推 `v0.1.0` tag（会因版本已存在而失败）。
-
-### 安装 / 运行
-
-```bash
-npx --yes --package=grokbot-control@latest gbc --help
-npx --yes --package=grokbot-control@latest gbc --mock --json bot list
-npx --yes --package=grokbot-control@latest gbc-mcp
-```
-
-MCP 建议钉版本，例如：
-
-```json
-{
-  "command": "npx",
-  "args": ["--yes", "--package=grokbot-control@0.1.0", "gbc-mcp"]
-}
-```
-
-OAuth 刷新仍需自行配置公开的 `GBT_OAUTH_CLIENT_ID`（本工具不内置 client_id）。
-
-## 文件优先同步（无 SQLite）
-
-CLI：`gbc sync pull --agent-id BOT [--session-id SESSION] --dir /absolute/private/root
---account-id STABLE_ID --team-id none --ack-unverified-scope`；`gbc sync status|render|attachments --dir /absolute/private/root`。
-pull/render/attachments 明确授权本地写，不需要远端 `--allow-writes`；`--dry-run` 纯本地计划、无 RPC/文件。
-身份是操作者显式声明而非服务端验证，必须核对稳定 ID，不能用邮箱/token 哈希。
-**render 已可直接 rg 已确认 JSON UI entry 的正文**：message、send-message(text/attachment)、notice、
-tool-call 名称/状态/summary、附件文件引用；其余类型/未知 body 仍 opaque，不猜解密。
-正文补读显式开启 `sync pull ... --hydrate missing`（默认 `off`，不默默增加网络请求）。inline 优先；
-omitted 精确重读同版本；blob 仅通过 store presign 读取正文，不是用户附件。原始 wire/protojson 不覆盖，
-补读 bytes/本地 SHA-256/来源/版本上下文另存，JSONL 与离线 render 均可 grep。请求失败/无法解码返回 `partial`（exit 9），已归档行保留。
-默认额外 RPC 32、正文传输/响应总 8MiB、单正文 4MiB，与 pull 总字节/截止时间共享；参数见格式文档。
-静态解码证据和 synthetic genuine-schema fixture 见 [transcript-body-0.79.3.md](docs/protocol/transcript-body-0.79.3.md)。
-例如 `rg '关键词' /absolute/private/root/derived -g '*.md'`；旧 opaque 归档可离线重新 render。
-head刷新与持久化backfill交替，不删缺失行，不承诺完整性；附件单独按需下载；无Watch/`--all`。
-MCP 设 `GBT_SYNC_ROOT` 才提供 `sync_status`，另需 `GBT_SYNC_ALLOW_LOCAL_WRITES=1` 才有
-`sync_pull/sync_render/sync_attachments`（READONLY 排除写工具；scope 在启动配置；attachments 可选远端 file_path 过滤）。
-命令示例、scope 限制、格式与恢复步骤见 [docs/sync-format.md](docs/sync-format.md)。
-
-## 文档
-
-| 文件 | 内容 |
-|---|---|
-| [docs/requirements.md](docs/requirements.md) | 需求 |
-| [docs/protocol-map.md](docs/protocol-map.md) | 覆盖矩阵 / RPC |
-| [docs/protocol/](docs/protocol/README.md) | 协议基线、静态还原方法、App 更新 runbook、兼容矩阵、`tools/protocol` 脚本 |
-| [docs/architecture.md](docs/architecture.md) | 模块 / 错误 / 写安全 |
-| [docs/implementation-plan.md](docs/implementation-plan.md) | 分期 |
-| [docs/acceptance.md](docs/acceptance.md) | 验收 |
-| [docs/review.md](docs/review.md) | 审查 |
-| [docs/references.md](docs/references.md) | 一手来源 |
-| [docs/sync-format.md](docs/sync-format.md) | 文件同步格式、身份限制、预算、崩溃恢复 |
-| [docs/implementation-status.md](docs/implementation-status.md) | 实现状态 |
-| [/workspace/grokbot-control-implementation.md](../grokbot-control-implementation.md) | 本轮实现报告 |
-
-## 退出码
-
-`0` success · `2` usage · `4` auth · `5` not_found · `6` conflict · `7` denied · `8` retryable · `9` failure · `10` unknown · `1` other
-
-## 协议 vendor
-
-正式协议源见 `proto/`；生成客户端见 `vendor/proto-gen/NOTICE.md`（App `0.79.3` commit `4739412`，本仓库从App恢复生成；生成器 Buf Connect Apache-2.0；schema 本身无单独官方许可声明）。
-
-### 同步修订
-支持默认session、generation内持久化backfill与跨调用session轮转；归档是retained observations，不是删除同步/完整镜像。
-附件仅按需App store aliases，用户上传和send-message attachment均支持；每次Resolve+条件GET，流式预算与scope绑定。
-attachments需与pull一致的`--account-id --team-id --ack-unverified-scope`。
-`--page-size 1 --max-pages 1`可做小量分页验收。详细边界见[格式文档](docs/sync-format.md)。
-
-### Native auth lock installation
-跨进程 refresh 使用 `fs-native-extensions@1.5.3` 原生 OS advisory lock（非外部 flock 命令、非 mtime lease）。
-Node20+，Linux/macOS/Windows x64/arm64 npm包预编译；缺binding fail closed。升级前停止全部旧MCP进程，旧Linux flock与新OFD锁不互通。
-Linux x64已实测；macOS/Windows仅源码检查+CI矩阵，未在本机执行。Windows需另核查用户目录ACL；只支持本地文件系统。
-详见 [native lock构建/平台/证据](docs/auth-lock.md)。
+- 本仓库**未**附带根目录 SPDX LICENSE 文件。
+- 生成器 / 运行时（Buf、Connect）为 **Apache-2.0**。
+- 协议 schema 与 `vendor/proto-gen`：**无单独官方许可声明**，由维护者从 App 静态提取恢复生成；事实来自逆向 schema，见 [vendor/proto-gen/NOTICE.md](vendor/proto-gen/NOTICE.md) 与 [docs/protocol/baseline-manifest.md](docs/protocol/baseline-manifest.md)。
+- 跨进程锁依赖 `fs-native-extensions@1.5.3`（Apache-2.0）；Node 20+，Linux / macOS / Windows 预编译。详见 [docs/auth-lock.md](docs/auth-lock.md)。
