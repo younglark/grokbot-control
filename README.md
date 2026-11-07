@@ -76,7 +76,7 @@ node dist/cli/main.js --json auth logout             # 只删本工具自己的�
 
 ### 后续发版（GitHub Actions + OIDC）
 
-`.github/workflows/publish.yml` 仅在推送 tag `v*` 时运行（Node 24、npm ≥ 11.5.1、`id-token: write`）：`npm ci` → `npm test` → `npm publish --access public`。无需 npm token 或仓库 secret。
+`.github/workflows/publish.yml` 仅在推送 tag `v*` 时运行（Node 24、npm ≥ 11.5.1、`id-token: write`）：`npm ci` → `npm run build` → `npm test` → `npm publish --access public`。无需 npm token 或仓库 secret。
 
 ```bash
 # 工作区干净、已通过本地 build/test
