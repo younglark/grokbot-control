@@ -1,0 +1,35 @@
+{
+  "name": "local-exec-daemon",
+  "version": "0.2.0-p2",
+  "private": true,
+  "description": "Independent compatible local-exec-daemon skeleton targeting Grok Bot App 0.79.3 behavior (research/implementation; not an official drop-in yet).",
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "bin": {
+    "local-exec-daemon": "dist/index.js"
+  },
+  "scripts": {
+    "build": "node -e \"require('node:fs').rmSync('dist', {recursive:true, force:true})\" && tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "test": "npm run build && node --test test/*.test.cjs",
+    "test:integration": "npm run build && node --test test/integration.test.cjs",
+    "smoke:uc": "npm run build && node scripts/uc-smoke.cjs",
+    "smoke:electron": "npm run build && node scripts/electron-smoke.cjs",
+    "generate": "node ../protocol/scripts/generate.cjs --target=daemon",
+    "generate:check": "node ../protocol/scripts/generate.cjs --target=daemon --check"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "1.10.1",
+    "@connectrpc/connect": "1.6.1",
+    "@connectrpc/connect-node": "1.6.1",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "5.9.3"
+  },
+  "license": "UNLICENSED"
+}

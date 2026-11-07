@@ -1,30 +1,13 @@
 # Runbook: official App released a new version
 
-1. **Keep the old baseline.** Do not overwrite `docs/protocol/baselines/*` or `vendor/proto-gen` until the end.
-2. **Download + verify** the official build (static-restore.md §1). Record version, commitSha, size, sha256 in
-   baseline-manifest.md. Stop if the source is not official.
-3. **Extract** with `tools/protocol/asar_extract.py` into a temp dir outside the repo (§2).
-4. **Schema:** run upstream `extract_proto.py` (must be 0 unresolved / 0 relocated) and `diff_snapshot.py` against
-   the previous snapshot. Do **not** run upstream `restore.sh` as-is: its `compare.mjs`/`cross-wire.mjs` `require()` the App bundle.
-   Run its steps by hand instead (as done for 0.79.3): `python3 -m grpc_tools.protoc -I proto --descriptor_set_out=desc.pb proto/*.proto`,
-   then in a temp dir `npm install @bufbuild/protoc-gen-es@1.10.1 @connectrpc/protoc-gen-connect-es@1.6.1 @bufbuild/protobuf@1.10.1 @connectrpc/connect@1.6.1`
-   and `protoc --es_out=js --es_opt=target=js --connect-es_out=js --connect-es_opt=target=js`. Sanity: the toolchain must reproduce the
-   current vendor byte-for-byte from the current baseline `.proto`. Then `node tools/protocol/verify_generated.mjs <js> <snapshot.json>` must exit 0.
-5. **Used-surface diff:** `tools/protocol/used_surface.py --old baselines/used-surface-<old>.json --new <new>/snapshot.json`.
-   - BREAKING (removed/renumbered/retyped field, RPC removed or I/O changed) → fix `src/ops/*` mapping before anything else.
-   - additive → decide per field whether SDK/CLI/MCP should expose it; old clients stay wire-compatible.
-6. **Auth anchors:** `tools/protocol/fingerprint.py` on main-app/main-core. Re-read login URL params, poll status
-   handling, refresh endpoint/body, policy error, any new login implementation. Update auth-flow.md + `src/auth/*`
-   only from evidence; keep client_id configurable, never forge device/policy headers.
-7. **Regenerate vendor + formal proto source:** copy the restored `.proto` set into **`proto/`** (formal source; update `proto/README.md` /
-   `proto/NOTICE.md`), keep a frozen identical copy under `baselines/schema-<new>/` (+ gzipped `snapshot.json`), copy the 6 used generated
-   files from `js/` into `vendor/proto-gen/`, update `vendor/proto-gen/NOTICE.md` (label: 本仓库从App恢复生成) + manifest hashes, keep generator
-   and runtime versions equal to the App's `@bufbuild/protobuf`, and update `test/proto-vendor-contract.test.ts`. `cmp proto/*.proto baselines/schema-<new>/*.proto` must be clean.
-8. **Write new baseline:** `used_surface.py --src src --new <new>/snapshot.json --write-subset baselines/used-surface-<new>.json`
-   and commit the diff report next to it.
-9. **Regression:** `npm run build && npm run typecheck && npm test && npm run test:protocol-tools`.
-   Offline/mock passing ≠ live.
-10. **Live checks, in order, each with explicit user approval:** independent browser auth (`auth login-begin` /
-    `auth complete`) → read-only (`auth whoami`, `bot list`, `sidebar list`, `bot status`) → only then a single
-    approved write test on a disposable resource. Never blind-retry a write with an unknown outcome; reconcile first.
-11. Update compat-matrix.md and the evidence levels in surface-map.md.
+1. **Keep every frozen version immutable.** Current input is `packages/protocol/baselines/schema-0.79.3/`, pinned by its sibling SHA256 manifest. Never overwrite it or recreate a mutable root `proto/` copy. `docs/protocol/baselines/` keeps historical used-surface/diff evidence, not a second active schema.
+2. **Download + verify**, only when authorized, using [static restore](static-restore.md). Record version/commit/input hashes in [baseline manifest](baseline-manifest.md). Stop if provenance is unknown.
+3. **Extract** using `tools/protocol/asar_extract.py` into an external temporary directory. No App bundles, credentials or real account data enter this repository.
+4. **Recover schema**, using the recorded upstream extractor in a temporary directory; require zero unresolved/relocated references. Do not execute upstream compare/cross-wire scripts that load the App bundle unless separately authorized and isolated. Compare against the old snapshot.
+5. **Create a NEW frozen version directory** at `packages/protocol/baselines/schema-<new>/` with original `.proto`, snapshot and provenance, plus a new pinned hash manifest. Update `packages/protocol/scripts/generate.cjs` to explicitly choose the reviewed version. Do not renumber fields, reduce service declarations, or overwrite previous baselines. Inner Exec schema recovery is a separate feature/research task, not part of the workspace move.
+6. **Used surface**: run `tools/protocol/used_surface.py --src packages/grokbot-control/src --old <old-subset.json> --new <new-snapshot.json>`; archive output under `docs/protocol/baselines/`. Removed/retyped/renumbered fields or changed RPC signatures block adoption. Daemon oneof/cancel and independent golden tests also remain mandatory.
+7. **Auth anchors**: update `auth-flow.md` and `packages/grokbot-control/src/auth/` from evidence; keep client_id configurable and never forge device/policy headers. Schema compatibility is not auth approval.
+8. **Generate both consumers** from the single frozen input: root `npm ci`, `npm run generate`, `npm run generate:check`. Exact current tools: Buf1.50.0, protobuf-es1.10.1, Connect1.6.1. Control gets local ESM JS in `packages/grokbot-control/vendor/proto-gen/`; daemon gets local TS→CJS in `packages/local-exec-daemon/src/generated/`. SOURCE.json is identical across consumers. Duplicated generated artifacts are deliberate; schema/tooling is single-source. No private workspace/file runtime dependency may be published.
+9. **Verify**: `node tools/protocol/verify_generated.mjs packages/grokbot-control/vendor/proto-gen <uncompressed-snapshot.json>`; root `npm run build`, `npm run typecheck`, `npm test`, `npm run test:protocol-tools`, `npm run smoke:uc`, optional Electron smoke and `npm run verify:package`. The last command packs the real public tarball and normally installs it outside the workspace, checking bins and SDK exports.
+10. **Live checks need separate approval**: independent auth → read-only selected RPCs → only an explicitly approved disposable write. Offline/mock/codegen checks are not live acceptance. Never blind-retry uncertain writes.
+11. Update compatibility/evidence docs. Public release remains `grokbot-control` with `gbc`/`gbc-mcp`; existing `v*` tags trigger **the same `publish.yml` file** with the publish working directory set to the public workspace. Do not publish the private root/protocol/daemon or create tags without authorization.

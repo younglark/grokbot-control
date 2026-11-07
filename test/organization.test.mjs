@@ -1,0 +1,47 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync,existsSync,readdirSync,lstatSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+import {resolve,dirname,join} from 'node:path';
+import {fileURLToPath} from 'node:url';
+const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
+const json=p=>JSON.parse(readFileSync(join(root,p),'utf8'));
+
+test('root orchestrates private workspaces; public package/bin/export contracts survive',()=>{
+ assert.equal(json('package.json').private,true);
+ assert.equal(json('packages/protocol/package.json').private,true);
+ const control=json('packages/grokbot-control/package.json'),daemon=json('packages/local-exec-daemon/package.json');
+ assert.equal(control.name,'grokbot-control');assert.equal(control.bin.gbc,'./dist/cli/main.js');assert.equal(control.bin['gbc-mcp'],'./dist/mcp/main.js');assert.equal(control.exports['.'].import,'./dist/index.js');
+ assert.equal(daemon.name,'local-exec-daemon');assert.equal(daemon.bin['local-exec-daemon'],'dist/index.js');assert.equal(daemon.private,true);
+});
+test('one root lock; consumers have no unpublished runtime workspace dependency',()=>{
+ assert.ok(existsSync(join(root,'package-lock.json')));
+ for(const name of ['grokbot-control','local-exec-daemon','protocol']){
+  assert.equal(existsSync(join(root,'packages',name,'package-lock.json')),false);
+  const pkg=json(`packages/${name}/package.json`);
+  for(const [dep,version] of Object.entries(pkg.dependencies||{})){
+   assert.notEqual(dep,'@grokbot-control/protocol');assert.ok(!/^(workspace:|file:)/.test(version));
+  }
+ }
+});
+test('frozen archive is unchanged and both consumers record exactly the same input hash',()=>{
+ const prefix='packages/protocol/baselines/schema-0.79.3';
+ const hashes=json(`${prefix}.sha256.json`);
+ assert.deepEqual(readdirSync(join(root,prefix)).sort(),Object.keys(hashes).sort());
+ for(const [name,hash] of Object.entries(hashes)){
+  const p=join(root,prefix,name);assert.equal(lstatSync(p).isSymbolicLink(),false);
+  assert.equal(createHash('sha256').update(readFileSync(p)).digest('hex'),hash,name);
+ }
+ const a=json('packages/grokbot-control/vendor/proto-gen/SOURCE.json'),b=json('packages/local-exec-daemon/src/generated/SOURCE.json');assert.deepEqual(a,b);
+ for(const [name,hash] of Object.entries(a.sha256))assert.equal(hash,hashes[name]);
+});
+test('public lifecycle ships only runtime artifacts and publisher binding filename stays fixed',()=>{
+ const p=json('packages/grokbot-control/package.json');assert.deepEqual(p.files,['dist','vendor/proto-gen','README.md']);
+ assert.equal(p.scripts.prepare,undefined);assert.equal(p.scripts.install,undefined);assert.equal(p.scripts.prepack,'npm run build');
+ const ci=readFileSync(join(root,'.github/workflows/publish.yml'),'utf8');
+ assert.match(ci,/working-directory: packages\/grokbot-control/);assert.match(ci,/id-token: write/);assert.match(ci,/"v\*"/);
+});
+test('headless and Docker boundaries are documentation, not fake implemented products',()=>{
+ for(const p of ['packages/headless-node/package.json','packages/headless-node/src/cli.ts','deploy/headless/Dockerfile','deploy/headless/docker-compose.yml'])assert.equal(existsSync(join(root,p)),false,p);
+ assert.ok(existsSync(join(root,'docs/headless/README.md')));
+});

@@ -1,0 +1,17 @@
+{
+  "name": "@grokbot-control/protocol",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "generate": "node scripts/generate.cjs",
+    "generate:check": "node scripts/generate.cjs --check"
+  },
+  "devDependencies": {
+    "@bufbuild/buf": "1.50.0",
+    "@bufbuild/protoc-gen-es": "1.10.1",
+    "@connectrpc/protoc-gen-connect-es": "1.6.1",
+    "@bufbuild/protobuf": "1.10.1",
+    "@connectrpc/connect": "1.6.1",
+    "@connectrpc/connect-node": "1.6.1"
+  }
+}

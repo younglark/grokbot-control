@@ -11,8 +11,8 @@ from a new official App build, and (3) update SDK + CLI + MCP safely.
 | [static-restore.md](static-restore.md) | How the protocol and auth were recovered statically (download → extract → schema → anchors) |
 | [update-runbook.md](update-runbook.md) | Step-by-step when the official App ships a new version |
 | [compat-matrix.md](compat-matrix.md) | Version compatibility + remaining risks |
-| [../../proto/](../../proto/) | **正式协议源** — restored `.proto` for current App 0.79.3 (feeds `vendor/proto-gen`) |
-| [baselines/](baselines/) | Versioned used-surface snapshots + archived schema copies (`schema-0.79.3/` keeps a freeze of the same `.proto`) |
+| [canonical schema](../../packages/protocol/baselines/schema-0.79.3/) | **唯一冻结协议源** — unchanged App0.79.3 archive; shared generator feeds both consumer artifacts |
+| [baselines/](baselines) | Historical versioned used-surface/diff evidence; frozen schema now lives in packages/protocol/baselines |
 | [../../tools/protocol/](../../tools/protocol/README.md) | Offline scripts: ASAR reader, anchor fingerprint, used-surface diff, generated-code verifier |
 
 ## Evidence levels (used throughout)

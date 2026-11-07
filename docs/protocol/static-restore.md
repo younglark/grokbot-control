@@ -46,7 +46,7 @@ every build — re-locate by anchor, then read the function in a prettified copy
 
 ## 5. Map to this repo
 ```bash
-python3 tools/protocol/used_surface.py --src src --old docs/protocol/baselines/used-surface-<old>.json \
+python3 tools/protocol/used_surface.py --src packages/grokbot-control/src --old docs/protocol/baselines/used-surface-<old>.json \
   --new /tmp/gb-X/out/snapshot.json -o /tmp/gb-X/used-surface.md      # exit 1 = breaking change in used surface
 ```
 *Executed:* 0.78.4 → 0.79.2: 0 breaking, 14 additive field lines.
@@ -61,4 +61,4 @@ python3 tools/protocol/used_surface.py --src src --old docs/protocol/baselines/u
 - `tools/protocol/verify_generated.mjs`: 0 errors (2923 msgs / 387 enums / 464 GrokBotService RPCs; 2923 round-trips).
 - Upstream `compare.mjs` / `cross-wire.mjs` **not run** (they `require()` the App's proto.cjs).
 - `fingerprint.py` on main-app.cjs: same auth anchors as 0.79.2; only minified identifiers changed.
-- Restored `.proto` live at **`proto/`** (formal protocol source); identical freeze kept under `docs/protocol/baselines/schema-0.79.3/`.
+- Current restored `.proto` live only at **`packages/protocol/baselines/schema-0.79.3/`** (immutable canonical archive). Historical extraction commands above ran in external temp directories; current generation uses root `npm run generate`.

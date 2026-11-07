@@ -13,7 +13,8 @@
 # npm CLI >= 11.5.1 and Node >= 22.14.0.
 #
 # Release flow (after the first manual publish and Trusted Publisher setup):
-#   npm version patch   # or minor/major; updates package.json and creates vX.Y.Z tag
+#   npm version patch -w grokbot-control --no-git-tag-version
+#   Review the release commit, then explicitly create its vX.Y.Z tag
 #   git push origin main --follow-tags
 
 name: Publish npm
@@ -50,14 +51,15 @@ jobs:
         run: npm ci
 
       - name: Build
-        run: npm run build
+        run: npm run build -w grokbot-control
 
       # sync-decode / sync-hydrate assert Chinese text is rg-readable (agent CLI acceptance).
       - name: Install ripgrep
         run: sudo apt-get update && sudo apt-get install -y ripgrep
 
       - name: Test
-        run: npm test
+        run: npm test -w grokbot-control
 
       - name: Publish
+        working-directory: packages/grokbot-control
         run: npm publish --access public

@@ -1,0 +1,27 @@
+name: Workspace regression
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  offline:
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm ci --ignore-scripts
+      - run: sudo apt-get update && sudo apt-get install -y ripgrep
+      - run: npm run generate:check
+      - run: npm run build
+      - run: npm test
+      - run: npm run test:protocol-tools
+      - run: npm run smoke:uc
+      # Electron is optional: a missing external host must report skip, not acceptance.
+      - run: npm run smoke:electron
+      - run: npm run verify:package
+      - run: git diff --exit-code

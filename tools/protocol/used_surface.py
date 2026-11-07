@@ -19,8 +19,8 @@ Exit code: 0 no breaking change in used surface, 1 breaking, 2 usage error.
 Reads only JSON + TS source text. No network, no bundle execution.
 
 Usage:
-  used_surface.py --src src --old OLD.json --new NEW.json [-o report.md]
-  used_surface.py --src src --new NEW.json --write-subset out.json   # baseline subset
+  used_surface.py --src packages/grokbot-control/src --old OLD.json --new NEW.json [-o report.md]
+  used_surface.py --src packages/grokbot-control/src --new NEW.json --write-subset out.json   # baseline subset
 """
 import argparse
 import json

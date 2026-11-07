@@ -1,7 +1,7 @@
 # Auth flow (independent Cursor browser login)
 
 Implementation: `src/auth/provider.ts`, `src/auth/store.ts`, `src/ops/auth.ts`. Contract table and CLI/MCP
-commands: [../protocol-map.md#auth-independent-cursor-browser-login](../protocol-map.md). This page records
+commands: [../protocol-map.md#auth-independent-cursor-browser-login](protocol-map.md). This page records
 **where the evidence lives** so it can be re-found in a new build.
 
 | Step | Behaviour | Stable anchor (search the extracted bundle) | 0.79.2 location (A=main-app.cjs) | Level |

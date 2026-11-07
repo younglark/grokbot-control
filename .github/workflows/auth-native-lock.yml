@@ -19,6 +19,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: node --import tsx --test test/auth-lock.test.ts test/auth-process.test.ts
+        working-directory: packages/grokbot-control
   source-build:
     strategy:
       fail-fast: false
@@ -52,3 +53,4 @@ jobs:
           arch: ${{ matrix.arch }}
           upload: false
       - run: node --import tsx --test test/auth-lock.test.ts test/auth-process.test.ts
+        working-directory: packages/grokbot-control

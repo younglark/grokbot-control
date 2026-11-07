@@ -4,7 +4,7 @@
 
 `vendor/proto-gen` is **本仓库从App恢复生成** (regenerated in this repo from the App; not a byte copy of upstream).
 
-**正式协议源目录 = [`proto/`](../../proto/)** (current App 0.79.3 `.proto`). The frozen copy under `baselines/schema-0.79.3/` must stay byte-identical (`cmp`).
+**唯一冻结协议源 = [packages/protocol/baselines/schema-0.79.3](../../packages/protocol/baselines/schema-0.79.3/)**. t95u moved the original archive byte-for-byte and removed redundant identical root proto copies; all 14 hashes are pinned in the sibling SHA256 manifest.
 
 | Item | Value | Level |
 |---|---|---|
@@ -33,7 +33,7 @@
 | internapi.v1_pb.js | `6bad66a292c08afd74be5c222e635a148000c81234ec214eae9161d1f4b1ca1b` | same |
 | svc_aiserver.v1.GrokBotService_connect.js | `88228cd0b039c8260290e4f53477454b2fa0353ec39ec5754620239144314f72` | changed |
 
-First-class sources: `proto/*.proto` (+ `proto/README.md`, `proto/NOTICE.md`).
+Current first-class sources: `packages/protocol/baselines/schema-0.79.3/*.proto`; restore/provenance records: `packages/protocol/RESTORE.md`, `packages/protocol/NOTICE.md`. Historical hashes below remain unchanged.
 Archived freeze: `baselines/schema-0.79.3/*.proto` + `snapshot.json.gz`, `used-surface-0.79.3.json`,
 `used-surface-diff-0.78.4-to-0.79.3.md`, `full-schema-diff-0.78.4-to-0.79.3.txt`, `full-schema-diff-0.79.2-to-0.79.3.txt`.
 Installer, `app.asar` and bundle files are **not** committed.
@@ -70,3 +70,7 @@ prettier; their line numbers drift between versions — use the string anchors i
 - The 2026-11-07 live read-only check (login + ListGrokBotAgents / GetGrokBotUserRuntimeSettings / ListGrokBotAgentStatuses) was
   done with the **old 0.78.4 vendor**. The 0.79.3 vendor is verified **offline only**.
 - macOS builds were not analysed for 0.79.x.
+
+## t95u location-only update
+
+Runtime vendor path is now packages/grokbot-control/vendor/proto-gen; all six ESM JS files are byte-identical to the pre-reorganization a9231c2 output. SOURCE.json adds canonical input/tool provenance. A shared generator also emits daemon TS→CJS, with identical input hashes. The archived baseline bytes and upstream evidence/hash records are unchanged.
