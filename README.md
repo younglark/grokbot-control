@@ -71,4 +71,4 @@ node dist/cli/main.js --json auth logout             # 只删本工具自己的�
 
 ## 协议 vendor
 
-见 `vendor/proto-gen/NOTICE.md`（App `0.79.3` commit `4739412`，本仓库从App恢复生成；生成器 Buf Connect Apache-2.0；schema 本身无单独官方许可声明）。
+正式协议源见 `proto/`；生成客户端见 `vendor/proto-gen/NOTICE.md`（App `0.79.3` commit `4739412`，本仓库从App恢复生成；生成器 Buf Connect Apache-2.0；schema 本身无单独官方许可声明）。

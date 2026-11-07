@@ -11,6 +11,6 @@ They read files, never execute App bundle code, never use the network, never wri
 | `used_surface.py` | Derives RPCs used in `src/` and diffs their request/response messages (transitively) + enums between two `snapshot.json`; exit 1 on breaking | Needs `snapshot.json` from upstream `extract_proto.py`; only `GrokBotService`; does not judge semantic changes of unchanged fields |
 
 Not automated here: downloading the build, `.proto` generation / protoc / codegen (manual steps in `docs/protocol/update-runbook.md` §4),
-App-side wire cross-check (upstream scripts execute the bundle; not used), and any live verification. See `docs/protocol/static-restore.md`.
+App-side wire cross-check (upstream scripts execute the bundle; not used), and any live verification. Formal restored `.proto` live in `proto/` (baselines keep a freeze). See `docs/protocol/static-restore.md`.
 
 Tests: `npm run test:protocol-tools` (= `python3 -m unittest discover -s tools/protocol`).

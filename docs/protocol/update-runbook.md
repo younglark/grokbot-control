@@ -16,9 +16,10 @@
 6. **Auth anchors:** `tools/protocol/fingerprint.py` on main-app/main-core. Re-read login URL params, poll status
    handling, refresh endpoint/body, policy error, any new login implementation. Update auth-flow.md + `src/auth/*`
    only from evidence; keep client_id configurable, never forge device/policy headers.
-7. **Regenerate vendor:** copy the 6 used files from the generated `js/` dir into `vendor/proto-gen/`, archive the `.proto` +
-   gzipped `snapshot.json` under `baselines/schema-<new>/`, update `vendor/proto-gen/NOTICE.md` (label: 本仓库从App恢复生成) + manifest
-   hashes, keep generator and runtime versions equal to the App's `@bufbuild/protobuf`, and update `test/proto-vendor-contract.test.ts`.
+7. **Regenerate vendor + formal proto source:** copy the restored `.proto` set into **`proto/`** (formal source; update `proto/README.md` /
+   `proto/NOTICE.md`), keep a frozen identical copy under `baselines/schema-<new>/` (+ gzipped `snapshot.json`), copy the 6 used generated
+   files from `js/` into `vendor/proto-gen/`, update `vendor/proto-gen/NOTICE.md` (label: 本仓库从App恢复生成) + manifest hashes, keep generator
+   and runtime versions equal to the App's `@bufbuild/protobuf`, and update `test/proto-vendor-contract.test.ts`. `cmp proto/*.proto baselines/schema-<new>/*.proto` must be clean.
 8. **Write new baseline:** `used_surface.py --src src --new <new>/snapshot.json --write-subset baselines/used-surface-<new>.json`
    and commit the diff report next to it.
 9. **Regression:** `npm run build && npm run typecheck && npm test && npm run test:protocol-tools`.

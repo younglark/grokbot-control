@@ -4,6 +4,8 @@
 
 `vendor/proto-gen` is **本仓库从App恢复生成** (regenerated in this repo from the App; not a byte copy of upstream).
 
+**正式协议源目录 = [`proto/`](../../proto/)** (current App 0.79.3 `.proto`). The frozen copy under `baselines/schema-0.79.3/` must stay byte-identical (`cmp`).
+
 | Item | Value | Level |
 |---|---|---|
 | Release feed | `https://api2.cursor.sh/updates/api/download/stable/linux-x64/sand`, opened 2026-11-07 with `curl`, no login → `version` 0.79.3, `commitSha` `473941287261c3efa92c6b2a0bf7e1caad1a2ef2` | S |
@@ -31,7 +33,8 @@
 | internapi.v1_pb.js | `6bad66a292c08afd74be5c222e635a148000c81234ec214eae9161d1f4b1ca1b` | same |
 | svc_aiserver.v1.GrokBotService_connect.js | `88228cd0b039c8260290e4f53477454b2fa0353ec39ec5754620239144314f72` | changed |
 
-Archived in repo: `baselines/schema-0.79.3/*.proto` + `snapshot.json.gz` (restored schema), `used-surface-0.79.3.json`,
+First-class sources: `proto/*.proto` (+ `proto/README.md`, `proto/NOTICE.md`).
+Archived freeze: `baselines/schema-0.79.3/*.proto` + `snapshot.json.gz`, `used-surface-0.79.3.json`,
 `used-surface-diff-0.78.4-to-0.79.3.md`, `full-schema-diff-0.78.4-to-0.79.3.txt`, `full-schema-diff-0.79.2-to-0.79.3.txt`.
 Installer, `app.asar` and bundle files are **not** committed.
 

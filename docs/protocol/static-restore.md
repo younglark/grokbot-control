@@ -61,3 +61,4 @@ python3 tools/protocol/used_surface.py --src src --old docs/protocol/baselines/u
 - `tools/protocol/verify_generated.mjs`: 0 errors (2923 msgs / 387 enums / 464 GrokBotService RPCs; 2923 round-trips).
 - Upstream `compare.mjs` / `cross-wire.mjs` **not run** (they `require()` the App's proto.cjs).
 - `fingerprint.py` on main-app.cjs: same auth anchors as 0.79.2; only minified identifiers changed.
+- Restored `.proto` live at **`proto/`** (formal protocol source); identical freeze kept under `docs/protocol/baselines/schema-0.79.3/`.

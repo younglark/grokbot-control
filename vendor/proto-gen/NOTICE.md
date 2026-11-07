@@ -7,6 +7,7 @@ extraction of the official Grok Bot desktop App. They are **not** an official xA
 | Item | Value |
 |---|---|
 | Source App | Grok Bot **0.79.3** Linux amd64 (`grok-bot_0.79.3_amd64.deb`), release commitSha `473941287261c3efa92c6b2a0bf7e1caad1a2ef2` |
+| Formal `.proto` source | [`proto/`](../../proto/) (same bytes as `docs/protocol/baselines/schema-0.79.3/*.proto`) |
 | Schema input | `dist/electron-main/proto.cjs` from that build's `app.asar`, sha256 `929f17d21f4646c745a9fc4c4a43b55ff686288b5637dc310587471a20f12f8a` (read as text, never executed) |
 | Restore method | `extract_proto.py` from https://github.com/younglark/grokbot-proto @ `49fd8ce` (script sha256 `ab3ec201…2301`) → `.proto` |
 | protoc | `grpcio-tools` 1.85.1 (libprotoc 35.1) |
