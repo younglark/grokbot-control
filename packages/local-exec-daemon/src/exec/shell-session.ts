@@ -105,7 +105,6 @@ export function findBash(env: NodeJS.ProcessEnv = process.env): string | null {
 
 let snapshot: string | null = null;
 let initPromise: Promise<string> | null = null;
-let initChild: ReturnType<typeof spawn> | null = null;
 let initClosed: Promise<void> = Promise.resolve();
 /**
  * Session cwd (official oracle cwdpersist: with no workingDirectory the next call reuses the
@@ -122,37 +121,51 @@ export function resetShellState(): void { snapshot = null; initPromise = null; s
  * Ordinary request cancellation never calls this (other waiters keep their shared init).
  */
 export async function terminateInitialSnapshot(): Promise<void> {
-  const child = initChild;
-  if (!child) return initClosed;
-  // Leader alive: SIGKILL the whole group (interactive bash ignores SIGTERM). Leader already
-  // exited: same-PGID descendants (e.g. a profile `cmd &`) may remain, so reap the group too.
-  if (child.pid) {
-    if (child.exitCode === null && child.signalCode === null) { try { process.kill(-child.pid, "SIGKILL"); } catch { /* gone */ } }
-    else reapInitGroup(child.pid);
+  const g = initGroup;
+  if (!g) return initClosed;
+  // Leader alive (not reaped, so its number still names our group): SIGKILL the whole group
+  // (interactive bash ignores SIGTERM). Leader exited but init not closed yet: residue may hold
+  // the stdout pipe; reap it once. Once retired, the number is never reclaimed.
+  if (!g.retired) {
+    if (g.child.exitCode === null && g.child.signalCode === null) signalInitGroup(g);
+    else reapInitGroup(g);
   }
   await initClosed;
-  if (child.pid) reapInitGroup(child.pid);
 }
 
 /**
- * Kill leftover members of the (detached, setsid) init process group after its leader exited.
- * PGID-reuse safety: the kernel never hands out a pid that is still in use as a live group's id,
- * so while at least one member (pid != pgid, pgrp == pgid, sid == pgid) exists the group is ours.
- * If a process with pid == pgid exists, the id was reused by someone else: never signal it.
- * Without /proc (non-Linux) we only signal while our own leader is not yet reaped.
+ * Ownership handle for the init process group. `retired` is set permanently the first time the
+ * group is cleaned up (signalled) or found empty, and when init closes; after that, no code path
+ * may signal the number again, because a free PGID can be reused by an unrelated session and
+ * /proc contents that "look the same" are not proof of ownership.
  */
-export function reapInitGroup(pgid: number): number {
+interface InitGroup { child: ReturnType<typeof spawn>; pgid: number; retired: boolean }
+let initGroup: InitGroup | null = null;
+
+function signalInitGroup(g: InitGroup): void {
+  if (g.retired) return;
+  g.retired = true;
+  try { process.kill(-g.pgid, "SIGKILL"); } catch { /* gone */ }
+}
+
+/**
+ * Reap leftover members of our init group after its leader exited, at most once. Members are only
+ * trusted while the handle is not retired (i.e. before init close / first cleanup); an empty group
+ * retires the handle. A process with pid == pgid means the number was reused: retire, no signal.
+ */
+export function reapInitGroup(g: InitGroup): number {
+  if (g.retired) return 0;
   let members: number[] = [];
   try {
     for (const d of fs.readdirSync("/proc")) {
       if (!/^\d+$/.test(d)) continue;
       let st: string; try { st = fs.readFileSync(`/proc/${d}/stat`, "utf8"); } catch { continue; }
       const f = st.slice(st.lastIndexOf(")") + 2).split(" "); // state ppid pgrp session ...
-      if (Number(f[2]) === pgid && Number(f[3]) === pgid) members.push(Number(d));
+      if (Number(f[2]) === g.pgid && Number(f[3]) === g.pgid) members.push(Number(d));
     }
-  } catch { return 0; }
-  if (members.length === 0 || members.includes(pgid)) return 0;
-  try { process.kill(-pgid, "SIGKILL"); } catch { return 0; }
+  } catch { g.retired = true; return 0; }
+  if (members.length === 0 || members.includes(g.pgid)) { g.retired = true; return 0; }
+  signalInitGroup(g);
   return members.length;
 }
 
@@ -171,14 +184,16 @@ export function initialSnapshot(bash: string, timeoutMs = 10000): Promise<string
         env: { ...process.env, ...BASE_ENV }, detached: true, stdio: ["ignore", "pipe", "ignore"], cwd: os.homedir(),
       });
     } catch { finish(""); return; }
-    initChild = child;
+    const group: InitGroup | null = child.pid ? { child, pgid: child.pid, retired: false } : null;
+    initGroup = group;
     initClosed = new Promise<void>((r) => child.once("close", () => r()));
-    const t = setTimeout(() => { try { if (child.pid) process.kill(-child.pid, "SIGKILL"); } catch { /* gone */ } finish(""); }, timeoutMs);
+    const t = setTimeout(() => { if (group && child.exitCode === null && child.signalCode === null) signalInitGroup(group); finish(""); }, timeoutMs);
     child.stdout?.on("data", (b: Buffer) => { size += b.length; if (size <= MAX_STATE_BYTES * 2) chunks.push(b); });
     child.once("error", () => finish(""));
     child.once("close", () => {
-      // Initialization is complete: clean up any residue left in the init process group now.
-      if (child.pid) reapInitGroup(child.pid);
+      // Initialization is complete: clean up residue of our group once, then retire the handle
+      // permanently so a later shutdown can never reclaim a (possibly reused) number.
+      if (group) { reapInitGroup(group); group.retired = true; }
       const buf = Buffer.concat(chunks);
       const mark = Buffer.from(INIT_MARK + "\n");
       const at = buf.lastIndexOf(mark);

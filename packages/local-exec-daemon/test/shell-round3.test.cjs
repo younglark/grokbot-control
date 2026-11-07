@@ -115,14 +115,12 @@ test('init leader exits first: same-PGID background residue is reaped, marker ne
   assert.equal(fs.existsSync(mark), false, 'background never continued');
 });
 
-test('reapInitGroup never signals a group whose id is held by a live leader (reuse) or an empty group', async () => {
-  const { reapInitGroup } = require('../dist/exec/shell-session.js');
-  const { spawn } = require('node:child_process');
-  const other = spawn('sleep', ['5'], { detached: true, stdio: 'ignore' });
-  await delay(50);
-  assert.equal(reapInitGroup(other.pid), 0);
-  let alive = true; try { process.kill(other.pid, 0); } catch { alive = false; }
-  assert.equal(alive, true, 'foreign group leader untouched');
-  other.kill('SIGKILL');
-  assert.equal(reapInitGroup(999999), 0);
+test('PGID ownership: retired after init close; reused number never reclaimed (simulated, no real signals)', () => {
+  const { spawnSync } = require('node:child_process');
+  const h = path.join(__dirname, 'helpers', 'pgid-stale-lifecycle.cjs');
+  const a = JSON.parse(spawnSync(process.execPath, [h], { encoding: 'utf8' }).stdout);
+  assert.deepEqual(a.afterOriginalClose, []); assert.deepEqual(a.laterShutdownSignals, []);
+  const b = JSON.parse(spawnSync(process.execPath, [h], { encoding: 'utf8', env: { ...process.env, MODE: 'residue' } }).stdout);
+  assert.deepEqual(b.afterOriginalClose, [[-70001, 'SIGKILL']], 'original residue reaped once at close');
+  assert.deepEqual(b.laterShutdownSignals, [[-70001, 'SIGKILL']], 'no second signal at shutdown');
 });
