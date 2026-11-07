@@ -87,3 +87,7 @@ The daemon skips remain generation/PID preemption and full pressure oracle. They
 Latest real tarball: `/tmp/gbc-independent-consumer-KqtTve/grokbot-control-0.1.3.tgz`; independent consumer result: `/tmp/gbc-independent-consumer-KqtTve/result.json`. The temporary artifacts are outside the repository and are not committed.
 
 Logs: `/tmp/grokbot-control-t95u-{ci-final,codegen-final,build-final,test-final,protocol-tools-final,uc-final,electron-final,package-final}.txt`; generated static verifier `/tmp/grokbot-control-t95u-generated.txt`; audit `/tmp/grokbot-control-t95u-audit.json`.
+
+## Reviewed P3 link cleanup
+
+After the independently clean-cloned t95u review (262 pass / 2 skip, tarball install passed), only the frozen directory README links and public auth-lock guidance URLs were corrected. The README documentation hash changed from `b98258f680d9921be3bdc47027641cb5ff555c337c02787fa9abde2422b2719b` to `9cc2ad68e907bc2ce7d37173e9c5d50b4a49ea7f08496fa9ed99431b71e8cfac`; **no .proto or snapshot content/hash changed**. Previous “all14 unchanged” statements describe the t95u move, not this later README-only correction. Link regression now covers the frozen README; auth-lock failure/help assertions require the full public GitHub docs/control-plane URL because npm does not ship docs. No behavior expansion or push.

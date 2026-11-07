@@ -45,3 +45,18 @@ test('headless and Docker boundaries are documentation, not fake implemented pro
  for(const p of ['packages/headless-node/package.json','packages/headless-node/src/cli.ts','deploy/headless/Dockerfile','deploy/headless/docker-compose.yml'])assert.equal(existsSync(join(root,p)),false,p);
  assert.ok(existsSync(join(root,'docs/headless/README.md')));
 });
+
+test('current Markdown relative links resolve, including the frozen schema README',()=>{
+ const walk=dir=>readdirSync(dir,{withFileTypes:true}).flatMap(item=>{
+  if(['node_modules','dist','.git'].includes(item.name))return [];
+  const p=join(dir,item.name);return item.isDirectory()?walk(p):p.endsWith('.md')?[p]:[];
+ });
+ for(const file of walk(root)){
+  // Original pre-workspace restore recipe is explicitly labeled historical.
+  if(file===join(root,'packages/protocol/RESTORE.md'))continue;
+  for(const match of readFileSync(file,'utf8').matchAll(/\]\(([^)\s]+)\)/g)){
+   const href=match[1];if(/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(href)||/^[#/<]/.test(href))continue;
+   assert.ok(existsSync(resolve(dirname(file),href.split('#')[0])),`${file}: ${href}`);
+  }
+ }
+});

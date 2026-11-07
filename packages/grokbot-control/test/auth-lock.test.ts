@@ -6,6 +6,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { withAdvisoryLock } from '../src/auth/lock.js';
 import { GbcError } from '../src/errors.js';
+import { HELP } from '../src/cli/help.js';
 
 function holder(file: string) {
  const script = `import {withAdvisoryLock} from './src/auth/lock.ts'; await withAdvisoryLock(process.env.LOCK_FILE, async()=>{console.log('HELD'); await new Promise(()=>{setInterval(()=>{},1000)});});`;
@@ -48,4 +49,7 @@ test('missing native binding fails closed with actionable install hint', async()
  const p=spawn(process.execPath,['--import','tsx','--input-type=module','-e',script]);let out='';p.stdout.on('data',d=>out+=d);
  await new Promise<void>(r=>p.once('close',()=>r()));
  assert.match(out,/auth_lock_unavailable/);assert.match(out,/npm ci/);assert.equal(p.exitCode,0);
+ const docs='https://github.com/younglark/grokbot-control/blob/main/docs/control-plane/auth-lock.md';
+ assert.ok(JSON.parse(out.trim()).message.includes(docs));assert.ok(HELP.includes(docs));
+ assert.ok(!out.includes('See docs/auth-lock.md'));assert.ok(!HELP.includes('see docs/auth-lock.md'));
 });

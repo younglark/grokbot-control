@@ -68,7 +68,7 @@ NOTES:
     replayed; whitelisted read-only unary may refresh+retry once. logout/login share the credential
     lock with refresh. Not logged in / pre-RPC refresh failure -> structured auth/retryable error with rpc_dispatched=false.
   - Native auth lock: fs-native-extensions@1.5.3, Node20+, Linux/macOS/Windows prebuilds.
-    Missing binding fails closed: npm ci; see docs/auth-lock.md. Local filesystem only; Windows
+    Missing binding fails closed: npm ci; see https://github.com/younglark/grokbot-control/blob/main/docs/control-plane/auth-lock.md. Local filesystem only; Windows
     ACL privacy requires operator verification. Stop ALL old MCPs before upgrading (lock namespaces differ).
     Wait deadline 30s, refresh HTTP <=20s; wait cancellation never abandons an acquired exchange.
   - MCP cancel ≠ Interrupt. Disconnect does not interrupt runs.

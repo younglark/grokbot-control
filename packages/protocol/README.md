@@ -1,6 +1,6 @@
 # Protocol workspace (private build tooling, not a runtime package)
 
-The only canonical schema is [baselines/schema-0.79.3](baselines/schema-0.79.3/). All 14 archived files were moved byte-for-byte, with hashes pinned in `baselines/schema-0.79.3.sha256.json`. The former `proto/*.proto` were checked byte-identical and removed as redundant source copies. **Never overwrite an existing frozen version**: upgrades create a new version directory/hash manifest and explicit generator target change.
+The only canonical schema is [baselines/schema-0.79.3](baselines/schema-0.79.3/). All 14 archived files were moved byte-for-byte during t95u. A later reviewed P3 corrects README links only and updates its documentation hash; all .proto and snapshot bytes/hashes remain original. Current hashes are pinned in `baselines/schema-0.79.3.sha256.json`. The former `proto/*.proto` were checked byte-identical and removed as redundant source copies. **Never overwrite an existing frozen version**: upgrades create a new version directory/hash manifest and explicit generator target change.
 
 Provenance: [NOTICE.md](NOTICE.md), [original restore record](RESTORE.md), [method/upgrade evidence](../../docs/protocol/README.md). The restore record is historical, not a current command recipe.
 

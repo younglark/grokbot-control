@@ -19,7 +19,7 @@ function nativeBinding(): AdvisoryLockBinding {
     binding = loaded;
     return loaded;
   } catch {
-    throw new GbcError('auth_lock_unavailable', 'Native advisory lock unavailable; run npm ci with fs-native-extensions@1.5.3 prebuilds for your OS/architecture. See docs/auth-lock.md for source build instructions. No lease fallback.', { exitCode: 4 });
+    throw new GbcError('auth_lock_unavailable', 'Native advisory lock unavailable; run npm ci with fs-native-extensions@1.5.3 prebuilds for your OS/architecture. See https://github.com/younglark/grokbot-control/blob/main/docs/control-plane/auth-lock.md for source build instructions. No lease fallback.', { exitCode: 4 });
   }
 }
 
