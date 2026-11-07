@@ -56,13 +56,27 @@ node dist/cli/main.js --json auth logout             # 只删本工具自己的�
 
 本包可发布到 [npm](https://www.npmjs.com/)（包名 `grokbot-control`）。**未声明 SPDX `license`**：`vendor/proto-gen` 来自逆向恢复的 schema，许可不清，见该目录 `NOTICE.md`；请自行评估分发风险。
 
-### 一次性准备
+### 一次性准备（首发）
 
 1. 在 [npmjs.com](https://www.npmjs.com/) 创建账号并开启 2FA。
-2. 创建 **Automation** 类型的 granular access token（允许 publish），写入本仓库 GitHub **Settings → Secrets and variables → Actions** 的 `NPM_TOKEN`。不要把 token 写进仓库或 workflow 明文。
-3. 确认 `.github/workflows/publish.yml` 已存在（tag `v*` push 或 Release published 时：`npm ci` → `npm test` → `npm publish --access public`）。
+2. 首个版本手动发布一次（包不存在时无法配置 Trusted Publisher）：
 
-### 发版
+   ```bash
+   npm login --auth-type=web --registry=https://registry.npmjs.org
+   npm ci && npm test
+   npm publish --access public --registry=https://registry.npmjs.org
+   ```
+
+3. 在 npmjs.com → `grokbot-control` → **Settings → Trusted Publisher** 选 GitHub Actions，填写：
+   - Organization or user：`younglark`
+   - Repository：`grokbot-control`
+   - Workflow filename：`publish.yml`
+
+   新建配置需在 2 天内完成第一次成功发布，否则过期。配置后可在 **Publishing access** 选择禁止 token 发布。
+
+### 后续发版（GitHub Actions + OIDC）
+
+`.github/workflows/publish.yml` 仅在推送 tag `v*` 时运行（Node 24、npm ≥ 11.5.1、`id-token: write`）：`npm ci` → `npm test` → `npm publish --access public`。无需 npm token 或仓库 secret。
 
 ```bash
 # 工作区干净、已通过本地 build/test
@@ -70,7 +84,7 @@ npm version patch   # 或 minor / major；会改 package.json 并打 vX.Y.Z tag
 git push origin main --follow-tags
 ```
 
-CI 会用 `NPM_TOKEN` 发布。同一版本不要既推 tag 又对同一 tag 再发 GitHub Release 触发二次 publish（第二次会因版本已存在而失败）。
+GitHub Release 不会触发发布，可在 tag 推送后基于该 tag 创建 Release，不会重复 publish。首版 0.1.0 已手动发布，不要再推 `v0.1.0` tag（会因版本已存在而失败）。
 
 ### 安装 / 运行
 
