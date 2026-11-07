@@ -27,13 +27,18 @@ export interface UserComputerTransport {
   stop(): Promise<void>;
 }
 
-/** Remaining gaps vs full official UC path. */
+/**
+ * Remaining gaps vs full official UC path.
+ * Note: official FDe ownership does NOT compare discovery.generation numbers
+ * (App publishes SAND_LOCAL_EXEC_GENERATION; daemon exits via PID superseded).
+ * Do not list "generation compare" as a pending daemon feature.
+ */
 export const UC_P2_GAPS = [
   "ack/dedup persistence across restart",
-  "generation number compare on daemon (official ownership is PID superseded, not generation)",
   "standing/approval/authoritative branches",
   "Credential renew / reject / multi-account scope switch",
   "Capability injection full parity (device/messages/mail)",
+  "sendKeepAlives / keepAliveDueAt full parity (superviseBacklog 15s/5s covered)",
 ] as const;
 
 /** @deprecated use UC_P2_GAPS */

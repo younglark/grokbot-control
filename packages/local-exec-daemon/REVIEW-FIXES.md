@@ -109,7 +109,17 @@ Preserved: inner-id reallocation, cancel-by-requestId, accepted_count=0, Watch r
 | Topic | Official evidence | Compat action |
 |-------|-------------------|---------------|
 | PID superseded | `Jae`+`hce` (D:**L79879–79880**, **L81004–81009**); ownership tick sets `supersededForMs` then `FDe` (D:**L179498–179515**, **L79882–79896**) | Implemented: discovery other live pid → `supersededForMs`; exit reason `superseded`. Regression forks daemon and rewrites discovery to parent pid. |
-| Generation | Env `SAND_LOCAL_EXEC_GENERATION` (D:**L78804**, **L187205**) published into discovery (D:**L179215**). No daemon-side generation compare in FDe. | Publish only; **do not** invent generation-exit. Residual gap documented. |
+| Generation | Env `SAND_LOCAL_EXEC_GENERATION` (D:**L78804**, **L187205**) published into discovery (D:**L179215**). No daemon-side generation compare in FDe. | Publish only; **not a pending feature** (official also does not compare). |
 | Busy 8+64 | `rgt=8`, `_9r=64` (D:**L177859–177860**); when inflight≥8 and backlog≥64 → `F5e` busy string (D:**L135896–135897**, **L178548–178552**) | Already in `pollOnce`; new regression saturates active+backlog and asserts busy text + no admit. |
 | superviseBacklog 15s discard / 5s nudge | D:**L178589–178599** | Still a residual gap (not this commit). |
+
+## superviseBacklog 15s/5s (post-ab9fed0)
+
+| Evidence | Fact |
+|----------|------|
+| Timers | `m9r=5e3`, `h9r=15e3` (D:**L177855–177856**); keepAliveTick `intervalMs: c9r=500` (D:**L177956**, **L178004–178005**) |
+| Semantics | `superviseBacklog`: if backlog nonempty and `now-lastPolledAt > 15s` drain with A9 closing text (D:**L135894–135895**, **L178589–178598**); else if `>= 5s` `requestPoll()` (D:**L178599**) |
+| Compat | Implemented on UC provider (`superviseBacklog`, `lastPolledAt`); regressions with injectable now. Full `sendKeepAlives` / `keepAliveDueAt` still residual. |
+
+Also: superseded process regression asserts stdout `received superseded, shutting down`. UC busy test fills via poll path (hanging handleQueued) and is named admission-gate (not e2e load).
 

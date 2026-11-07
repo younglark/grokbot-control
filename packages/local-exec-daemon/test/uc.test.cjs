@@ -251,7 +251,7 @@ describe('generation / lease / ownership helpers', () => {
   });
 });
 
-describe('ownership PID superseded + UC busy pressure', () => {
+describe('ownership PID superseded + UC admission gate + superviseBacklog', () => {
   it('discovery naming another live pid exits as superseded (FDe/Jae/hce)', { timeout: 15000 }, async () => {
     const cp = require('node:child_process');
     const http = require('node:http');
@@ -271,7 +271,6 @@ describe('ownership PID superseded + UC busy pressure', () => {
     const data = path.join(dir, 'data');
     fs.mkdirSync(data);
     fs.writeFileSync(path.join(data, 'settings.json'), JSON.stringify({ version: 1, localToolPermission: 'never' }));
-    // Fresh supervisor so unsupervised path stays keep until superseded fires.
     fs.writeFileSync(path.join(data, 'local-exec-supervisor.json'), JSON.stringify({ pid: process.pid, at: Date.now() }));
     fs.writeFileSync(
       path.join(data, 'local-exec-daemon-connection.json'),
@@ -281,6 +280,9 @@ describe('ownership PID superseded + UC busy pressure', () => {
       env: { ...process.env, SAND_DATA_ROOT: data, SAND_LOCAL_EXEC_ROOT: dir, SAND_LOCAL_EXEC_GENERATION: '1' },
       stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
     });
+    let stdout = '';
+    child.stdout.on('data', (chunk) => { stdout += String(chunk); });
+    child.stderr.on('data', (chunk) => { stdout += String(chunk); });
     child.send({
       type: 'sand-local-exec-file-key',
       key: Buffer.alloc(32, 9).toString('base64'),
@@ -301,11 +303,15 @@ describe('ownership PID superseded + UC busy pressure', () => {
       });
     try {
       await until(() => fs.existsSync(discoveryPath) && JSON.parse(fs.readFileSync(discoveryPath, 'utf8')).pid === child.pid);
-      // Pretend a newer live daemon owns discovery (parent test process is alive).
       const prev = JSON.parse(fs.readFileSync(discoveryPath, 'utf8'));
       fs.writeFileSync(discoveryPath, JSON.stringify({ ...prev, pid: process.pid, generation: 2 }));
       await until(() => child.exitCode === 0, 10000);
       assert.equal(child.exitCode, 0);
+      assert.match(
+        stdout,
+        /received superseded, shutting down/,
+        `expected superseded shutdown log, got: ${stdout.slice(-500)}`,
+      );
     } finally {
       if (child.exitCode === null) {
         const end = new Promise((r) => child.once('exit', r));
@@ -318,24 +324,36 @@ describe('ownership PID superseded + UC busy pressure', () => {
     }
   });
 
-  it('UC poll at inflight8+backlog64 rejects with official busy text', { timeout: 5000 }, async () => {
+  it('UC poll admission gate: fill active+backlog via poll then busy (not e2e load oracle)', { timeout: 15000 }, async () => {
+    // Exercises the official 8+64 admission gate through pollOnce parse/admit.
+    // Jobs hang so active stays saturated; this is NOT a network/backpressure load oracle.
     const http = require('node:http');
     const wire = require('./helpers/wire-oracle.cjs');
     const { UserComputerProvider } = require('../dist/uc/provider');
-    const frame = Buffer.concat([
-      wire.encStr(1, 'overflow-req'),
-      wire.encMsg(2, wire.encStr(1, '{"id":1,"readArgs":{"path":"probe.txt"}}')),
-    ]);
-    const queued = wire.encMsg(
-      1,
-      Buffer.concat([wire.encStr(1, 'queue-overflow'), wire.encMsg(2, frame)]),
-    );
+    let seq = 0;
+    const makeBatch = (n) => {
+      const parts = [];
+      for (let i = 0; i < n; i++) {
+        const id = `q-${seq}`;
+        const req = `r-${seq}`;
+        seq += 1;
+        const frame = Buffer.concat([
+          wire.encStr(1, req),
+          wire.encMsg(2, wire.encStr(1, '{"id":1,"readArgs":{"path":"probe.txt"}}')),
+        ]);
+        parts.push(wire.encMsg(1, Buffer.concat([wire.encStr(1, id), wire.encMsg(2, frame)])));
+      }
+      return Buffer.concat(parts);
+    };
     const server = http.createServer((req, res) => {
       const chunks = [];
       req.on('data', (c) => chunks.push(c));
       req.on('end', () => {
+        const body = Buffer.concat(chunks);
+        const fields = wire.decodeFields(body);
+        const limit = fields[4]?.[0]?.v ?? 1;
         res.writeHead(200, { 'content-type': 'application/proto' });
-        res.end(queued);
+        res.end(makeBatch(Number(limit)));
       });
     });
     await new Promise((r) => server.listen(0, '127.0.0.1', r));
@@ -359,27 +377,93 @@ describe('ownership PID superseded + UC busy pressure', () => {
     p.channel = { backendUrl: `http://127.0.0.1:${port}`, machineId: 'synthetic', credential: 'synthetic' };
     p.replies = { available: true };
     p.emit = (f) => got.push(f);
-    p.active = new Set(Array.from({ length: 8 }, (_, i) => `active-${i}`));
-    p.backlog = Array.from({ length: 64 }, (_, i) => ({
-      id: `b${i}`,
-      requestId: `b${i}`,
-      kind: 2,
-      serverMessage: {},
-    }));
+    // Hang admitted work so active remains at capacity (admission still via poll).
+    // Rejectable so the test process does not leak forever-pending handles.
+    const cancelHang = [];
+    p.handleQueued = () => new Promise((_, reject) => { cancelHang.push(reject); });
     try {
+      for (let i = 0; i < 20 && !(p.active.size >= 8 && p.backlog.length >= 64); i++) {
+        await p.pollOnce();
+      }
+      assert.equal(p.active.size, 8, `active=${p.active.size} backlog=${p.backlog.length} seq=${seq}`);
+      assert.equal(p.backlog.length, 64, `active=${p.active.size} backlog=${p.backlog.length}`);
+      const before = got.length;
       await p.pollOnce();
-      assert.ok(
-        got.some(
-          (f) =>
-            f.requestId === 'overflow-req' &&
-            /busy with other requests right now/i.test(f.message?.throw?.error || ''),
-        ),
-        JSON.stringify(got),
+      const busy = got.slice(before).filter((f) =>
+        /busy with other requests right now/i.test(f.message?.throw?.error || f.error || ''),
       );
-      assert.equal(p.backlog.length, 64, 'busy rejection must not admit into backlog');
-      assert.ok(p.pendingAcks.includes('queue-overflow'));
+      assert.ok(busy.length >= 1, JSON.stringify(got.slice(before)));
+      assert.equal(p.backlog.length, 64, 'busy rejection must not grow backlog');
     } finally {
+      for (const reject of cancelHang) reject(new Error('test cleanup'));
+      p.beginShutdown();
+      await new Promise((r) => setTimeout(r, 50));
       await new Promise((r) => server.close(r));
     }
+  });
+
+  it('superviseBacklog drains stale backlog after 15s and nudges poll after 5s', async () => {
+    const http = require('node:http');
+    const {
+      UserComputerProvider,
+      UC_BACKLOG_CLOSED_BEFORE_START,
+      UC_BACKLOG_STALE_MS,
+      UC_BACKLOG_NUDGE_MS,
+    } = require('../dist/uc/provider');
+    let polls = 0;
+    const server = http.createServer((req, res) => {
+      req.resume();
+      req.on('end', () => {
+        polls += 1;
+        res.writeHead(200, { 'content-type': 'application/proto' });
+        res.end(Buffer.alloc(0));
+      });
+    });
+    await new Promise((r) => server.listen(0, '127.0.0.1', r));
+    const port = server.address().port;
+    const p = new UserComputerProvider({
+      backendUrl: `http://127.0.0.1:${port}`,
+      machineId: 'synthetic',
+      credential: 'synthetic',
+      root: '/tmp',
+      permission: 'ask',
+      hello: {
+        label: 'lab',
+        localRoot: '/tmp',
+        terminalsFolder: '/tmp',
+        standing: 'ask',
+        variant: 'lab',
+        serverAuthoritative: false,
+      },
+    });
+    const got = [];
+    p.channel = { backendUrl: `http://127.0.0.1:${port}`, machineId: 'synthetic', credential: 'synthetic' };
+    // available:false so a nudged pollOnce cannot runBacklog-steal the fixture item
+    p.replies = { available: false };
+    p.emit = (f) => got.push(f);
+    p.backlog = [
+      { id: 'stale-1', requestId: 'stale-req', kind: 2, serverMessage: {} },
+    ];
+    const now = Date.now();
+    p.lastPolledAt = now - (UC_BACKLOG_NUDGE_MS + 100);
+    const pollsBefore = polls;
+    p.superviseBacklog(now);
+    await new Promise((r) => setTimeout(r, 80));
+    assert.ok(polls > pollsBefore, '5s nudge should request poll');
+    assert.equal(p.backlog.length, 1, 'nudge must not drain');
+
+    // Stale drain does not require replies.available (official abandons queued work).
+    p.lastPolledAt = now - (UC_BACKLOG_STALE_MS + 1);
+    p.superviseBacklog(now);
+    assert.equal(p.backlog.length, 0);
+    assert.ok(
+      got.some(
+        (f) =>
+          f.requestId === 'stale-req' &&
+          (f.message?.throw?.error === UC_BACKLOG_CLOSED_BEFORE_START || f.error === UC_BACKLOG_CLOSED_BEFORE_START),
+      ),
+      JSON.stringify(got),
+    );
+    await new Promise((r) => server.close(r));
   });
 });

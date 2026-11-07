@@ -92,6 +92,14 @@ function authError(error: unknown): boolean {
  * UserComputer ConnectRPC transport (P2 skeleton).
  * Speaks Watch/Poll/Submit/Withdraw against a lab fake peer or compatible backend.
  */
+/** Official h9r / m9r / A9 (daemon.formatted.cjs L177855–177856, L135894–135895, L178589–178599). */
+export const UC_BACKLOG_STALE_MS = 15_000;
+export const UC_BACKLOG_NUDGE_MS = 5_000;
+export const UC_BACKLOG_CLOSED_BEFORE_START =
+  "The user's computer stopped serving requests before this one started. Retry it once the computer is back.";
+/** Official keepAliveTick interval c9r (L177956 / L177848 area). */
+export const UC_KEEPALIVE_INTERVAL_MS = 500;
+
 export class UserComputerProvider implements UserComputerTransport {
   private closed = false;
   private stopped = false;
@@ -107,8 +115,11 @@ export class UserComputerProvider implements UserComputerTransport {
   private activeJobs = new Set<Promise<void>>();
   private pollAgain = false;
   private pollTimer?: NodeJS.Timeout;
+  private keepAliveTimer?: NodeJS.Timeout;
   private admissionClosed = false;
   private announcedStanding?: string;
+  /** Official lastPolledAt (monotonic in daemon; wall clock here). */
+  lastPolledAt = 0;
   get blocked(): boolean { return this.admissionClosed; }
   private channel: { backendUrl: string; machineId: string; credential: string } | null =
     null;
@@ -150,7 +161,12 @@ export class UserComputerProvider implements UserComputerTransport {
         `[user-computer-provider] server accepted ${accepted} of ${submitted} response frames; the rest were not queued for this machine`,
       );
     }, () => { this.admissionClosed = true; this.abort.abort(); });
+    this.lastPolledAt = Date.now();
     this.pollTimer = setInterval(() => { void this.pollOnce().catch(() => undefined); }, 250);
+    // Official keepAliveTick (~500ms) runs superviseBacklog then sendKeepAlives.
+    this.keepAliveTimer = setInterval(() => {
+      this.superviseBacklog();
+    }, UC_KEEPALIVE_INTERVAL_MS);
     let attempts = 0;
     while (!this.closed) {
       if (this.admissionClosed) { await new Promise(r => setTimeout(r, 100)); continue; }
@@ -162,6 +178,7 @@ export class UserComputerProvider implements UserComputerTransport {
       await new Promise(r => setTimeout(r, Math.min(2000, 100 * 2 ** Math.min(attempts++, 4))));
     }
     clearInterval(this.pollTimer);
+    clearInterval(this.keepAliveTimer);
   }
 
   /** Same-machine, same-scope rotation resumes the SAME reply/ack/task state. */
@@ -185,7 +202,7 @@ export class UserComputerProvider implements UserComputerTransport {
   }
 
   beginShutdown(): void {
-    this.closed = true; clearInterval(this.pollTimer); this.abort.abort();
+    this.closed = true; clearInterval(this.pollTimer); clearInterval(this.keepAliveTimer); this.abort.abort();
   }
   async stop(): Promise<void> {
     if (this.stopped) return;
@@ -225,9 +242,10 @@ export class UserComputerProvider implements UserComputerTransport {
     }).toBinary()));
   }
 
-  private async pollOnce(): Promise<void> {
+  async pollOnce(): Promise<void> {
     if (this.pollBusy) { this.pollAgain = true; return; }
-    if (this.closed || this.admissionClosed || !this.channel || !this.replies?.available) return;
+    // Official keeps polling at capacity/backpressure so cancel + superviseBacklog nudge stay live.
+    if (this.closed || this.admissionClosed || !this.channel) return;
     this.pollBusy = true;
     const acks = this.pendingAcks.splice(0);
     try {
@@ -271,6 +289,7 @@ export class UserComputerProvider implements UserComputerTransport {
       }
       // A previously saturated reply lane may have recovered with no new jobs.
       this.runBacklog();
+      this.lastPolledAt = Date.now();
     } catch (e) {
       this.pendingAcks.unshift(...acks);
       if (authError(e)) {
@@ -282,6 +301,32 @@ export class UserComputerProvider implements UserComputerTransport {
       if (this.pollAgain) { this.pollAgain = false; setTimeout(() => void this.pollOnce(), 25); }
     }
   }
+  /**
+   * Official superviseBacklog (daemon.formatted.cjs L178589–178599):
+   * age > 15s → drain backlog with A9 closing text; age >= 5s → nudge poll.
+   * Exposed for regressions (clock injectable via nowMs).
+   */
+  superviseBacklog(nowMs = Date.now()): void {
+    if (this.backlog.length === 0 || this.closed || this.admissionClosed) return;
+    if (this.lastPolledAt <= 0) return;
+    const age = nowMs - this.lastPolledAt;
+    if (age > UC_BACKLOG_STALE_MS) {
+      const drained = this.backlog.splice(0, this.backlog.length);
+      for (const q of drained) {
+        const error = UC_BACKLOG_CLOSED_BEFORE_START;
+        if ([requestKinds.upload, requestKinds.download, requestKinds.discoverAiTool].includes(q.kind)) {
+          void this.emit({ kind: "file-error", requestId: q.requestId, error });
+        } else if (q.kind === requestKinds.messagesOp) {
+          void this.emit({ kind: "messages-error", requestId: q.requestId, error });
+        } else {
+          void this.emit({ kind: "control", requestId: q.requestId, message: { throw: { id: 0, error } } });
+        }
+      }
+    } else if (age >= UC_BACKLOG_NUDGE_MS) {
+      void this.pollOnce().catch(() => undefined);
+    }
+  }
+
   private runBacklog(): void {
     while (!this.closed && !this.admissionClosed && this.active.size < 8 && this.backlog.length && this.replies?.available) {
       const q = this.backlog.shift()!;
