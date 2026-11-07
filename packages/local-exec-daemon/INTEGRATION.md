@@ -18,7 +18,7 @@
 | Root `npm pack --dry-run --json` | pass, 122 files; existing CLI and MCP entry points present; no publication/tag |
 | `git diff --check` | pass |
 
-The two skips remain generation/PID supersession and full load-pressure oracle (t98u did not convert them). **t98u:** Exec* freeze + UC inner-id reallocation landed; approval/scope, lifecycle and full drop-in gaps remain in REVIEW-FIXES.md. No real control plane or official install replacement occurred. Not a drop-in claim.
+The two skips remain generation/PID supersession and full load-pressure oracle (t98u did not convert them). **t98u+:** Exec* freeze + UC inner-id reallocation + generated Exec JSON codec landed; approval/scope, lifecycle and full drop-in gaps remain in REVIEW-FIXES.md. No real control plane or official install replacement occurred. Not a drop-in claim.
 
 ### Naming and security checks
 

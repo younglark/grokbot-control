@@ -17,6 +17,13 @@ import {
   type Emit,
   type ExecFrameOut,
 } from "../exec/handlers";
+import {
+  decodeExecServerMessageJson,
+  encodeExecClientControlMessageJson,
+  encodeExecClientMessageJson,
+  execServerMessageToRecord,
+  isExecServerDecodeError,
+} from "../exec/exec-codec";
 import type { PermissionMode } from "../settings";
 import { isSupervised } from "../state/discovery";
 import type { UserComputerHello, UserComputerTransport } from "./types";
@@ -47,15 +54,14 @@ export function parseQueued(item: GrokBotUserComputerQueuedRequest): Queued {
     const kind = GrokBotUserComputerRequestFrame.fields.list().find(f => f.localName === frame.frame.case)!.no;
     let serverMessage: Record<string, unknown> = {};
     if (frame.frame.case === "exec") {
-      // Inner ExecServerMessage is now in the frozen schema; wire still arrives as serverMessageJson.
-      const value = JSON.parse(frame.frame.value.serverMessageJson);
-      if (value === null || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid exec JSON object");
-      serverMessage = value;
+      // Official: ExecServerMessage.fromJsonString(serverMessageJson, { ignoreUnknownFields: true }).
+      const decoded = decodeExecServerMessageJson(frame.frame.value.serverMessageJson);
+      serverMessage = execServerMessageToRecord(decoded);
     }
     return { id, requestId, kind, serverMessage };
   } catch (error) {
-    const parseError = error instanceof SyntaxError
-      ? `cannot decode agent.v1.ExecServerMessage from JSON: ${error.message}`
+    const parseError = isExecServerDecodeError(error)
+      ? (error as Error).message
       : error instanceof Error && error.message === "invalid request oneof"
         ? "This computer's local-exec daemon does not understand that request frame; update the desktop app."
         : "Malformed local-exec request frame";
@@ -64,9 +70,17 @@ export function parseQueued(item: GrokBotUserComputerQueuedRequest): Queued {
 }
 function responseFrame(frame: ExecFrameOut): GrokBotUserComputerResponseFrame {
   const result = new GrokBotUserComputerResponseFrame({requestId: frame.requestId});
-  if (frame.kind === "client") result.frame = {case: "client", value: new GrokBotUserComputerClientMessage({messageJson: JSON.stringify(frame.message)})};
-  else if (frame.kind === "control") result.frame = {case: "control", value: new GrokBotUserComputerControlMessage({messageJson: JSON.stringify(frame.message), cwdState: frame.cwdState})};
-  else if (frame.kind === "messages-error") result.frame = {case: "messagesError", value: new GrokBotUserComputerMessagesError({error: frame.error})};
+  if (frame.kind === "client") {
+    // Outer payload remains messageJson string; inner body is schema-validated when possible.
+    result.frame = {case: "client", value: new GrokBotUserComputerClientMessage({
+      messageJson: encodeExecClientMessageJson(frame.message),
+    })};
+  } else if (frame.kind === "control") {
+    result.frame = {case: "control", value: new GrokBotUserComputerControlMessage({
+      messageJson: encodeExecClientControlMessageJson(frame.message),
+      cwdState: frame.cwdState,
+    })};
+  } else if (frame.kind === "messages-error") result.frame = {case: "messagesError", value: new GrokBotUserComputerMessagesError({error: frame.error})};
   else if (frame.kind === "file-error") result.frame = {case: "fileError", value: new GrokBotUserComputerFileError({error: frame.error})};
   return result;
 }

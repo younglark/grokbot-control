@@ -13,6 +13,7 @@ import {
   handleDownload,
   type ExecFrameOut,
 } from "../exec/handlers";
+import { decodeExecServerMessageValue, execServerMessageToRecord, isExecServerDecodeError } from "../exec/exec-codec";
 
 export type BoxProviderOptions = {
   connection: Connection;
@@ -147,7 +148,7 @@ export class BoxProvider {
         await openSse(`${this.opts.connection.baseUrl.replace(/\/$/, "")}/local-exec/requests`, data => {
           void this.onEvent(data).catch(e => {
             const ev = data as Record<string, unknown>;
-            void requestError(String(ev?.requestId || ""), Number((ev?.serverMessage as Record<string, unknown>)?.id) || 1, e, this.emitExec)
+            void requestError(String(ev?.requestId || ""), 0, e, this.emitExec)
               .catch(() => console.error("[box-provider] request reply failed"));
           });
         }, this.abort.signal, this.headers);
@@ -210,12 +211,23 @@ export class BoxProvider {
 
     if (kind === "exec") {
       const requestId = String(ev.requestId || "");
-      const serverMessage = (ev.serverMessage || {}) as Record<string, unknown>;
       if (this.seen.has(requestId)) return;
       this.seen.add(requestId);
       if (this.seen.size > 256) this.seen.delete(this.seen.values().next().value!);
       this.bump(1);
       try {
+        let serverMessage: Record<string, unknown>;
+        try {
+          serverMessage = execServerMessageToRecord(
+            decodeExecServerMessageValue((ev.serverMessage ?? {}) as import("@bufbuild/protobuf").JsonValue),
+          );
+        } catch (error) {
+          const msg = isExecServerDecodeError(error)
+            ? (error as Error).message
+            : "Malformed local-exec request frame";
+          await requestError(requestId, 0, msg, this.emitExec);
+          return;
+        }
         const job = dispatchExec({
           root: this.opts.root,
           requestId,
