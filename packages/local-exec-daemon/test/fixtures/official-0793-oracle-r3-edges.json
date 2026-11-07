@@ -1,0 +1,1042 @@
+{
+ "_source": "official 0.79.3 main.cjs unchanged, bwrap + fake box peer; scripts/oracles/r3/run_all.sh (PROBE=cancel|cwd|edges|options|rootlink), run 2026-11-08 UTC+8; localExecutionTimeMs stripped; /state/r3/root -> <ROOT>",
+ "cases": {
+  "cancel-init": [
+   {
+    "kind": "client",
+    "requestId": "cancel-init",
+    "message": {
+     "id": 1,
+     "shellStream": {
+      "start": {
+       "sandboxPolicy": {
+        "type": "TYPE_INSECURE_NONE"
+       }
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "cancel-init",
+    "message": {
+     "id": 1,
+     "shellStream": {
+      "exit": {
+       "code": 4294967295,
+       "cwd": "<ROOT>",
+       "aborted": true,
+       "abortReason": "SHELL_ABORT_REASON_USER_ABORT"
+      }
+     }
+    }
+   },
+   {
+    "kind": "control",
+    "requestId": "cancel-init",
+    "message": {
+     "streamClose": {
+      "id": 1
+     }
+    }
+   }
+  ],
+  "cancel-check": [
+   {
+    "kind": "client",
+    "requestId": "cancel-check",
+    "message": {
+     "id": 2,
+     "shellStream": {
+      "start": {
+       "sandboxPolicy": {
+        "type": "TYPE_INSECURE_NONE"
+       }
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "cancel-check",
+    "message": {
+     "id": 2,
+     "shellStream": {
+      "stdout": {
+       "data": "CANCELLED_NOT_RUN\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "cancel-check",
+    "message": {
+     "id": 2,
+     "shellStream": {
+      "exit": {
+       "cwd": "<ROOT>"
+      }
+     }
+    }
+   },
+   {
+    "kind": "control",
+    "requestId": "cancel-check",
+    "message": {
+     "streamClose": {
+      "id": 2
+     }
+    }
+   }
+  ],
+  "cwd-save": [
+   {
+    "kind": "client",
+    "requestId": "cwd-save",
+    "message": {
+     "id": 1,
+     "shellStream": {
+      "start": {
+       "sandboxPolicy": {
+        "type": "TYPE_INSECURE_NONE"
+       }
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "cwd-save",
+    "message": {
+     "id": 1,
+     "shellStream": {
+      "exit": {
+       "cwd": "<ROOT>/sub"
+      }
+     }
+    }
+   },
+   {
+    "kind": "control",
+    "requestId": "cwd-save",
+    "message": {
+     "streamClose": {
+      "id": 1
+     }
+    }
+   }
+  ],
+  "cwd-harmless": [
+   {
+    "kind": "client",
+    "requestId": "cwd-harmless",
+    "message": {
+     "id": 2,
+     "shellStream": {
+      "start": {
+       "sandboxPolicy": {
+        "type": "TYPE_INSECURE_NONE"
+       }
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "cwd-harmless",
+    "message": {
+     "id": 2,
+     "shellStream": {
+      "stdout": {
+       "data": "HARMLESS\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "cwd-harmless",
+    "message": {
+     "id": 2,
+     "shellStream": {
+      "exit": {
+       "cwd": "<ROOT>"
+      }
+     }
+    }
+   },
+   {
+    "kind": "control",
+    "requestId": "cwd-harmless",
+    "message": {
+     "streamClose": {
+      "id": 2
+     }
+    }
+   }
+  ],
+  "cwd-check": [
+   {
+    "kind": "client",
+    "requestId": "cwd-check",
+    "message": {
+     "id": 3,
+     "shellStream": {
+      "start": {
+       "sandboxPolicy": {
+        "type": "TYPE_INSECURE_NONE"
+       }
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "cwd-check",
+    "message": {
+     "id": 3,
+     "shellStream": {
+      "stdout": {
+       "data": "CWD_EXECUTED\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "cwd-check",
+    "message": {
+     "id": 3,
+     "shellStream": {
+      "exit": {
+       "cwd": "<ROOT>"
+      }
+     }
+    }
+   },
+   {
+    "kind": "control",
+    "requestId": "cwd-check",
+    "message": {
+     "streamClose": {
+      "id": 3
+     }
+    }
+   }
+  ],
+  "alias-save": [
+   {
+    "kind": "client",
+    "requestId": "alias-save",
+    "message": {
+     "id": 1,
+     "shellStream": {
+      "start": {
+       "sandboxPolicy": {
+        "type": "TYPE_INSECURE_NONE"
+       }
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "alias-save",
+    "message": {
+     "id": 1,
+     "shellStream": {
+      "exit": {
+       "cwd": "<ROOT>"
+      }
+     }
+    }
+   },
+   {
+    "kind": "control",
+    "requestId": "alias-save",
+    "message": {
+     "streamClose": {
+      "id": 1
+     }
+    }
+   }
+  ],
+  "alias-read": [
+   {
+    "kind": "client",
+    "requestId": "alias-read",
+    "message": {
+     "id": 2,
+     "shellStream": {
+      "start": {
+       "sandboxPolicy": {
+        "type": "TYPE_INSECURE_NONE"
+       }
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "alias-read",
+    "message": {
+     "id": 2,
+     "shellStream": {
+      "stdout": {
+       "data": "alias edgeal='echo first\nalias second'\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "alias-read",
+    "message": {
+     "id": 2,
+     "shellStream": {
+      "exit": {
+       "cwd": "<ROOT>"
+      }
+     }
+    }
+   },
+   {
+    "kind": "control",
+    "requestId": "alias-read",
+    "message": {
+     "streamClose": {
+      "id": 2
+     }
+    }
+   }
+  ],
+  "vars-save": [
+   {
+    "kind": "client",
+    "requestId": "vars-save",
+    "message": {
+     "id": 3,
+     "shellStream": {
+      "start": {
+       "sandboxPolicy": {
+        "type": "TYPE_INSECURE_NONE"
+       }
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "vars-save",
+    "message": {
+     "id": 3,
+     "shellStream": {
+      "exit": {
+       "cwd": "<ROOT>"
+      }
+     }
+    }
+   },
+   {
+    "kind": "control",
+    "requestId": "vars-save",
+    "message": {
+     "streamClose": {
+      "id": 3
+     }
+    }
+   }
+  ],
+  "vars-read": [
+   {
+    "kind": "client",
+    "requestId": "vars-read",
+    "message": {
+     "id": 4,
+     "shellStream": {
+      "start": {
+       "sandboxPolicy": {
+        "type": "TYPE_INSECURE_NONE"
+       }
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "vars-read",
+    "message": {
+     "id": 4,
+     "shellStream": {
+      "stdout": {
+       "data": "REQUEST=unset CONV=unset STORE=unset ASKPASS=unset ELECTRON=unset\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "vars-read",
+    "message": {
+     "id": 4,
+     "shellStream": {
+      "exit": {
+       "cwd": "<ROOT>"
+      }
+     }
+    }
+   },
+   {
+    "kind": "control",
+    "requestId": "vars-read",
+    "message": {
+     "streamClose": {
+      "id": 4
+     }
+    }
+   }
+  ],
+  "quoted-save": [
+   {
+    "kind": "client",
+    "requestId": "quoted-save",
+    "message": {
+     "id": 5,
+     "shellStream": {
+      "start": {
+       "sandboxPolicy": {
+        "type": "TYPE_INSECURE_NONE"
+       }
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "quoted-save",
+    "message": {
+     "id": 5,
+     "shellStream": {
+      "exit": {
+       "cwd": "<ROOT>"
+      }
+     }
+    }
+   },
+   {
+    "kind": "control",
+    "requestId": "quoted-save",
+    "message": {
+     "streamClose": {
+      "id": 5
+     }
+    }
+   }
+  ],
+  "quoted-read": [
+   {
+    "kind": "client",
+    "requestId": "quoted-read",
+    "message": {
+     "id": 6,
+     "shellStream": {
+      "start": {
+       "sandboxPolicy": {
+        "type": "TYPE_INSECURE_NONE"
+       }
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "quoted-read",
+    "message": {
+     "id": 6,
+     "shellStream": {
+      "stdout": {
+       "data": "quote' line1\nline2 $(echo unsafe)\nalias qedge='echo '\\''single'\\'''\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "quoted-read",
+    "message": {
+     "id": 6,
+     "shellStream": {
+      "exit": {
+       "cwd": "<ROOT>"
+      }
+     }
+    }
+   },
+   {
+    "kind": "control",
+    "requestId": "quoted-read",
+    "message": {
+     "streamClose": {
+      "id": 6
+     }
+    }
+   }
+  ],
+  "fd-check": [
+   {
+    "kind": "client",
+    "requestId": "fd-check",
+    "message": {
+     "id": 7,
+     "shellStream": {
+      "start": {
+       "sandboxPolicy": {
+        "type": "TYPE_INSECURE_NONE"
+       }
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "fd-check",
+    "message": {
+     "id": 7,
+     "shellStream": {
+      "stdout": {
+       "data": "FD3=closed\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "fd-check",
+    "message": {
+     "id": 7,
+     "shellStream": {
+      "stdout": {
+       "data": "FD4=closed\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "fd-check",
+    "message": {
+     "id": 7,
+     "shellStream": {
+      "exit": {
+       "cwd": "<ROOT>"
+      }
+     }
+    }
+   },
+   {
+    "kind": "control",
+    "requestId": "fd-check",
+    "message": {
+     "streamClose": {
+      "id": 7
+     }
+    }
+   }
+  ],
+  "func-save": [
+   {
+    "kind": "client",
+    "requestId": "func-save",
+    "message": {
+     "id": 8,
+     "shellStream": {
+      "start": {
+       "sandboxPolicy": {
+        "type": "TYPE_INSECURE_NONE"
+       }
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "func-save",
+    "message": {
+     "id": 8,
+     "shellStream": {
+      "exit": {
+       "cwd": "<ROOT>"
+      }
+     }
+    }
+   },
+   {
+    "kind": "control",
+    "requestId": "func-save",
+    "message": {
+     "streamClose": {
+      "id": 8
+     }
+    }
+   }
+  ],
+  "func-read": [
+   {
+    "kind": "client",
+    "requestId": "func-read",
+    "message": {
+     "id": 9,
+     "shellStream": {
+      "start": {
+       "sandboxPolicy": {
+        "type": "TYPE_INSECURE_NONE"
+       }
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "func-read",
+    "message": {
+     "id": 9,
+     "shellStream": {
+      "stdout": {
+       "data": "special\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "func-read",
+    "message": {
+     "id": 9,
+     "shellStream": {
+      "stdout": {
+       "data": " ff\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "func-read",
+    "message": {
+     "id": 9,
+     "shellStream": {
+      "exit": {
+       "cwd": "<ROOT>"
+      }
+     }
+    }
+   },
+   {
+    "kind": "control",
+    "requestId": "func-read",
+    "message": {
+     "streamClose": {
+      "id": 9
+     }
+    }
+   }
+  ],
+  "multicwd": [
+   {
+    "kind": "client",
+    "requestId": "multicwd",
+    "message": {
+     "id": 10,
+     "shellStream": {
+      "start": {
+       "sandboxPolicy": {
+        "type": "TYPE_INSECURE_NONE"
+       }
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "multicwd",
+    "message": {
+     "id": 10,
+     "shellStream": {
+      "stdout": {
+       "data": "<ROOT>/line\nbreak\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "multicwd",
+    "message": {
+     "id": 10,
+     "shellStream": {
+      "exit": {
+       "cwd": "<ROOT>/line"
+      }
+     }
+    }
+   },
+   {
+    "kind": "control",
+    "requestId": "multicwd",
+    "message": {
+     "streamClose": {
+      "id": 10
+     }
+    }
+   }
+  ],
+  "cwd-next": [
+   {
+    "kind": "client",
+    "requestId": "cwd-next",
+    "message": {
+     "id": 11,
+     "shellStream": {
+      "start": {
+       "sandboxPolicy": {
+        "type": "TYPE_INSECURE_NONE"
+       }
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "cwd-next",
+    "message": {
+     "id": 11,
+     "shellStream": {
+      "stderr": {
+       "data": "--: line 2: break: only meaningful in a `for', `while', or `until' loop\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "cwd-next",
+    "message": {
+     "id": 11,
+     "shellStream": {
+      "stdout": {
+       "data": "<ROOT>\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "cwd-next",
+    "message": {
+     "id": 11,
+     "shellStream": {
+      "exit": {
+       "cwd": "<ROOT>"
+      }
+     }
+    }
+   },
+   {
+    "kind": "control",
+    "requestId": "cwd-next",
+    "message": {
+     "streamClose": {
+      "id": 11
+     }
+    }
+   }
+  ],
+  "path-save": [
+   {
+    "kind": "client",
+    "requestId": "path-save",
+    "message": {
+     "id": 12,
+     "shellStream": {
+      "start": {
+       "sandboxPolicy": {
+        "type": "TYPE_INSECURE_NONE"
+       }
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "path-save",
+    "message": {
+     "id": 12,
+     "shellStream": {
+      "stderr": {
+       "data": "environment: line 132: grep: command not found\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "path-save",
+    "message": {
+     "id": 12,
+     "shellStream": {
+      "stderr": {
+       "data": "environment: line 132: grep: command not found\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "path-save",
+    "message": {
+     "id": 12,
+     "shellStream": {
+      "stderr": {
+       "data": "environment: line 140: grep: command not found\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "path-save",
+    "message": {
+     "id": 12,
+     "shellStream": {
+      "exit": {
+       "cwd": "<ROOT>"
+      }
+     }
+    }
+   },
+   {
+    "kind": "control",
+    "requestId": "path-save",
+    "message": {
+     "streamClose": {
+      "id": 12
+     }
+    }
+   }
+  ],
+  "path-read": [
+   {
+    "kind": "client",
+    "requestId": "path-read",
+    "message": {
+     "id": 13,
+     "shellStream": {
+      "start": {
+       "sandboxPolicy": {
+        "type": "TYPE_INSECURE_NONE"
+       }
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "path-read",
+    "message": {
+     "id": 13,
+     "shellStream": {
+      "stdout": {
+       "data": "LAST=unset\nmy-fn is a function\nmy-fn () \n{ \n    printf 'special\\n'\n}\nalias edgeal='echo first\nalias second'\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "path-read",
+    "message": {
+     "id": 13,
+     "shellStream": {
+      "exit": {
+       "cwd": "<ROOT>"
+      }
+     }
+    }
+   },
+   {
+    "kind": "control",
+    "requestId": "path-read",
+    "message": {
+     "streamClose": {
+      "id": 13
+     }
+    }
+   }
+  ],
+  "options-save": [
+   {
+    "kind": "client",
+    "requestId": "options-save",
+    "message": {
+     "id": 1,
+     "shellStream": {
+      "start": {
+       "sandboxPolicy": {
+        "type": "TYPE_INSECURE_NONE"
+       }
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "options-save",
+    "message": {
+     "id": 1,
+     "shellStream": {
+      "exit": {
+       "cwd": "<ROOT>"
+      }
+     }
+    }
+   },
+   {
+    "kind": "control",
+    "requestId": "options-save",
+    "message": {
+     "streamClose": {
+      "id": 1
+     }
+    }
+   }
+  ],
+  "options-read": [
+   {
+    "kind": "client",
+    "requestId": "options-read",
+    "message": {
+     "id": 2,
+     "shellStream": {
+      "start": {
+       "sandboxPolicy": {
+        "type": "TYPE_INSECURE_NONE"
+       }
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "options-read",
+    "message": {
+     "id": 2,
+     "shellStream": {
+      "stdout": {
+       "data": "ERREXIT=0\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "options-read",
+    "message": {
+     "id": 2,
+     "shellStream": {
+      "stdout": {
+       "data": "pipefail       \toff\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "options-read",
+    "message": {
+     "id": 2,
+     "shellStream": {
+      "stdout": {
+       "data": "AFTER_FALSE\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "options-read",
+    "message": {
+     "id": 2,
+     "shellStream": {
+      "exit": {
+       "cwd": "<ROOT>"
+      }
+     }
+    }
+   },
+   {
+    "kind": "control",
+    "requestId": "options-read",
+    "message": {
+     "streamClose": {
+      "id": 2
+     }
+    }
+   }
+  ],
+  "rootlink-default": [
+   {
+    "kind": "client",
+    "requestId": "rootlink-default",
+    "message": {
+     "id": 1,
+     "shellStream": {
+      "start": {
+       "sandboxPolicy": {
+        "type": "TYPE_INSECURE_NONE"
+       }
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "rootlink-default",
+    "message": {
+     "id": 1,
+     "shellStream": {
+      "stdout": {
+       "data": "<ROOT>\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "rootlink-default",
+    "message": {
+     "id": 1,
+     "shellStream": {
+      "exit": {
+       "cwd": "<ROOT>"
+      }
+     }
+    }
+   },
+   {
+    "kind": "control",
+    "requestId": "rootlink-default",
+    "message": {
+     "streamClose": {
+      "id": 1
+     }
+    }
+   }
+  ]
+ },
+ "_sha256_cancel": "7359835c01f3d4ee473b6f86c6709398dfec3d25f6fe2a4b333b100f97dfdd22",
+ "_sha256_cwd": "b600e61ddfa22e40bc9c80253ddf7b7bedb048f3d97600d37fc28a3cf82bc788",
+ "_sha256_edges": "0d5115b7eb0f26fe31650a5c36e8419f15a0141eb0307a715262e719447c51de",
+ "_sha256_options": "700a3158fcad847b975bbecca1e531e17df8568e2a5c32c8bb91ffef7a0b41e4",
+ "_sha256_rootlink": "52b74a66f5c440ca62052f8dc4e58f42eb2f78b6e7321d5a233c5b19d9e27833"
+}

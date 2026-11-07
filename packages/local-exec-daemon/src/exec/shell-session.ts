@@ -1,20 +1,29 @@
 /**
  * Bash execution environment + cross-call state, aligned with observed official
- * 0.79.3 behavior (isolated oracle official-v2; see docs/local-exec-scenario-matrix.md).
+ * 0.79.3 behavior (isolated oracle; see docs/local-exec/scenario-matrix.md).
  *
  * Official evidence (daemon.formatted.cjs):
  *  - Zze L22670: bash = $SHELL if it contains "bash", else PATH lookup; none → "Can't find Bash".
  *  - Ok L20851 / Lze L20848: `bash -O extglob -c <script> -- <command>`, non-login, stdin </dev/null.
- *  - Kme ~L22702: initial state from `bash -O extglob -ilc` (interactive login) snapshot, empty on failure.
- *  - Wme L22688: each command restores snapshot, `set +u`, exports PWD, expand_aliases,
- *    eval command, then dumps state; `exit` inside the command skips the dump.
+ *  - Kme ~L22702: initial state from `bash -O extglob -ilc` snapshot, empty on failure.
+ *  - Wme L22688: restore snapshot, `set +u`, export PWD, expand_aliases, eval command, dump;
+ *    `exit` inside the command skips the dump.
+ *  - dump_bash_state L21230–21389: excludes *_proxy, CURSOR_SANDBOX*, SUDO_ASKPASS, CURSOR_ASKPASS,
+ *    CURSOR_CONVERSATION_ID, CURSOR_REQUEST_ID, CURSOR_AGENT_STORE, POSIXLY_CORRECT, ELECTRON_RUN_AS_NODE;
+ *    set -o excludes errexit/nounset/pipefail/posix.
  *  - Wo L21040: TERM=dumb NO_COLOR=1 FORCE_COLOR=0 _ZO_DOCTOR=0; lWt L18948 core.quotePath=false.
- * Observed (oracle): exported vars, functions, aliases, shopt and `set -o` persist;
- * non-exported vars do not; cwd does not persist (each call starts at workingDirectory
- * or root) while exit.cwd reports the final pwd; nonexistent cwd → stderr notice + root.
  *
- * The dump/restore script below is an independent implementation, NOT the official
- * dump_bash_state; parity is asserted only for the oracle-observed cases.
+ * INTENTIONAL SAFETY DEVIATIONS (independent implementation, not official dump_bash_state):
+ *  - cwd is never part of the restore script: it travels as a length-prefixed byte field that only
+ *    Node parses. Official emits raw `$PWD` as a script line, so a directory name with a newline is
+ *    executed on the next call (reproduced in independent-r3-cwd; we do not reproduce it).
+ *  - The dump uses bash builtins only (no grep/sed/awk/cat), every value is `%q`-quoted, aliases are
+ *    serialized via BASH_ALIASES assignments (no line rewriting), and a dump is committed only when
+ *    it has both start and end markers and fits the size cap (atomic; otherwise the old state stays).
+ *    Consequence: `export PATH=/nonexistent` is saved completely here, whereas official's dump fails
+ *    for lack of external grep and silently keeps the previous state.
+ *  - Exclusions are matched by variable NAME; official greps whole `export -p` lines, so it also drops
+ *    variables whose value merely contains a token. POSIX-mode replay is not implemented.
  */
 import { spawn } from "node:child_process";
 import * as fs from "node:fs";
@@ -22,23 +31,65 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 export const BASE_ENV: Record<string, string> = { TERM: "dumb", NO_COLOR: "1", FORCE_COLOR: "0", _ZO_DOCTOR: "0" };
-export const CWD_MARK = "__GB_STATE_CWD__=";
+export const STATE_START = "__GB_STATE_START__";
+export const STATE_END = "__GB_STATE_END__";
+export const MAX_STATE_BYTES = 4 * 1024 * 1024;
 const INIT_MARK = "__GB_STATE_INIT__";
 
-/** Bash function printing restorable state to stdout. First line carries cwd. */
+/**
+ * Bash function printing: START\n <cwd-byte-length>\n <cwd bytes>\n <restore script> END\n.
+ * Builtins only. The restore script never contains cwd.
+ */
 export const DUMP_FN = String.raw`__gb_dump_state() {
-  builtin printf '%s%s\n' '${CWD_MARK}' "$PWD"
-  local __n
+  builtin local LC_ALL=C __n __l __k __f
+  builtin printf '%s\n%s\n%s\n' '${STATE_START}' "${"$"}{#PWD}" "$PWD"
+  builtin printf '%s\n' 'builtin unset ELECTRON_RUN_AS_NODE 2>/dev/null'
   for __n in $(builtin compgen -e); do
-    case "$__n" in PWD|OLDPWD|SHLVL|_|SHELLOPTS|BASHOPTS|BASH_*|CURSOR_STATE_*|__GB_*) continue;; esac
+    case "$__n" in
+      PWD|OLDPWD|SHLVL|_|SHELLOPTS|BASHOPTS|BASH_*|POSIXLY_CORRECT|ELECTRON_RUN_AS_NODE|SUDO_ASKPASS|CURSOR_ASKPASS|CURSOR_CONVERSATION_ID|CURSOR_REQUEST_ID|CURSOR_AGENT_STORE|CURSOR_SANDBOX*|__GB_*) continue;;
+      *_proxy|*_PROXY|*_Proxy) continue;;
+    esac
     builtin printf 'builtin export %s=%q\n' "$__n" "${"$"}{!__n}"
   done
-  builtin declare -f | LC_ALL=C command sed -n '/^__gb_dump_state ()/,/^}/!p'
-  builtin alias -p | LC_ALL=C command sed 's/^alias /builtin alias /' 2>/dev/null
-  builtin shopt -p 2>/dev/null | LC_ALL=C command grep -v -e ' login_shell$' -e ' restricted_shell$'
-  builtin set +o | LC_ALL=C command grep -v -E ' (monitor|history|emacs|vi|interactive-comments|posix)$'
+  builtin unset -f __gb_dump_state 2>/dev/null
+  __f=$(builtin declare -f)
+  [[ -n "$__f" ]] && builtin printf '__gb_f=%q; builtin eval -- "$__gb_f"; builtin unset __gb_f\n' "$__f"
+  for __k in "${"$"}{!BASH_ALIASES[@]}"; do
+    builtin printf 'BASH_ALIASES[%q]=%q\n' "$__k" "${"$"}{BASH_ALIASES[$__k]}"
+  done
+  while builtin read -r __l; do
+    case "$__l" in *' login_shell'|*' restricted_shell') continue;; esac
+    builtin printf 'builtin %s 2>/dev/null\n' "$__l"
+  done < <(builtin shopt -p)
+  while builtin read -r __l; do
+    case "$__l" in *'o errexit'|*'o nounset'|*'o pipefail'|*'o posix'|*'o history'|*'o monitor') continue;; esac
+    builtin printf 'builtin %s 2>/dev/null\n' "$__l"
+  done < <(builtin set +o)
+  builtin printf '%s\n' '${STATE_END}'
 }
 `;
+
+export type ParsedState = { cwd: string; script: string };
+
+/** Strict parser: returns null unless the dump is complete and well-formed. */
+export function parseState(buf: Buffer, from = 0): ParsedState | null {
+  if (buf.length - from > MAX_STATE_BYTES) return null;
+  const start = Buffer.from(STATE_START + "\n");
+  if (!buf.subarray(from, from + start.length).equals(start)) return null;
+  let i = from + start.length;
+  const nl = buf.indexOf(0x0a, i);
+  if (nl < 0 || nl - i > 12) return null;
+  const lenStr = buf.subarray(i, nl).toString("latin1");
+  if (!/^\d+$/.test(lenStr)) return null;
+  const len = Number(lenStr);
+  i = nl + 1;
+  if (i + len + 1 > buf.length || buf[i + len] !== 0x0a) return null;
+  const cwd = buf.subarray(i, i + len).toString("utf8");
+  const rest = buf.subarray(i + len + 1);
+  const end = Buffer.from(STATE_END + "\n");
+  if (rest.length < end.length || !rest.subarray(rest.length - end.length).equals(end)) return null;
+  return { cwd, script: rest.subarray(0, rest.length - end.length).toString("utf8") };
+}
 
 export function findBash(env: NodeJS.ProcessEnv = process.env): string | null {
   const sh = env.SHELL;
@@ -56,21 +107,15 @@ let initPromise: Promise<string> | null = null;
 /** Test-only reset of daemon-global shell state. */
 export function resetShellState(): void { snapshot = null; initPromise = null; }
 
-function stripCwd(s: string): { cwd?: string; rest: string } {
-  const nl = s.indexOf("\n");
-  const first = nl < 0 ? s : s.slice(0, nl);
-  if (!first.startsWith(CWD_MARK)) return { rest: s };
-  return { cwd: first.slice(CWD_MARK.length), rest: nl < 0 ? "" : s.slice(nl + 1) };
-}
-
-/** Lazily capture the initial interactive-login snapshot once per daemon. */
+/** Lazily capture the initial interactive-login snapshot once per daemon (shared by waiters). */
 export function initialSnapshot(bash: string, timeoutMs = 10000): Promise<string> {
   if (snapshot !== null) return Promise.resolve(snapshot);
   if (initPromise) return initPromise;
   initPromise = new Promise<string>((resolve) => {
-    let out = "";
+    const chunks: Buffer[] = [];
+    let size = 0;
     let done = false;
-    const finish = (v: string) => { if (done) return; done = true; clearTimeout(t); snapshot = v; resolve(v); };
+    const finish = (v: string) => { if (done) return; done = true; clearTimeout(t); if (snapshot === null) snapshot = v; resolve(snapshot); };
     let child: ReturnType<typeof spawn>;
     try {
       child = spawn(bash, ["-O", "extglob", "-ilc", `${DUMP_FN} builtin printf '%s\\n' '${INIT_MARK}'; __gb_dump_state`], {
@@ -78,11 +123,14 @@ export function initialSnapshot(bash: string, timeoutMs = 10000): Promise<string
       });
     } catch { finish(""); return; }
     const t = setTimeout(() => { try { if (child.pid) process.kill(-child.pid, "SIGKILL"); } catch { /* gone */ } finish(""); }, timeoutMs);
-    child.stdout?.on("data", (b: Buffer) => { if (out.length < 4 * 1024 * 1024) out += b.toString("utf8"); });
+    child.stdout?.on("data", (b: Buffer) => { size += b.length; if (size <= MAX_STATE_BYTES * 2) chunks.push(b); });
     child.once("error", () => finish(""));
     child.once("close", () => {
-      const i = out.lastIndexOf(INIT_MARK + "\n");
-      finish(i < 0 ? "" : stripCwd(out.slice(i + INIT_MARK.length + 1)).rest);
+      const buf = Buffer.concat(chunks);
+      const mark = Buffer.from(INIT_MARK + "\n");
+      const at = buf.lastIndexOf(mark);
+      const parsed = at < 0 ? null : parseState(buf, at + mark.length);
+      finish(parsed ? parsed.script : "");
     });
   });
   return initPromise;
@@ -91,16 +139,15 @@ export function initialSnapshot(bash: string, timeoutMs = 10000): Promise<string
 export type PreparedShell = { bash: string; args: string[]; env: NodeJS.ProcessEnv; snapshotIn: string };
 
 /**
- * Snapshot travels on fd 3 (in) and fd 4 (out) like official Wme's default
- * transport, and both are closed for the user command (`3<&- 4>&-`), so no
- * CURSOR_STATE_* file variables leak into the command environment.
+ * Snapshot travels on fd 3 (in, read with the `read` builtin) and fd 4 (out); both are closed for
+ * the user command (`3<&- 4>&-`).
  */
 export async function prepareShell(command: string, root: string): Promise<PreparedShell> {
   const bash = findBash();
   if (!bash) throw new Error("Can't find Bash");
   const snapshotIn = await initialSnapshot(bash);
   const script =
-    `${DUMP_FN}snap=$(command cat <&3) && builtin shopt -s extglob && builtin eval -- "$snap" 2>/dev/null; ` +
+    `${DUMP_FN}IFS= builtin read -r -d '' __gb_snap <&3; builtin shopt -s extglob; builtin eval -- "$__gb_snap" 2>/dev/null; builtin unset __gb_snap; ` +
     `{ builtin set +u 2>/dev/null || true; builtin export PWD="$(builtin pwd)"; builtin shopt -s expand_aliases 2>/dev/null; ` +
     `builtin eval "$1" 3<&- 4>&- < /dev/null; }; COMMAND_EXIT_CODE=$?; __gb_dump_state >&4 2>/dev/null; builtin exit $COMMAND_EXIT_CODE`;
   const gitCount = Number(process.env.GIT_CONFIG_COUNT || 0) || 0;
@@ -116,10 +163,11 @@ export async function prepareShell(command: string, root: string): Promise<Prepa
   return { bash, args: ["-O", "extglob", "-c", script, "--", command], env, snapshotIn };
 }
 
-/** Commit dumped state (only if the command reached the dump) and return final cwd. */
-export function commitShell(dumped: string, aborted: boolean): string | undefined {
-  if (aborted || !dumped.startsWith(CWD_MARK)) return undefined;
-  const { cwd, rest } = stripCwd(dumped);
-  snapshot = rest;
-  return cwd;
+/** Atomically commit a complete dump and return its cwd; otherwise keep the old state. */
+export function commitShell(dumped: Buffer, aborted: boolean): string | undefined {
+  if (aborted) return undefined;
+  const parsed = parseState(dumped);
+  if (!parsed) return undefined;
+  snapshot = parsed.script;
+  return parsed.cwd;
 }

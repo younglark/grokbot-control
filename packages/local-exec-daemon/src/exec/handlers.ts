@@ -12,7 +12,7 @@ import * as path from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
 import { assertRealpathUnderRoot, assertUnderRoot, PathGuardError } from "./path";
 import type { PermissionMode } from "../settings";
-import { commitShell, prepareShell, type PreparedShell } from "./shell-session";
+import { commitShell, MAX_STATE_BYTES, prepareShell, type PreparedShell } from "./shell-session";
 
 export type ExecFrameOut =
   | { kind: "client"; requestId: string; message: Record<string, unknown> }
@@ -168,46 +168,96 @@ export async function handleShellStream(args: {
   workingDirectory?: string; timeout?: number; emit: Emit;
 }): Promise<void> {
   const { root, requestId, msgId, command, emit } = args;
+  const startedAt = Date.now();
+  // Lifecycle is registered on entry so cancel/timeout/shutdown cover the whole request:
+  // cwd validation, (shared) initial-snapshot wait, spawn, run and close. Official oracle
+  // (independent-r3-cancel): cancel during a slow login snapshot → USER_ABORT exit, no start
+  // frame, command never runs.
+  let pendingReason: ShellAbortReason | undefined;
+  let wakePreSpawn: () => void = () => undefined;
+  const preSpawnAborted = new Promise<void>((r) => { wakePreSpawn = r; });
+  let abortJob: (reason: ShellAbortReason) => void = (why) => {
+    if (pendingReason !== undefined) return;
+    pendingReason = why; wakePreSpawn();
+  };
+  let resolveDone: () => void = () => undefined;
+  const done = new Promise<void>((r) => { resolveDone = r; });
+  shells.set(requestId, { abort: (why) => abortJob(why), done });
+  // Official oracle (independent-r3-cancel, timeout=100ms, cancel at 150ms during a 2s login
+  // snapshot) reports USER_ABORT, i.e. the timeout clock does not run during the snapshot wait;
+  // it is armed at spawn. The snapshot wait itself is bounded by initialSnapshot's own cap.
+  let timeoutTimer: NodeJS.Timeout | undefined;
+
+  const emitAborted = async (why: ShellAbortReason, cwdForExit: string) => {
+    clearTimeout(timeoutTimer);
+    shells.delete(requestId);
+    try {
+      const elapsed = Date.now() - startedAt;
+      // Oracle frame order for an abort before the command ran: start, aborted exit, close.
+      await emit({ kind: "client", requestId, message: { id: msgId,
+        shellStream: { start: { sandboxPolicy: new SandboxPolicy({type: SandboxPolicy_Type.INSECURE_NONE}).toJson() } }, localExecutionTimeMs: elapsed } });
+      await emit({ kind: "client", requestId, message: { id: msgId,
+        shellStream: { exit: { code: 4294967295, cwd: cwdForExit, aborted: true,
+          abortReason: proto3.getEnumType(ShellAbortReason).findNumber(why)!.name, localExecutionTimeMs: elapsed } },
+        localExecutionTimeMs: elapsed } });
+      await emit({ kind: "control", requestId, message: { streamClose: { id: msgId } } });
+    } catch { console.error("[local-exec] reply emission failed during shell abort"); }
+    resolveDone();
+  };
+
   let cwd: string;
+  let realRoot: string;
   let prepared: PreparedShell;
   let notice: string | undefined;
   try {
-    const realRoot = fs.realpathSync(root);
+    realRoot = fs.realpathSync(root);
     const wanted = args.workingDirectory || root;
-    // Official (oracle sh-badcwd): a missing working directory is not an error;
-    // stderr notice first, then run in the root. Escapes stay refused here
-    // (official escape behavior for cwd is unverified).
-    assertUnderRoot(realRoot, path.resolve(realRoot, wanted));
-    if (!fs.existsSync(path.resolve(realRoot, wanted))) {
-      notice = `working directory ${path.resolve(realRoot, wanted)} does not exist on this machine; running in ${realRoot} instead\n`;
+    // Accept the logical root (may be a symlink, oracle independent-r3-rootlink) or its canonical
+    // form; both checks keep symlink-escape protection via realpath.
+    let abs: string;
+    try { abs = assertRealpathUnderRoot(root, wanted); }
+    catch (e) { if (!(e instanceof PathGuardError) || realRoot === path.resolve(root)) throw e; abs = assertRealpathUnderRoot(realRoot, wanted); }
+    if (!fs.existsSync(abs)) {
+      // Official (oracle sh-badcwd): stderr notice, then run in the root. Escapes stay refused.
+      notice = `working directory ${abs} does not exist on this machine; running in ${realRoot} instead\n`;
       cwd = realRoot;
     } else {
-      cwd = assertRealpathUnderRoot(root, wanted);
+      cwd = fs.realpathSync(abs);
       if (!(await fs.promises.stat(cwd)).isDirectory()) throw new Error("cwd is not a directory");
     }
-    prepared = await prepareShell(command, realRoot);
-  } catch (e) { await requestError(requestId, msgId, e, emit); return; }
+    if (pendingReason === undefined) {
+      const p = prepareShell(command, realRoot);
+      p.catch(() => undefined);
+      await Promise.race([p, preSpawnAborted]);
+      if (pendingReason === undefined) prepared = await p;
+    }
+  } catch (e) {
+    clearTimeout(timeoutTimer); shells.delete(requestId);
+    await requestError(requestId, msgId, e, emit); resolveDone(); return;
+  }
+  if (pendingReason !== undefined) { await emitAborted(pendingReason, cwd); return; }
   if (notice) await emit({ kind: "client", requestId, message: { id: msgId, shellStream: { stderr: { data: notice } }, localExecutionTimeMs: 0 } });
-  const startedAt = Date.now();
-  let abortJob: (reason: ShellAbortReason) => void = () => undefined;
-  const done = new Promise<void>((resolve) => {
-    const child = spawn(prepared.bash, prepared.args, {
+  // Re-check after the notice await: never spawn a cancelled request.
+  if (pendingReason !== undefined) { await emitAborted(pendingReason, cwd); return; }
+  const prep = prepared!;
+  {
+    const child = spawn(prep.bash, prep.args, {
       cwd, detached: true,
-      env: prepared.env,
+      env: prep.env,
       stdio: ["ignore", "pipe", "pipe", "pipe", "pipe"],
     });
     const stateIn = child.stdio?.[3] as NodeJS.WritableStream | null;
     const stateOut = child.stdio?.[4] as NodeJS.ReadableStream | null;
-    let dumped = "";
+    const dumpChunks: Buffer[] = [];
+    let dumpSize = 0;
     stateIn?.on("error", () => undefined);
-    stateIn?.end(prepared.snapshotIn);
-    stateOut?.on("data", (b: Buffer) => { if (dumped.length < 4 * 1024 * 1024) dumped += b.toString("utf8"); });
+    stateIn?.end(prep.snapshotIn);
+    stateOut?.on("data", (b: Buffer) => { dumpSize += b.length; if (dumpSize <= MAX_STATE_BYTES) dumpChunks.push(b); });
     stateOut?.on("error", () => undefined);
     let finished = false;
     let reason: ShellAbortReason | undefined;
     let escalation: NodeJS.Timeout | undefined;
     let deadline: NodeJS.Timeout | undefined;
-    let timeout: NodeJS.Timeout | undefined;
     let drain: NodeJS.Timeout | undefined;
     const groupKill = (signal: NodeJS.Signals) => {
       if (!child.pid) return;
@@ -216,11 +266,12 @@ export async function handleShellStream(args: {
     const finish = async (code: number | null, error?: Error) => {
       if (finished) return;
       finished = true;
-      clearTimeout(timeout); clearTimeout(deadline); clearTimeout(escalation); clearTimeout(drain);
+      clearTimeout(timeoutTimer); clearTimeout(deadline); clearTimeout(escalation); clearTimeout(drain);
       if (reason) groupKill("SIGKILL");
       child.stdout?.destroy(); child.stderr?.destroy();
       shells.delete(requestId);
-      const finalCwd = commitShell(dumped, Boolean(reason) || Boolean(error)) ?? cwd;
+      const truncated = dumpSize > MAX_STATE_BYTES;
+      const finalCwd = commitShell(Buffer.concat(dumpChunks), Boolean(reason) || Boolean(error) || truncated) ?? cwd;
       try {
       if (error) await requestError(requestId, msgId, error, emit);
       else {
@@ -232,7 +283,7 @@ export async function handleShellStream(args: {
         await emit({ kind: "control", requestId, message: { streamClose: { id: msgId } } });
       }
       } catch { console.error("[local-exec] reply emission failed during shell completion"); }
-      resolve();
+      resolveDone();
     };
     abortJob = (why) => {
       if (finished || reason) return;
@@ -253,6 +304,7 @@ export async function handleShellStream(args: {
       emit({ kind: "client", requestId, message: { id: msgId,
         shellStream: { start: { sandboxPolicy: new SandboxPolicy({type: SandboxPolicy_Type.INSECURE_NONE}).toJson() } }, localExecutionTimeMs: 1 } });
     });
+    if (args.timeout && args.timeout > 0) timeoutTimer = setTimeout(() => abortJob(ShellAbortReason.TIMEOUT), args.timeout);
     for (const [stream, name] of [[child.stdout, "stdout"], [child.stderr, "stderr"]] as const) {
       stream?.on("data", (b: Buffer) => {
         if (finished) return;
@@ -263,9 +315,7 @@ export async function handleShellStream(args: {
           .finally(() => { if (!finished) stream?.resume(); });
       });
     }
-    if (args.timeout && args.timeout > 0) timeout = setTimeout(() => abortJob(ShellAbortReason.TIMEOUT), args.timeout);
-  });
-  shells.set(requestId, { abort: why => abortJob(why), done });
+  }
   await done;
 }
 export function cancelRequest(requestId: string): boolean {
