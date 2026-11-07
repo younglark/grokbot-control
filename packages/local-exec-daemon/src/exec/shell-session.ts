@@ -123,11 +123,37 @@ export function resetShellState(): void { snapshot = null; initPromise = null; s
  */
 export async function terminateInitialSnapshot(): Promise<void> {
   const child = initChild;
-  if (!child || child.exitCode !== null || child.signalCode !== null) return initClosed;
-  // SIGKILL the whole group: an interactive (-i) bash ignores SIGTERM, and a TERM'd foreground
-  // child would let the profile continue running before an escalation fires (review probe).
-  try { if (child.pid) process.kill(-child.pid, "SIGKILL"); } catch { /* gone */ }
+  if (!child) return initClosed;
+  // Leader alive: SIGKILL the whole group (interactive bash ignores SIGTERM). Leader already
+  // exited: same-PGID descendants (e.g. a profile `cmd &`) may remain, so reap the group too.
+  if (child.pid) {
+    if (child.exitCode === null && child.signalCode === null) { try { process.kill(-child.pid, "SIGKILL"); } catch { /* gone */ } }
+    else reapInitGroup(child.pid);
+  }
   await initClosed;
+  if (child.pid) reapInitGroup(child.pid);
+}
+
+/**
+ * Kill leftover members of the (detached, setsid) init process group after its leader exited.
+ * PGID-reuse safety: the kernel never hands out a pid that is still in use as a live group's id,
+ * so while at least one member (pid != pgid, pgrp == pgid, sid == pgid) exists the group is ours.
+ * If a process with pid == pgid exists, the id was reused by someone else: never signal it.
+ * Without /proc (non-Linux) we only signal while our own leader is not yet reaped.
+ */
+export function reapInitGroup(pgid: number): number {
+  let members: number[] = [];
+  try {
+    for (const d of fs.readdirSync("/proc")) {
+      if (!/^\d+$/.test(d)) continue;
+      let st: string; try { st = fs.readFileSync(`/proc/${d}/stat`, "utf8"); } catch { continue; }
+      const f = st.slice(st.lastIndexOf(")") + 2).split(" "); // state ppid pgrp session ...
+      if (Number(f[2]) === pgid && Number(f[3]) === pgid) members.push(Number(d));
+    }
+  } catch { return 0; }
+  if (members.length === 0 || members.includes(pgid)) return 0;
+  try { process.kill(-pgid, "SIGKILL"); } catch { return 0; }
+  return members.length;
 }
 
 /** Lazily capture the initial interactive-login snapshot once per daemon (shared by waiters). */
@@ -151,6 +177,8 @@ export function initialSnapshot(bash: string, timeoutMs = 10000): Promise<string
     child.stdout?.on("data", (b: Buffer) => { size += b.length; if (size <= MAX_STATE_BYTES * 2) chunks.push(b); });
     child.once("error", () => finish(""));
     child.once("close", () => {
+      // Initialization is complete: clean up any residue left in the init process group now.
+      if (child.pid) reapInitGroup(child.pid);
       const buf = Buffer.concat(chunks);
       const mark = Buffer.from(INIT_MARK + "\n");
       const at = buf.lastIndexOf(mark);

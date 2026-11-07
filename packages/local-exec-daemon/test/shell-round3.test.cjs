@@ -100,3 +100,29 @@ test('cwd: omitted workingDirectory reuses previous final cwd; explicit override
   const after = await run(root, 'nl-next', 'echo ok');
   assert.equal(out(after), 'ok\n'); assert.equal(fs.existsSync(path.join(base, 'pwn')), false);
 });
+
+test('init leader exits first: same-PGID background residue is reaped, marker never written', async () => {
+  const root = freshRoot('initgroups');
+  const bgp = path.join(base, 'bg-pid'), mark = path.join(base, 'bg-after');
+  setProfile(`(echo $BASHPID > '${bgp}'; sleep 1.3; echo X > '${mark}') </dev/null >/dev/null 2>&1 &\n`);
+  const fr = await run(root, 'init-bg', 'echo READY');
+  assert.equal(out(fr), 'READY\n');
+  const bpid = Number(fs.readFileSync(bgp, 'utf8'));
+  const alive = (pid) => { try { const st = fs.readFileSync(`/proc/${pid}/stat`, 'utf8'); return !/\) Z /.test(st); } catch { return false; } };
+  assert.equal(alive(bpid), false, 'residue reaped at init completion');
+  await shutdownShells();
+  await delay(1600);
+  assert.equal(fs.existsSync(mark), false, 'background never continued');
+});
+
+test('reapInitGroup never signals a group whose id is held by a live leader (reuse) or an empty group', async () => {
+  const { reapInitGroup } = require('../dist/exec/shell-session.js');
+  const { spawn } = require('node:child_process');
+  const other = spawn('sleep', ['5'], { detached: true, stdio: 'ignore' });
+  await delay(50);
+  assert.equal(reapInitGroup(other.pid), 0);
+  let alive = true; try { process.kill(other.pid, 0); } catch { alive = false; }
+  assert.equal(alive, true, 'foreign group leader untouched');
+  other.kill('SIGKILL');
+  assert.equal(reapInitGroup(999999), 0);
+});
