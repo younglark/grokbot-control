@@ -1,3 +1,4 @@
+import { GbcError } from "../errors.js";
 import { createAuthProvider, staticTokenProvider } from "../auth/provider.js";
 import type { AuthKind } from "../auth/types.js";
 import { ControlPlane } from "../ops/plane.js";
@@ -42,11 +43,24 @@ export function parseGlobals(argv: string[]): { globals: CliGlobal; rest: string
   return { globals, rest };
 }
 
+/**
+ * Value flag lookup. `--x=value` always takes value verbatim (use this form for
+ * values beginning with "-"). `--x value` form: a missing value or a next token
+ * starting with "--" is a usage error (exit 2) — never swallow the next flag.
+ */
 export function flag(rest: string[], name: string): string | undefined {
-  const idx = rest.indexOf(name);
-  if (idx >= 0) return rest[idx + 1];
   const pref = rest.find((x) => x.startsWith(`${name}=`));
-  return pref ? pref.slice(name.length + 1) : undefined;
+  if (pref !== undefined) return pref.slice(name.length + 1);
+  const idx = rest.indexOf(name);
+  if (idx < 0) return undefined;
+  const v = rest[idx + 1];
+  if (v === undefined || v.startsWith("--")) {
+    throw new GbcError("usage", `${name} requires a value`, {
+      exitCode: 2,
+      hint: `pass ${name} <value>, or ${name}=<value> for values starting with "-"`,
+    });
+  }
+  return v;
 }
 
 export function hasFlag(rest: string[], name: string): boolean {

@@ -1,6 +1,9 @@
 import { z } from "zod";
 import type { ControlPlane } from "../ops/plane.js";
 import type { ResultEnvelope } from "../dto/result.js";
+import { LIMIT_MAX } from "../ops/limits.js";
+
+const limitSchema = z.number().int().positive().max(LIMIT_MAX).optional();
 
 export type ToolDef = {
   name: string;
@@ -23,7 +26,7 @@ export function buildTools(opts?: { readOnly?: boolean }): ToolDef[] {
       name: "list_bots",
       description: "List Grok Bot agents (ListGrokBotAgents)",
       readOnly: true,
-      inputSchema: z.object({ limit: z.number().int().positive().max(1000).optional() }),
+      inputSchema: z.object({ limit: limitSchema }),
       handler: (p, a) => p.bot.list({ limit: a.limit as number | undefined }),
     },
     {
@@ -134,7 +137,7 @@ export function buildTools(opts?: { readOnly?: boolean }): ToolDef[] {
       name: "list_transcript",
       description: "List transcript entries; ciphertext not decrypted",
       readOnly: true,
-      inputSchema: z.object({ agent_id: agentId, limit: z.number().optional() }),
+      inputSchema: z.object({ agent_id: agentId, limit: limitSchema }),
       handler: (p, a) => p.message.history({ agentId: String(a.agent_id), limit: a.limit as number | undefined }),
     },
     {

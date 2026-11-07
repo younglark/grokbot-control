@@ -5,6 +5,7 @@ import { failResult, newRequestId, okResult, type ResultEnvelope } from "../dto/
 import type { BotSummary } from "../dto/types.js";
 import { GbcError } from "../errors.js";
 import { mapBot } from "./map.js";
+import { validateLimit } from "./limits.js";
 
 export type WriteOpts = {
   dryRun?: boolean;
@@ -38,9 +39,9 @@ export class BotOps {
   async list(opts?: { limit?: number }): Promise<ResultEnvelope<{ bots: BotSummary[]; truncated: boolean }>> {
     const request_id = newRequestId();
     try {
+      const limit = validateLimit(opts?.limit);
       const res = await this.client.listGrokBotAgents({});
       const all = (res.agents ?? []).map(mapBot);
-      const limit = opts?.limit ?? 50;
       const truncated = Boolean(res.truncated) || all.length > limit;
       return this.wrapSim(
         okResult(
@@ -56,20 +57,32 @@ export class BotOps {
     }
   }
 
-  /** No GetBot RPC — filter ListGrokBotAgents client-side. */
+  /** No GetBot RPC — filter ListGrokBotAgents client-side (full server page, not the user-facing cap). */
   async get(agentId: string): Promise<ResultEnvelope<{ bot: BotSummary }>> {
-    const listed = await this.list({ limit: 10_000 });
-    if (!listed.ok || !listed.data) return listed as ResultEnvelope<never>;
-    const bot = listed.data.bots.find((b) => b.agent_id === agentId || b.id === agentId);
-    if (!bot) {
+    const request_id = newRequestId();
+    try {
+      const res = await this.client.listGrokBotAgents({});
+      const all = (res.agents ?? []).map(mapBot);
+      const bot = all.find((b: BotSummary) => b.agent_id === agentId || b.id === agentId);
+      if (bot) return this.wrapSim(okResult({ bot }, { request_id }));
+      if (res.truncated) {
+        return this.wrapSim(
+          failResult("lookup_incomplete", `bot ${agentId} not in a truncated ListGrokBotAgents page; existence unknown`, {
+            request_id,
+            outcome: "unknown",
+            hint: "Server list was truncated; absence is not proof of non-existence.",
+          }),
+        );
+      }
       return this.wrapSim(
         failResult("not_found", `bot ${agentId} not found in ListGrokBotAgents`, {
-          request_id: listed.request_id,
+          request_id,
           hint: "There is no GetGrokBotAgent RPC; get = list + filter.",
         }),
       );
+    } catch (e) {
+      return this.fromErr(e, request_id);
     }
-    return this.wrapSim(okResult({ bot }, { request_id: listed.request_id }));
   }
 
   async create(input: {
@@ -122,7 +135,7 @@ export class BotOps {
       const bot = mapBot(res.agent);
       return this.wrapSim(okResult({ bot, agent_id: bot.agent_id || agentId }, { request_id }));
     } catch (e) {
-      return this.fromErr(e, request_id);
+      return this.fromErr(e, request_id, true);
     }
   }
 
@@ -146,7 +159,7 @@ export class BotOps {
       });
       return this.wrapSim(okResult({ bot: mapBot(res.agent) }, { request_id }));
     } catch (e) {
-      return this.fromErr(e, request_id);
+      return this.fromErr(e, request_id, true);
     }
   }
 
@@ -181,7 +194,8 @@ export class BotOps {
         ),
       );
     } catch (e) {
-      const mapped = mapConnectError(e, request_id);
+      if (e instanceof GbcError) return this.fromErr(e, request_id, true);
+      const mapped = mapConnectError(e, request_id, { write: true });
       // App treats NotFound as ok on delete.
       if (mapped.code === "not_found") {
         return this.wrapSim(
@@ -194,12 +208,12 @@ export class BotOps {
           ),
         );
       }
-      return this.fromErr(e, request_id);
+      return this.fromErr(mapped, request_id, true);
     }
   }
 
-  private fromErr(e: unknown, request_id: string): ResultEnvelope<never> {
-    const err = e instanceof GbcError ? e : mapConnectError(e, request_id);
+  private fromErr(e: unknown, request_id: string, write = false): ResultEnvelope<never> {
+    const err = e instanceof GbcError ? e : mapConnectError(e, request_id, { write });
     return this.wrapSim(
       failResult(err.code, err.message, {
         outcome: err.outcome,

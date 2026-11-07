@@ -81,49 +81,65 @@ export class SidebarOps {
         if (!write?.allowWrite && process.env.GBT_ALLOW_WRITES !== "1") {
           return this.sim(failResult("denied", "need --allow-writes for sidebar write", { request_id }));
         }
-        await this.client.updateGrokBotUserRuntimeSettings({
-          sidebarSections: {
-            sections: next.map((s: { id: string; name: string; agent_ids: string[] }) => ({ id: s.id, name: s.name, agentIds: s.agent_ids })),
-          },
-          sidebarSectionsBase: {
-            sections: baseSections.map((s: { id: string; name: string; agent_ids: string[] }) => ({ id: s.id, name: s.name, agentIds: s.agent_ids })),
-          },
-        });
-        let verified = false;
-        if (write?.verify !== false) {
+        let writeSent = false;
+        try {
+          writeSent = true;
+          await this.client.updateGrokBotUserRuntimeSettings({
+            sidebarSections: { sections: toWire(next) },
+            sidebarSectionsBase: { sections: toWire(baseSections) },
+          });
+        } catch (e) {
+          const err = e instanceof GbcError ? e : mapConnectError(e, request_id, { write: true });
+          if (err.code === "failed_precondition" || /SidebarSectionsSaveConflict|conflict/i.test(err.message) && err.code !== "unknown") {
+            return this.sim(
+              failResult("sidebar_conflict", err.message, {
+                request_id,
+                hint: "Re-list sidebar, re-apply minimal patch, write again. No strong cross-App guarantee.",
+              }),
+            );
+          }
+          return this.fromErr(err, request_id);
+        }
+        if (write?.verify === false) {
+          return this.sim(okResult({ sections: next, note: "Wrote sections+base; verify skipped" }, { request_id }));
+        }
+        let got: SidebarSection[];
+        try {
           const again = await this.client.getGrokBotUserRuntimeSettings({});
-          const got = (again.settings?.sidebarSections?.sections ?? []).map(mapSection);
-          verified = JSON.stringify(got) === JSON.stringify(next);
+          got = (again.settings?.sidebarSections?.sections ?? []).map(mapSection);
+        } catch (e) {
+          const err = e instanceof GbcError ? e : mapConnectError(e, request_id);
           return this.sim(
-            okResult(
-              {
-                sections: got,
-                verified,
-                note: "Best-effort base CAS only; not cross-App transactional. Process-local lock held.",
-              },
-              { request_id },
-            ),
+            failResult("sidebar_unverified", `write sent but read-back failed: ${err.message}`, {
+              request_id,
+              outcome: "unknown",
+              hint: "Re-run `gbc sidebar list` and compare before retrying.",
+              details: { write_sent: writeSent, expected: next },
+            }),
+          );
+        }
+        const diff = diffSections(next, got);
+        if (diff.length > 0) {
+          return this.sim(
+            failResult("sidebar_unverified", "sidebar read-back does not match the intended state", {
+              request_id,
+              outcome: "unknown",
+              hint: "Write may have been dropped or overwritten concurrently. Re-list and re-apply; do not blindly retry.",
+              details: { diff, expected: next, actual: got },
+            }),
           );
         }
         return this.sim(
           okResult(
             {
-              sections: next,
-              note: "Wrote sections+base; verify skipped",
+              sections: got,
+              verified: true,
+              note: "Verified: section order, names and agent membership match (agent_ids order not compared). Best-effort base CAS only; not cross-App transactional.",
             },
             { request_id },
           ),
         );
       } catch (e) {
-        const err = e instanceof GbcError ? e : mapConnectError(e, request_id);
-        if (err.code === "failed_precondition" || /conflict|SidebarSectionsSaveConflict/i.test(err.message)) {
-          return this.sim(
-            failResult("sidebar_conflict", err.message, {
-              request_id,
-              hint: "Re-list sidebar, re-apply minimal patch, write again. No strong cross-App guarantee.",
-            }),
-          );
-        }
         return this.fromErr(e, request_id);
       }
     });
@@ -146,11 +162,12 @@ export class SidebarOps {
   }
 
   deleteSection(sectionId: string, write?: { dryRun?: boolean; allowWrite?: boolean; confirm?: string }) {
-    if (write?.confirm && write.confirm !== sectionId && !write.dryRun) {
+    if (!write?.dryRun && write?.confirm !== sectionId) {
       return Promise.resolve(
         this.sim(
-          failResult("denied", "delete section requires --confirm=<section_id>", {
+          failResult("denied", "delete section requires --confirm=<section_id> matching --section-id", {
             request_id: newRequestId(),
+            hint: `gbc sidebar delete --section-id ${sectionId} --confirm=${sectionId} --allow-writes`,
           }),
         ),
       );
@@ -187,4 +204,35 @@ export class SidebarOps {
       }),
     );
   }
+}
+
+function toWire(sections: SidebarSection[]) {
+  return sections.map((s) => ({ id: s.id, name: s.name, agentIds: s.agent_ids }));
+}
+
+/**
+ * Semantic diff: section order (by id) and names are meaningful; agent_ids are
+ * compared as a set (in-section ordering changes are not treated as mismatch).
+ */
+export function diffSections(expected: SidebarSection[], actual: SidebarSection[]): string[] {
+  const out: string[] = [];
+  const eIds = expected.map((s) => s.id);
+  const aIds = actual.map((s) => s.id);
+  if (eIds.join("\u0000") !== aIds.join("\u0000")) {
+    out.push(`section order/ids differ: expected [${eIds.join(",")}] got [${aIds.join(",")}]`);
+  }
+  const byId = new Map(actual.map((s) => [s.id, s]));
+  for (const e of expected) {
+    const a = byId.get(e.id);
+    if (!a) continue;
+    if (a.name !== e.name) out.push(`section ${e.id} name: expected "${e.name}" got "${a.name}"`);
+    const want = new Set(e.agent_ids);
+    const have = new Set(a.agent_ids);
+    const missing = [...want].filter((x) => !have.has(x));
+    const extra = [...have].filter((x) => !want.has(x));
+    if (missing.length || extra.length) {
+      out.push(`section ${e.id} agents: missing [${missing.join(",")}] extra [${extra.join(",")}]`);
+    }
+  }
+  return out;
 }

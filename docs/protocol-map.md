@@ -51,3 +51,21 @@ App 行为旁证：Linux **0.79.2** `main-app.pretty.cjs`（静态，未登录�
 - [ ] RuntimeSettings base 冲突错误码  
 - [ ] `viewer_session_id` 作默认 session 是否总可用  
 - [ ] Watch/List transcript 与加密可见性  
+
+## Contract updates (review fixes on top of 14b88bf)
+
+- `sidebar delete` / `delete_sidebar_section`: non-dry-run requires `confirm == section_id` in the SDK (CLI and MCP identical); otherwise `denied` (exit 7), no write.
+- Value flags: `--flag value` or `--flag=value`. Missing value or next token starting with `--` → `usage` (exit 2). Dash-leading literals use `--text=--literal`. `--text-file` missing/unreadable → exit 2.
+- Mutation RPCs (create/update/delete bot, send, sidebar write, interrupt): `unavailable`/`internal`/`unknown`/`resource_exhausted`/`deadline_exceeded`/`canceled`/transport errors → `outcome=unknown`, `retryable=false`, exit 10. Reads keep `unavailable` retryable (exit 8).
+- Sidebar writes are read back: section id order + names + agent membership (set) must match; in-section `agent_ids` order is not compared. Mismatch or read-back failure → `sidebar_unverified`, `outcome=unknown`, exit 10, `details.diff`.
+- `GBT_TRUST_BACKEND` / `--trust-backend`: only exact `"1"` trusts a non-allowlisted backend (SDK/CLI/MCP).
+- `limit` (bot list, message history; CLI/MCP/SDK): integer 1..1000, default 50; invalid → `invalid_argument`/`usage` exit 2, no RPC.
+- `bot get`: match missing in a server-`truncated` list → `lookup_incomplete` (`outcome=unknown`, exit 10), not `not_found`.
+
+### Still unverified against the live server (mock/fake passing is not live proof)
+- `DeleteGrokBotAgent{id}` / `UpdateGrokBotAgent{id}` are sent the public `agent_id`; whether proto `id` ≠ `agent_id` live (which would make delete NotFound→ok a false success) is unverified. Not changed.
+- `SendGrokBotUserMessage` sends `source`/`initiator`/`send_source` = 0 (UNSPECIFIED). Not changed.
+- `ListGrokBotTranscriptEntries` sends `limit=0`, `session_id=""`; server meaning of 0 unverified; client-side cap only.
+- Real error code for a stale `sidebar_sections_base` (assumed `failed_precondition`/"conflict").
+- Whether the server reorders `agent_ids` (treated as unordered) or sections (treated as ordered).
+- Sidebar cleanup after bot delete; idempotency of `message_id`/`agent_id` on retry.

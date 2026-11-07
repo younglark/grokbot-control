@@ -28,10 +28,10 @@ export function createAuthProvider(opts: {
     "https://agentn.global.api5.cursor.sh",
   ];
   const backend = opts.backend.replace(/\/$/, "");
-  if (!defaults.includes(backend) && !opts.trustCustomBackend && !process.env.GBT_TRUST_BACKEND) {
+  if (!defaults.includes(backend) && !opts.trustCustomBackend && process.env.GBT_TRUST_BACKEND !== "1") {
     throw new GbcError(
       "denied",
-      `backend ${backend} is not in the default allowlist; pass trustCustomBackend or GBT_TRUST_BACKEND=1`,
+      `backend ${backend} is not in the default allowlist; pass trustCustomBackend / --trust-backend or GBT_TRUST_BACKEND=1 (exactly "1")`,
       { exitCode: 7, hint: "Prevents sending tokens to an untrusted host (RFC9700-style binding)." },
     );
   }

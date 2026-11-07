@@ -91,12 +91,12 @@ export class ProgressOps {
         ),
       );
     } catch (e) {
-      return this.fromErr(e, request_id);
+      return this.fromErr(e, request_id, true);
     }
   }
 
-  private fromErr(e: unknown, request_id: string): ResultEnvelope<never> {
-    const err = e instanceof GbcError ? e : mapConnectError(e, request_id);
+  private fromErr(e: unknown, request_id: string, write = false): ResultEnvelope<never> {
+    const err = e instanceof GbcError ? e : mapConnectError(e, request_id, { write });
     return this.sim(
       failResult(err.code, err.message, {
         outcome: err.outcome,

@@ -21,7 +21,14 @@ NOTES:
   - Default transport is live Connect to --base-url (requires auth). Use --mock only for explicit simulation.
   - Live auth/RPC against production is NOT verified in this build's automated tests.
   - Writes require --allow-writes (or GBT_ALLOW_WRITES=1). --dry-run is pure (no RPC).
-  - delete/interrupt require --confirm=<resource-id>.
+  - bot delete / sidebar delete / interrupt require --confirm=<resource-id> (exact match).
+  - Value flags: "--flag value" or "--flag=value". A missing value (or a next token starting
+    with "--") is a usage error (exit 2); use --text=--literal for values starting with "-".
+  - --limit must be an integer 1..1000 (default 50); invalid values exit 2.
+  - Write errors that cannot rule out a side effect (unavailable/internal/deadline/transport)
+    exit 10 (unknown, retryable=false): reconcile before retrying.
+  - Sidebar writes are read back; a semantic mismatch exits 10 with code sidebar_unverified.
+  - GBT_TRUST_BACKEND / --trust-backend: only the exact value "1" trusts a custom --base-url.
   - MCP cancel ≠ Interrupt. Disconnect does not interrupt runs.
   - Room commands are not mixed into sidebar.
 

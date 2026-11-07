@@ -3,6 +3,7 @@ import { HELP } from "./help.js";
 import { buildPlane, flag, hasFlag, parseGlobals, persistMockState } from "./config.js";
 import { catchToExit, emitResult, usageExit } from "./io.js";
 import { failResult, okResult } from "../dto/result.js";
+import { parseCliLimit } from "../ops/limits.js";
 
 async function main(): Promise<number> {
   const argv = process.argv.slice(2);
@@ -49,7 +50,7 @@ async function main(): Promise<number> {
         );
       }
     } else if (noun === "bot" && verb === "list") {
-      code = emitResult(await plane.bot.list({ limit: Number(flag(rest, "--limit") || 50) }), asJson);
+      code = emitResult(await plane.bot.list({ limit: parseCliLimit(flag(rest, "--limit")) }), asJson);
     } else if (noun === "bot" && verb === "get") {
       const id = flag(rest, "--agent-id");
       if (!id) usageExit("bot get requires --agent-id");
@@ -120,7 +121,13 @@ async function main(): Promise<number> {
       let text = flag(rest, "--text");
       if (hasFlag(rest, "--text-file")) {
         const fs = await import("node:fs");
-        text = fs.readFileSync(flag(rest, "--text-file")!, "utf8");
+        const file = flag(rest, "--text-file");
+        if (!file) usageExit("--text-file requires a path", "gbc message send ... --text-file ./msg.txt");
+        try {
+          text = fs.readFileSync(file, "utf8");
+        } catch (err) {
+          usageExit(`cannot read --text-file: ${(err as Error).message}`);
+        }
       }
       if (hasFlag(rest, "--text-stdin")) text = await readStdin();
       if (!agentId || !sessionId || text == null) {
@@ -146,7 +153,7 @@ async function main(): Promise<number> {
     } else if (noun === "message" && verb === "history") {
       const agentId = flag(rest, "--agent-id");
       if (!agentId) usageExit("--agent-id required");
-      code = emitResult(await plane.message.history({ agentId, limit: Number(flag(rest, "--limit") || 50) }), asJson);
+      code = emitResult(await plane.message.history({ agentId, limit: parseCliLimit(flag(rest, "--limit")) }), asJson);
     } else if (noun === "session" && verb === "list") {
       const agentId = flag(rest, "--agent-id");
       if (!agentId) usageExit("--agent-id required");

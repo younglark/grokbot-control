@@ -40,7 +40,32 @@ export function createGrokBotClient(cfg: ConnectConfig): GrokBotClient {
   return createClient(GrokBotService as any, transport);
 }
 
-export function mapConnectError(err: unknown, requestId: string): GbcError {
+/**
+ * Codes that do not prove the server did NOT apply a mutation. For writes these
+ * become outcome=unknown / retryable=false / exit 10 (reconcile, never blind-retry).
+ */
+const WRITE_AMBIGUOUS = new Set(["unavailable", "rpc_error", "internal", "unknown_rpc", "resource_exhausted"]);
+
+export type MapErrorOpts = {
+  /** True when the RPC is a mutation (create/update/delete/send/sidebar write/interrupt). */
+  write?: boolean;
+};
+
+export function mapConnectError(err: unknown, requestId: string, opts?: MapErrorOpts): GbcError {
+  const base = mapConnectErrorBase(err, requestId);
+  if (opts?.write && WRITE_AMBIGUOUS.has(base.code)) {
+    return new GbcError("unknown", `write outcome unknown (${base.code}): ${base.message}`, {
+      outcome: "unknown",
+      retryable: false,
+      exitCode: 10,
+      hint: "Server may or may not have applied this write. Reconcile with list/get_send_status/history before any retry; do not blindly resend.",
+      details: { request_id: requestId, rpc_code: base.code },
+    });
+  }
+  return base;
+}
+
+function mapConnectErrorBase(err: unknown, requestId: string): GbcError {
   const anyErr = err as {
     code?: string | number;
     rawMessage?: string;
@@ -103,6 +128,15 @@ export function mapConnectError(err: unknown, requestId: string): GbcError {
         exitCode: 10,
         hint: "Request canceled ≠ InterruptGrokBotAgentRun.",
       });
+    case "internal":
+    case "13":
+      return new GbcError("internal", msg, { exitCode: 9 });
+    case "unknown":
+    case "2":
+      return new GbcError("unknown_rpc", msg, { exitCode: 9 });
+    case "resource_exhausted":
+    case "8":
+      return new GbcError("resource_exhausted", msg, { retryable: true, exitCode: 8 });
     case "invalid_argument":
     case "3":
       return new GbcError("invalid_argument", msg, { exitCode: 2 });

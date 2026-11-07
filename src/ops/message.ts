@@ -3,6 +3,7 @@ import { mapConnectError } from "../connect/client.js";
 import { failResult, newRequestId, okResult, type ResultEnvelope } from "../dto/result.js";
 import type { SendDelivery, SendStatusView, TranscriptEntryView } from "../dto/types.js";
 import { GbcError } from "../errors.js";
+import { validateLimit } from "./limits.js";
 
 function requireWrite(allow: boolean | undefined, action: string) {
   if (!allow && process.env.GBT_ALLOW_WRITES !== "1") {
@@ -67,7 +68,7 @@ export class MessageOps {
         ),
       );
     } catch (e) {
-      return this.fromErr(e, request_id);
+      return this.fromErr(e, request_id, true);
     }
   }
 
@@ -108,10 +109,11 @@ export class MessageOps {
   }): Promise<ResultEnvelope<{ entries: TranscriptEntryView[]; generation?: number; note: string }>> {
     const request_id = newRequestId();
     try {
+      const limit = validateLimit(input.limit);
+      // NOTE: server-side `limit`/`session_id` are still not sent (semantics of 0 unverified); client caps.
       const res = await this.client.listGrokBotTranscriptEntries({
         agentId: input.agentId,
       });
-      const limit = input.limit ?? 50;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const entries = (res.entries ?? []).slice(0, limit).map((e: any) => {
         const id = e.id || e.entryId || e.entry_id;
@@ -141,8 +143,8 @@ export class MessageOps {
     }
   }
 
-  private fromErr(e: unknown, request_id: string): ResultEnvelope<never> {
-    const err = e instanceof GbcError ? e : mapConnectError(e, request_id);
+  private fromErr(e: unknown, request_id: string, write = false): ResultEnvelope<never> {
+    const err = e instanceof GbcError ? e : mapConnectError(e, request_id, { write });
     return this.sim(
       failResult(err.code, err.message, {
         outcome: err.outcome,
