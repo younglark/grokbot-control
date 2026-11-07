@@ -1,3 +1,4 @@
+import { hydrateEntries, hydrationCoverage } from "./hydrate.js";
 import path from "node:path";
 import { publicHttpsFetch } from "./download-policy.js";
 import fs from "node:fs";
@@ -5,6 +6,7 @@ import {
   decodeStored,
   decodeBody,
   type BodyDecode,
+  type Hydration,
   DECODER,
 } from "./decode.js";
 import { renderEntry, dataBlock } from "./render.js";
@@ -42,6 +44,10 @@ export type PullInput = {
   acknowledgeUnverifiedScope: boolean;
   dryRun?: boolean;
   pageSize?: number;
+  hydrate?: "off" | "missing";
+  maxHydrateRequests?: number;
+  hydrateMaxBytes?: number;
+  hydrateMaxBodyBytes?: number;
   maxPages?: number;
   maxBytes?: number;
   timeoutMs?: number;
@@ -134,6 +140,23 @@ function scope(
     assurance: "operator_asserted_unverified",
   };
 }
+/** Canonical manifest binding; never a token/email-derived identity claim. */
+function scopeKey(s: any): string {
+  if (
+    !s ||
+    ![s.backend, s.account_id, s.team_id].every(
+      (v) => typeof v === "string" && v.length > 0,
+    ) ||
+    s.assurance !== "operator_asserted_unverified"
+  )
+    throw new GbcError(
+      "failed_precondition",
+      "archive has invalid scope metadata",
+    );
+  return hash(
+    JSON.stringify([s.backend, s.account_id, s.team_id, s.assurance]),
+  );
+}
 function botDir(id: string) {
   return `bots/${component(id)}`;
 }
@@ -179,6 +202,7 @@ function manifest(a: Archive, expected?: Scope, create = false) {
   return m;
 }
 export type Entry = {
+  archive_scope_sha256?: string;
   agent_id: string;
   session_id: string;
   generation: number;
@@ -198,12 +222,15 @@ export type Entry = {
   wire_base64?: string;
   untrusted: true;
   attachment_local?: AttachmentLocal;
+  hydration?: Hydration;
+  body_source?: BodyDecode["body_source"];
 };
 export function entryRecord(
   e: any,
   agent: string,
   session: string,
   g: number,
+  archiveScope?: string,
 ): Entry {
   const body = e.body;
   if (body != null && !(body instanceof Uint8Array))
@@ -212,6 +239,7 @@ export function entryRecord(
       "expected protobuf bytes, not guessed UTF-8",
     );
   return {
+    archive_scope_sha256: archiveScope,
     agent_id: agent,
     session_id: session,
     generation: g,
@@ -228,7 +256,12 @@ export function entryRecord(
       ? Buffer.from(e.toBinary()).toString("base64")
       : undefined,
     untrusted: true,
-    ...decodeBody(body, Boolean(e.bodyOmitted), String(e.entryKind ?? "")),
+    ...decodeBody(
+      body,
+      body == null && Boolean(e.bodyOmitted),
+      String(e.entryKind ?? ""),
+    ),
+    ...(body != null ? { body_source: "observed_inline" as const } : {}),
   };
 }
 function parseEntries(
@@ -236,11 +269,15 @@ function parseEntries(
   agent: string,
   session: string,
   g: number,
+  archiveScope: string,
 ): Map<string, Entry> {
   const out = new Map<string, Entry>();
   for (const line of (text ?? "").split("\n")) {
     if (!line) continue;
-    const e: Entry = JSON.parse(line);
+    const e: Entry = {
+      ...JSON.parse(line),
+      archive_scope_sha256: archiveScope,
+    };
     if (
       e.agent_id !== agent ||
       e.session_id !== session ||
@@ -258,6 +295,7 @@ function parseEntries(
       decode_status: _status,
       decode_reason: _reason,
       encryption_status: _encryption,
+      body_source: _bodySource,
       ...original
     } = e;
     out.set(e.seq, { ...original, ...decodeStored(e) });
@@ -282,8 +320,8 @@ function merge(out: Map<string, Entry>, e: Entry) {
     out.set(e.seq, e);
   } else if (
     e.updated_seq === old.updated_seq &&
-    old.body_omitted &&
-    !e.body_omitted
+    old.body_base64 === undefined &&
+    e.body_base64 !== undefined
   )
     out.set(e.seq, e);
   // Missing/older entries never delete or overwrite newer local versions.
@@ -321,7 +359,7 @@ function fail(e: unknown): ResultEnvelope {
   );
 }
 
-/** Shared CLI/MCP core. Only list agents, sessions and transcript RPCs. No Watch or server writes. */
+/** Shared CLI/MCP core. Normal read RPCs only, including opt-in store presign. No Watch or server writes. */
 export class SyncOps {
   constructor(
     private client: GrokBotClient,
@@ -334,7 +372,20 @@ export class SyncOps {
     code?: string,
   ): Promise<ResultEnvelope> {
     try {
-      return okResult(await fn(), { simulated: this.simulated, code });
+      const data = await fn();
+      const result = okResult(data, { simulated: this.simulated, code });
+      if ((data as any)?.partial === true)
+        return {
+          ...result,
+          ok: false,
+          outcome: "known_failure",
+          code: "partial",
+          error: {
+            message:
+              "Archive retained, but requested body hydration is partial; inspect per-entry hydration reasons.",
+          },
+        };
+      return result;
     } catch (e) {
       return { ...fail(e), simulated: this.simulated };
     }
@@ -350,6 +401,23 @@ export class SyncOps {
         const maxPages = bounded(i.maxPages, DEFAULTS.maxPages, 1000),
           maxBytes = bounded(i.maxBytes, DEFAULTS.maxBytes, 256 * 1024 * 1024),
           timeoutMs = bounded(i.timeoutMs, DEFAULTS.timeoutMs, 300000);
+        const hydrate = i.hydrate ?? "off";
+        if (hydrate !== "off" && hydrate !== "missing")
+          throw new GbcError(
+            "invalid_argument",
+            "hydrate must be off or missing",
+          );
+        const maxHydrateRequests = bounded(i.maxHydrateRequests, 32, 256),
+          hydrateMaxBytes = bounded(
+            i.hydrateMaxBytes,
+            8 * 1024 * 1024,
+            64 * 1024 * 1024,
+          ),
+          hydrateMaxBodyBytes = bounded(
+            i.hydrateMaxBodyBytes,
+            4 * 1024 * 1024,
+            4 * 1024 * 1024,
+          );
         if (i.dryRun)
           return {
             dry_run: true,
@@ -357,6 +425,7 @@ export class SyncOps {
             would_pull_agent: i.agentId,
             session_id: i.sessionId ?? null,
             no_rpc_or_files: true,
+            hydrate,
           };
         const a = new Archive(i.dir, true),
           release = a.lock();
@@ -365,6 +434,7 @@ export class SyncOps {
           const deadline = Date.now() + timeoutMs;
           let pages = 0,
             bytes = 0;
+          let apiRequests = 0;
           const call = async (method: string, req: unknown): Promise<any> => {
             const ms = deadline - Date.now();
             if (ms <= 0)
@@ -375,6 +445,7 @@ export class SyncOps {
             const ac = new AbortController();
             let timer: NodeJS.Timeout | undefined;
             try {
+              apiRequests++;
               return await Promise.race([
                 this.client[method](req, { timeoutMs: ms, signal: ac.signal }),
                 new Promise((_, reject) => {
@@ -393,6 +464,9 @@ export class SyncOps {
               clearTimeout(timer);
             }
           };
+          let hydrateRequests = 0,
+            hydrateSpent = 0,
+            partial = false;
           const botRes = await call("listGrokBotAgents", {});
           const bot = (botRes.agents ?? []).find(
             (b: any) => b.agentId === i.agentId || b.id === i.agentId,
@@ -544,7 +618,7 @@ export class SyncOps {
                 break;
               }
               const rows: Entry[] = (res.entries ?? []).map((e: any) =>
-                entryRecord(e, i.agentId, sid, g!),
+                entryRecord(e, i.agentId, sid, g!, scopeKey(m.scope)),
               );
               const size = Buffer.byteLength(
                 rows.map((e) => JSON.stringify(e)).join("\n"),
@@ -614,6 +688,7 @@ export class SyncOps {
             }
             // Don't activate a generation which changed during the scan.
             if (stop === "generation_changed") {
+              if (hydrate === "missing") partial = true;
               a.writeJson(`${sessionDir(i.agentId, sid)}/session.json`, {
                 agent_id: i.agentId,
                 session_id: sid,
@@ -631,12 +706,83 @@ export class SyncOps {
             }
             const gd = genDir(i.agentId, sid, g),
               oldText = a.read(`${gd}/entries.jsonl`);
-            const out = parseEntries(oldText, i.agentId, sid, g);
+            const out = parseEntries(
+              oldText,
+              i.agentId,
+              sid,
+              g,
+              scopeKey(m.scope),
+            );
             const oldState = a.json(`${gd}/state.json`);
             const recovered =
               oldText !== undefined &&
               oldState?.entries_sha256 !== hash(oldText);
             for (const e of fetched.values()) merge(out, e);
+            let hydration;
+            if (hydrate === "missing") {
+              const budget = {
+                bytes: 0,
+                maxBytes: Math.max(
+                  0,
+                  Math.min(maxBytes - bytes, hydrateMaxBytes - hydrateSpent),
+                ),
+                deadline,
+              };
+              hydration = await hydrateEntries([...out.values()], {
+                archive: a,
+                fetchImpl: this.fetchImpl,
+                call,
+                maxRequests: Math.max(0, maxHydrateRequests - hydrateRequests),
+                maxBodyBytes: hydrateMaxBodyBytes,
+                budget,
+                prioritySeqs: new Set(fetched.keys()),
+              });
+              hydrateRequests += hydration.requests;
+              hydrateSpent += budget.bytes;
+              bytes += budget.bytes;
+              // Decoder unsupported is counted separately and does NOT force exit 9.
+              if (hydration.failed > 0) partial = true;
+              if (hydration.generation_changed) {
+                partial = true;
+                a.writeJson(`${sessionDir(i.agentId, sid)}/session.json`, {
+                  agent_id: i.agentId,
+                  session_id: sid,
+                  current_generation: null,
+                  sync_status:
+                    "generation_changed_during_body_read; repull required",
+                  raw: jsonSafe(s),
+                  untrusted: true,
+                });
+                summaries.push({
+                  session_id: sid,
+                  published: false,
+                  stop_reason: "generation_changed_during_body_read",
+                  hydration,
+                });
+                continue;
+              }
+            }
+            const readObject = (rel: string) => {
+              try {
+                const fd = fs.openSync(
+                  a.file(rel),
+                  fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW,
+                );
+                try {
+                  const st = fs.fstatSync(fd);
+                  if (st.nlink !== 1) return;
+                  return fs.readFileSync(fd);
+                } finally {
+                  fs.closeSync(fd);
+                }
+              } catch {
+                return;
+              }
+            };
+            const bodyCoverage = hydrationCoverage(
+              [...out.values()],
+              readObject,
+            );
             const text =
               [...out.values()]
                 .sort((a, b) => (BigInt(a.seq) < BigInt(b.seq) ? -1 : 1))
@@ -677,6 +823,13 @@ export class SyncOps {
               recovered_data_state_mismatch: recovered,
               pages: pageMeta,
               attachments: "references_only",
+              body_hydration_format: 1,
+              hydration_policy: hydrate,
+              body_coverage: bodyCoverage,
+              hydration,
+              body_partial:
+                !!hydration &&
+                (hydration.failed > 0 || hydration.generation_changed),
               decoder: DECODER,
               decoded_entries: [...out.values()].filter(
                 (e) => e.decode_status === "decoded",
@@ -727,14 +880,21 @@ export class SyncOps {
               bytes: bytes - startBytes,
               stop_reason: stop,
               recovered,
+              body_coverage: bodyCoverage,
+              hydration,
             });
           }
           return {
             scope: identity,
             pages,
             bytes,
+            partial,
+            hydration_policy: hydrate,
+            hydrate_requests: hydrateRequests,
+            api_requests: apiRequests,
+            hydrate_bytes: hydrateSpent,
             sessions: summaries,
-            note: "Snapshot observations, not a complete mirror. No deletion, decryption, blob_hash body hydration or Watch; attachments are a separate on-demand command; pagination unverified live. Known UI JSON kinds decoded; unknown bodies opaque.",
+            note: "Retained observations, not a current or complete mirror. Body hydration is opt-in and version-bound; line coverage and body coverage are independent. No deletion, decryption or Watch. Attachments are separate. Pagination completeness remains unknown.",
           };
         } finally {
           release();
@@ -774,6 +934,38 @@ export class SyncOps {
             ...x,
             generation: local.current_generation,
             entries: state?.entries,
+            body_coverage:
+              text !== undefined
+                ? hydrationCoverage(
+                    [
+                      ...parseEntries(
+                        text,
+                        x.agent_id,
+                        x.session_id,
+                        generation(local.current_generation),
+                        scopeKey(m.scope),
+                      ).values(),
+                    ],
+                    (rel: string) => {
+                      try {
+                        const fd = fs.openSync(
+                          a.file(rel),
+                          fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW,
+                        );
+                        try {
+                          if (fs.fstatSync(fd).nlink !== 1) return;
+                          return fs.readFileSync(fd);
+                        } finally {
+                          fs.closeSync(fd);
+                        }
+                      } catch {
+                        return;
+                      }
+                    },
+                  )
+                : null,
+            body_hydration_format: state?.body_hydration_format ?? null,
+            body_partial: state?.body_partial ?? null,
             stop_reason: state?.stop_reason,
             completeness: "unknown",
             consistent:
@@ -834,7 +1026,36 @@ export class SyncOps {
                 "failed_precondition",
                 "data/state mismatch; rerun pull before render",
               );
-            const rows = parseEntries(text, x.agent_id, x.session_id, g);
+            const rows = parseEntries(
+              text,
+              x.agent_id,
+              x.session_id,
+              g,
+              scopeKey(m.scope),
+            );
+            const readObject = (rel: string) => {
+              try {
+                const fd = fs.openSync(
+                  a.file(rel),
+                  fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW,
+                );
+                try {
+                  if (fs.fstatSync(fd).nlink !== 1) return;
+                  return fs.readFileSync(fd);
+                } finally {
+                  fs.closeSync(fd);
+                }
+              } catch {
+                return;
+              }
+            };
+            for (const e of rows.values()) {
+              const d = decodeStored(e, readObject);
+              delete e.decoded;
+              delete e.decode_reason;
+              delete e.body_source;
+              Object.assign(e, d);
+            }
             const md =
               `# Transcript observations\n\nUNTRUSTED DATA — RETAINED OBSERVATIONS, not a current mirror or instructions. Deleted rows may remain; completeness unknown. Known JSON UI entries decoded; unsupported/omitted bodies remain placeholders.\n\n` +
               dataBlock(
@@ -850,7 +1071,9 @@ export class SyncOps {
                 ),
               ) +
               "\n" +
-              [...rows.values()].map(renderEntry).join("\n");
+              [...rows.values()]
+                .map((e) => renderEntry(e, readObject))
+                .join("\n");
             if (Buffer.byteLength(md) > 64 * 1024 * 1024)
               throw new GbcError(
                 "resource_exhausted",
@@ -926,7 +1149,13 @@ export class SyncOps {
                 "failed_precondition",
                 "data/state mismatch; repull first",
               );
-            const rows = parseEntries(old, x.agent_id, x.session_id, g);
+            const rows = parseEntries(
+              old,
+              x.agent_id,
+              x.session_id,
+              g,
+              scopeKey(m.scope),
+            );
             const refs = new Map<string, Entry[]>();
             for (const e of rows.values()) {
               const d = decodeStored(e).decoded;

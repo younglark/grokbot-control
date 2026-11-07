@@ -64,7 +64,7 @@ coordinator `Ee`（formatted 55815 之后）优先 body；否则收集 blobHash�
 `j3` 的 client.readBlobs 用 PresignSandBoxStoreReads，relPaths=`blobs/<hash>`，fetch arrayBuffer 返回原始 bytes。
 静态链中没有独立的 body 解密步骤；这不证明服务端磁盘/传输没有加密。
 
-本次不增加 blob/presign 或额外补正文网络请求；只有已拉到的 inline body 能解码。blobHash 是 transcript 正文间接引用，
+早期实现仅 inline 解码；现已加入显式 `--hydrate missing` 正文补读（默认off），证据与新增守卫见下节。blobHash 是 transcript 正文间接引用，
 不应误称为普通附件，也不应当作已验证 SHA-256 或自由下载 URL。缺失正文仍是硬缺口。
 
 coordinator 的 box gateway `getAgentTranscriptTail` 复用同一 List + hydrate + Tt 路径，不是另一个可任意替代的公开文本历史 RPC。
@@ -84,3 +84,15 @@ renderer `rQ`/`jbt`静态确认send-message.message.type=attachment，path=messa
 当前decoder支持该结构，下载只接受已证实canonical store alias，外部URL保持unsupported。
 本次隔离live得到file:// alias、中文显示名、36字节文本，条件GET返回not_modified；
 不将一次成功扩大为通用卡片、任意附件或blob正文支持。详见attachment-pagination-0.79.3.md与implementation-status.md。
+
+## omitted/blob 补读修订（基于 main@8a6cf21）
+仅静态读取 `/workspace/grokbot-sync-evidence-0793/coordinator.formatted.cjs`，未执行 App；原始 bundle 校验见本文前部。
+- 55789–55814 `ge`：agentId/**generation（含0）**/beforeSeq=seq+1/limit=1/`_s(session)`；按返回 seq 精确找 row。
+- 55815–55867 `Ee`：body!=null 优先，之后 blobHash，最后 bodyOmitted；omitted补读再选 body/blob；同批 ref 先 Set 去重；最终交 Tt 同 JSON decoder。
+- 53129 `mL="blobs/"`；53230–53257 `j3.readBlobs`：GrokBotService.PresignSandBoxStoreReads 只传 relPaths，响应 instructions 按 relPath 去掉 prefix 做逐项 ref 映射，不按数组索引；每8项并行。请求没有 agent/session/generation；客户端共享已解析 access/backend/auth transport，store scope 不是用户附件 Resolve scope。
+- 53139–53147 `Wte`：404 -> null，其他非ok报错，成功 arrayBuffer；此路径未见 blob 的403 re-presign 或 expiry 判断。不能把附件 reader 的重试推定为 blob reader 行为。
+- proto List request/response（12337–12353）、GrokBotTranscriptEntry（10583–10591）确认 uint64 seq/updated_seq、optional body/blob、response generation，但无 session 回显，也无 caller inline字节上限。proto PresignSandBoxStoreReads（13591–13597）仅 rel_paths/instructions；SandBoxStoreReadInstruction（15421–15425）为 rel_path/url/expires_at_ms，**无 size/etag/hash-algorithm**。
+- 此段代码没有证明 blobHash 的生成算法或跨版本不可变性，故仅当 opaque ref 使用；不根据字段名自行验证 SHA256，也不猜 store path。安全单段限制是本工具额外的保守约束，不宣称覆盖未知未来 ref 格式。
+
+实现额外收紧：exact row generation/updated_seq/entry_id/kind 检查、uint64 successor边界；缺失/重复/额外 presign path 拒绝；合法 expiry/公开HTTPS/DNS pinning/无Bearer/URL不落盘；流式单body/总字节/时间/API预算、私有staging/fsync/rename；403最多1次新presign是有界增强，不是伪称App语义。并发改为顺序，单批去重，不实现 Watch。原始 envelope 与恢复 body 分开、版本绑定；本地 SHA256 仅表示下载内容/完整性，不表示已验证远端 ref 算法。
+详细字段与失败/离线缓存语义见 ../sync-format.md；mock 覆盖不冒充 live。真实正文来源以本轮验收记录为准。

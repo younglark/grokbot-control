@@ -356,6 +356,20 @@ export function buildTools(opts?: {
             session_id: agentId.optional(),
             dry_run: z.boolean().optional(),
             page_size: z.number().int().min(1).max(500).optional(),
+            hydrate: z.enum(["off", "missing"]).optional(),
+            max_hydrate_requests: z.number().int().min(1).max(256).optional(),
+            hydrate_max_bytes: z
+              .number()
+              .int()
+              .min(1)
+              .max(64 * 1024 * 1024)
+              .optional(),
+            hydrate_max_body_bytes: z
+              .number()
+              .int()
+              .min(1)
+              .max(4 * 1024 * 1024)
+              .optional(),
             max_pages: z.number().int().min(1).max(1000).optional(),
             max_bytes: z
               .number()
@@ -376,6 +390,10 @@ export function buildTools(opts?: {
             acknowledgeUnverifiedScope: c.acknowledgeUnverifiedScope === true,
             dryRun: a.dry_run as boolean | undefined,
             pageSize: a.page_size as number | undefined,
+            hydrate: a.hydrate as "off" | "missing" | undefined,
+            maxHydrateRequests: a.max_hydrate_requests as number | undefined,
+            hydrateMaxBytes: a.hydrate_max_bytes as number | undefined,
+            hydrateMaxBodyBytes: a.hydrate_max_body_bytes as number | undefined,
             maxPages: a.max_pages as number | undefined,
             maxBytes: a.max_bytes as number | undefined,
             timeoutMs: a.timeout_ms as number | undefined,

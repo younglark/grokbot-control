@@ -28,6 +28,9 @@ SYNC (file-first snapshots; no SQLite):
   gbc sync render --dir /absolute/private/root [--agent-id <id>] [--session-id <sid>]
   gbc sync attachments --dir /absolute/private/root [--agent-id <id>] [--session-id <sid>] [--path <remote>]
   pull bounds: --page-size 100 --max-pages 100 --max-bytes 33554432 --timeout-ms 30000 (defaults)
+  body hydration: --hydrate off|missing (default off); inline first, exact omitted re-list, store blob reads.
+  hydration bounds: --max-hydrate-requests 32 --hydrate-max-bytes 8388608 --hydrate-max-body-bytes 4194304
+  Hard caps: 256 extra RPCs / 64MiB aggregate / 4MiB body; share pull byte/time budget. Partial -> exit 9.
   attachments bounds: --max-file-bytes 33554432 --max-bytes 67108864 --timeout-ms 30000
   --dry-run pull/render/attachments: no RPC or files. --all is not supported in v1.
   attachments also requires --account-id/--team-id/--ack-unverified-scope.
@@ -35,9 +38,10 @@ SYNC (file-first snapshots; no SQLite):
   Identity is operator-asserted, NOT verified by auth. Use stable IDs, never email/token hash.
   Existing roots must be private 0700; files 0600. status/render are local and need no login.
   Raw bytes/base64 preserved. render exposes known JSON message/text/notice/tool-summary shapes.
-  Unknown cards, omitted/blob-only bodies remain placeholders; no decryption. Use rg -g '*.md'.
-  Pagination unverified live; completeness always unknown. No Watch/deletion/blob_hash body hydration.
-  attachments: on-demand ResolveGrokBotAttachmentReads for synced user-attachment and send-message attachment App store aliases only; not live verified.
+  Raw observed envelopes stay unchanged; recovered bodies carry version-bound provenance/local content hash.
+  Unknown cards/unrecovered bodies remain placeholders; no decryption. JSONL/MD grep works offline.
+  Line coverage and body coverage are separate; completeness/current membership always unknown. No Watch/deletion.
+  attachments: on-demand ResolveGrokBotAttachmentReads for synced user-attachment and send-message attachment App store aliases only.
   MCP: configure GBT_SYNC_ROOT; sync_status is local. sync_pull/render/attachments require independent
   GBT_SYNC_ALLOW_LOCAL_WRITES=1 plus GBT_SYNC_ACCOUNT_ID, GBT_SYNC_TEAM_ID,
   GBT_SYNC_ACK_UNVERIFIED_SCOPE=1 for pull. READONLY excludes sync mutators. No archive path tool argument.

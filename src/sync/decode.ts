@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 /** Static 0.79.3 evidence: node-agent-coordinator Tt -> JSON.parse(h.decode(body))
  * -> _b/Are discriminated UI-entry validator. See docs/protocol/transcript-body-0.79.3.md.
  * A deliberately strict subset, NOT arbitrary UTF-8, protobuf guessing or decryption.
@@ -30,7 +31,127 @@ export type BodyDecode = {
   decode_reason?: string;
   encryption_status: "unknown" | "plaintext_json";
   decoded?: DecodedBody;
+  body_source?: "observed_inline" | "hydrated_omitted" | "hydrated_blob";
 };
+export type Hydration = {
+  format_version: 1;
+  status: "fetched" | "error";
+  binding: string;
+  source: "omitted_list" | "blob";
+  context: {
+    archive_scope_sha256: string;
+    agent_id: string;
+    session_id: string;
+    generation: number;
+    seq: string;
+    updated_seq: string;
+    entry_id?: string;
+  };
+  observed_at_ms: string;
+  reason?: string;
+  body_base64?: string;
+  content_sha256?: string;
+  object_rel?: string;
+  remote_blob_ref?: string;
+  /** Attempts for this binding; deterministic failures set retry:"never". */
+  attempts?: number;
+  retry?: "never" | "retryable";
+  /** Meta/wire only — body bytes live in object_rel, not duplicated here. */
+  reread?: {
+    raw: unknown;
+    wire_base64?: string;
+    object_rel?: string;
+    content_sha256?: string;
+  };
+};
+export type ObjectReader = (rel: string) => Buffer | undefined;
+type StoredInput = {
+  archive_scope_sha256?: string;
+  body_base64?: string;
+  body_omitted: boolean;
+  entry_kind: string;
+  agent_id?: string;
+  session_id?: string;
+  generation?: number;
+  seq?: string;
+  updated_seq?: string;
+  entry_id?: string;
+  blob_hash?: string;
+  hydration?: Hydration;
+};
+export function hydrationBinding(e: StoredInput): string {
+  return createHash("sha256")
+    .update(
+      JSON.stringify([
+        e.archive_scope_sha256,
+        e.agent_id,
+        e.session_id,
+        e.generation,
+        e.seq,
+        e.updated_seq,
+        e.entry_id ?? null,
+        e.entry_kind,
+        e.blob_hash ?? null,
+        e.body_omitted,
+        e.body_base64 ?? null,
+      ]),
+    )
+    .digest("hex");
+}
+export function verifiedHydratedBytes(
+  e: StoredInput,
+  readObject?: ObjectReader,
+): Buffer | undefined {
+  const h = e.hydration;
+  if (
+    !h ||
+    h.format_version !== 1 ||
+    h.status !== "fetched" ||
+    h.binding !== hydrationBinding(e) ||
+    !/^[0-9a-f]{64}$/.test(h.content_sha256 ?? "")
+  )
+    return;
+  const c = h.context;
+  if (
+    !c ||
+    typeof e.archive_scope_sha256 !== "string" ||
+    !/^[0-9a-f]{64}$/.test(e.archive_scope_sha256) ||
+    c.archive_scope_sha256 !== e.archive_scope_sha256 ||
+    c.agent_id !== e.agent_id ||
+    c.session_id !== e.session_id ||
+    c.generation !== e.generation ||
+    c.seq !== e.seq ||
+    c.updated_seq !== e.updated_seq ||
+    c.entry_id !== e.entry_id
+  )
+    return;
+  if (h.source !== "omitted_list" && h.source !== "blob") return;
+  if (h.object_rel !== `bodies/objects/sha256-${h.content_sha256}`) return;
+  // Canonical copy is the content-addressed object; body_base64 is legacy/optional.
+  if (readObject) {
+    try {
+      const b = readObject(h.object_rel);
+      if (
+        b &&
+        b.byteLength <= BODY_DECODE_MAX &&
+        createHash("sha256").update(b).digest("hex") === h.content_sha256
+      )
+        return b;
+    } catch {
+      return;
+    }
+  }
+  if (typeof h.body_base64 !== "string") return;
+  if (h.body_base64.length > Math.ceil(BODY_DECODE_MAX / 3) * 4) return;
+  const b = Buffer.from(h.body_base64, "base64");
+  if (
+    b.byteLength > BODY_DECODE_MAX ||
+    b.toString("base64") !== h.body_base64 ||
+    createHash("sha256").update(b).digest("hex") !== h.content_sha256
+  )
+    return;
+  return b;
+}
 const object = (v: unknown): v is Record<string, unknown> =>
   v !== null && typeof v === "object" && !Array.isArray(v);
 const optionalString = (v: unknown) => v === undefined || typeof v === "string";
@@ -157,12 +278,27 @@ export function decodeBody(
   };
 }
 /** Offline re-render also upgrades archives written before the decoder existed. */
-export function decodeStored(e: {
-  body_base64?: string;
-  body_omitted: boolean;
-  entry_kind: string;
-}): BodyDecode {
-  if (e.body_omitted) return decodeBody(undefined, true, e.entry_kind);
+export function decodeStored(
+  e: StoredInput,
+  readObject?: ObjectReader,
+): BodyDecode {
+  // Inline observation always wins, even if cached hydration was supplied.
+  if (e.body_base64 === undefined) {
+    const recovered = verifiedHydratedBytes(e, readObject);
+    if (recovered)
+      return {
+        ...decodeBody(recovered, false, e.entry_kind),
+        body_source:
+          e.hydration!.source === "blob" ? "hydrated_blob" : "hydrated_omitted",
+      };
+    if (
+      e.hydration &&
+      (e.hydration.status === "fetched" || e.hydration.format_version !== 1)
+    )
+      return opaque("invalid_stored_hydration");
+  }
+  if (e.body_omitted && e.body_base64 === undefined)
+    return decodeBody(undefined, true, e.entry_kind);
   if (e.body_base64 === undefined)
     return decodeBody(undefined, false, e.entry_kind);
   if (typeof e.body_base64 !== "string") return opaque("invalid_stored_base64");
@@ -176,5 +312,8 @@ export function decodeStored(e: {
   const bytes = Buffer.from(e.body_base64, "base64");
   if (bytes.toString("base64") !== e.body_base64)
     return opaque("invalid_stored_base64");
-  return decodeBody(bytes, false, e.entry_kind);
+  return {
+    ...decodeBody(bytes, false, e.entry_kind),
+    body_source: "observed_inline",
+  };
 }

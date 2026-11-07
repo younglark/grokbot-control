@@ -44,7 +44,7 @@ node dist/cli/main.js --json auth logout             # 只删本工具自己的�
 ```
 
 鉴权限制（详见 docs/protocol-map.md「Auth」）：
-- 协议来自 Grok Bot Linux App **静态逆向**，非官方公开 API。`vendor/proto-gen` 现为 **0.79.3**（本仓库从App恢复生成，离线校验）。2026-11-07 的人工 live 验证（浏览器登录 + 只读 `bot list` / `sidebar list` / `bot status`）使用的是**旧 0.78.4 vendor**；0.79.3 vendor 尚未 live 调用。刷新与所有写操作**未** live 验证。
+- 协议来自 Grok Bot Linux App **静态逆向**，非官方公开 API。`vendor/proto-gen` 现为 **0.79.3**（本仓库从App恢复生成，离线校验）。较早人工登录验证使用旧0.78.4 vendor；0.79.3 的选定正常RPC已进行隔离临时bot验收，范围/skip见 implementation-status。不能由此推定所有RPC或OAuth刷新已验证。
 - 仅支持 Cursor token；xAI identity 登录结果返回 `unsupported`。
 - 刷新需显式配置公开 OAuth client_id：`GBT_OAUTH_CLIENT_ID`（本工具不内置）。未配置时 token 过期后需重新登录。
 - 凭据独立于 App（不读取、不复用 App 的 sand-secrets.json）。logout 只删本地文件，不吊销服务端会话。
@@ -57,7 +57,11 @@ CLI：`gbc sync pull --agent-id BOT [--session-id SESSION] --dir /absolute/priva
 pull/render/attachments 明确授权本地写，不需要远端 `--allow-writes`；`--dry-run` 纯本地计划、无 RPC/文件。
 身份是操作者显式声明而非服务端验证，必须核对稳定 ID，不能用邮箱/token 哈希。
 **render 已可直接 rg 已确认 JSON UI entry 的正文**：message、send-message(text/attachment)、notice、
-tool-call 名称/状态/summary、附件文件引用；其余类型/省略/未知 body 仍 opaque，不猜解密。
+tool-call 名称/状态/summary、附件文件引用；其余类型/未知 body 仍 opaque，不猜解密。
+正文补读显式开启 `sync pull ... --hydrate missing`（默认 `off`，不默默增加网络请求）。inline 优先；
+omitted 精确重读同版本；blob 仅通过 store presign 读取正文，不是用户附件。原始 wire/protojson 不覆盖，
+补读 bytes/本地 SHA-256/来源/版本上下文另存，JSONL 与离线 render 均可 grep。请求失败/无法解码返回 `partial`（exit 9），已归档行保留。
+默认额外 RPC 32、正文传输/响应总 8MiB、单正文 4MiB，与 pull 总字节/截止时间共享；参数见格式文档。
 静态解码证据和 synthetic genuine-schema fixture 见 [transcript-body-0.79.3.md](docs/protocol/transcript-body-0.79.3.md)。
 例如 `rg '关键词' /absolute/private/root/derived -g '*.md'`；旧 opaque 归档可离线重新 render。
 head刷新与持久化backfill交替，不删缺失行，不承诺完整性；附件单独按需下载；无Watch/`--all`。

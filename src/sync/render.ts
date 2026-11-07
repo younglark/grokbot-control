@@ -1,4 +1,4 @@
-import { decodeStored, type DecodedBody } from "./decode.js";
+import { decodeStored, type DecodedBody, type ObjectReader } from "./decode.js";
 import type { Entry } from "./core.js";
 
 /** Indented Markdown code, not HTML/links/instructions. Escape terminal control/bidi codes. */
@@ -46,9 +46,9 @@ function display(d: DecodedBody): string {
       "\n";
   return out;
 }
-export function renderEntry(e: Entry): string {
+export function renderEntry(e: Entry, readObject?: ObjectReader): string {
   // Do not trust cached decoded fields or body.seq/session fields for source scope/order.
-  const b = decodeStored(e);
+  const b = decodeStored(e, readObject);
   let out =
     `## seq ${e.seq}\n\n` +
     dataBlock(
@@ -61,6 +61,16 @@ export function renderEntry(e: Entry): string {
           decode_reason: b.decode_reason,
           encryption_status: b.encryption_status,
           blob_hash: e.blob_hash,
+          body_source: b.body_source,
+          hydration: e.hydration
+            ? {
+                status: e.hydration.status,
+                source: e.hydration.source,
+                reason: e.hydration.reason,
+                content_sha256: e.hydration.content_sha256,
+                context: e.hydration.context,
+              }
+            : undefined,
         },
         null,
         2,

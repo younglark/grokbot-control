@@ -255,7 +255,7 @@ export async function downloadToStage(
   url: string,
   opts: {
     maxBytes: number;
-    expectedSize: number;
+    expectedSize?: number;
     budget: TransferBudget;
     fetchImpl: FetchFn;
     etag?: string;
@@ -266,8 +266,9 @@ export async function downloadToStage(
   if (remain <= 0)
     throw new GbcError("deadline_exceeded", "attachment command deadline");
   if (
-    opts.expectedSize > opts.maxBytes ||
-    opts.expectedSize > opts.budget.maxBytes - opts.budget.bytes
+    opts.expectedSize !== undefined &&
+    (opts.expectedSize > opts.maxBytes ||
+      opts.expectedSize > opts.budget.maxBytes - opts.budget.bytes)
   )
     throw new GbcError(
       "resource_exhausted",
@@ -310,7 +311,11 @@ export async function downloadToStage(
     const len = res.headers.get("content-length");
     if (
       len !== null &&
-      (!/^\d+$/.test(len) || Number(len) !== opts.expectedSize)
+      (!/^\d+$/.test(len) ||
+        !Number.isSafeInteger(Number(len)) ||
+        Number(len) > opts.maxBytes ||
+        Number(len) > opts.budget.maxBytes - opts.budget.bytes ||
+        (opts.expectedSize !== undefined && Number(len) !== opts.expectedSize))
     )
       throw new GbcError(
         "failed_precondition",
@@ -330,7 +335,7 @@ export async function downloadToStage(
       opts.budget.bytes += value.byteLength;
       if (
         size > opts.maxBytes ||
-        size > opts.expectedSize ||
+        (opts.expectedSize !== undefined && size > opts.expectedSize) ||
         opts.budget.bytes > opts.budget.maxBytes
       )
         throw new GbcError(
@@ -340,7 +345,10 @@ export async function downloadToStage(
       h.update(value);
       opts.sink.write(value);
     }
-    if (size !== opts.expectedSize)
+    if (
+      (opts.expectedSize !== undefined && size !== opts.expectedSize) ||
+      (len !== null && size !== Number(len))
+    )
       throw new GbcError("failed_precondition", "attachment size mismatch");
     return { status: 200, digest: h.digest("hex"), size };
   } catch (e) {
