@@ -1,0 +1,31 @@
+{
+  "corruptPollFrames": 0,
+  "corruptPollAcks": [],
+  "repairedFrames": [
+    {
+      "requestId": "good",
+      "type": 2,
+      "message": {
+        "id": 1,
+        "readResult": {
+          "success": {
+            "path": "/state/bad-frame-oracle/root/probe.txt",
+            "content": "oracle-fixture-r2\n",
+            "totalLines": 2,
+            "fileSize": "18"
+          }
+        },
+        "localExecutionTimeMs": 6
+      }
+    },
+    {
+      "requestId": "good",
+      "type": 3,
+      "message": {
+        "streamClose": {
+          "id": 1
+        }
+      }
+    }
+  ]
+}

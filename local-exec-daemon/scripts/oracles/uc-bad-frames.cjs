@@ -219,6 +219,7 @@ function startUcServer(){
       queue.push({id, frameBuf});
       try{watchRes?.write(pb.envelope(buildNotify()))}catch{}
     },
+    removeQueue(id){queue=queue.filter(x=>x.id!==id)},
     notify(){try{watchRes?.write(pb.envelope(buildNotify()))}catch{}},
     setUnauth(v){forceUnauth=!!v},
     closeWatch(){try{watchRes?.end()}catch{};watchRes=null},
@@ -237,6 +238,19 @@ function startUcServer(){
  async function until(fn){const end=Date.now()+8000;while(Date.now()<end){if(fn())return;await delay(20)}throw Error('deadline')}
  try{
  child.send({type:'sand-local-exec-file-key',key,computerId:SYN_MACHINE});await until(()=>uc.log.some(x=>x.kind==='watch'));
+ if(process.argv.includes('--truncated-poll')) {
+   uc.enqueueRaw('truncated',Buffer.concat([pb.encStr(1,'truncated'),Buffer.from('12ff','hex')]));
+   uc.enqueueExec('good',{id:1,readArgs:{path:'probe.txt'}});
+   await until(()=>uc.log.some(x=>x.kind==='poll'&&x.qlen===2));
+   await delay(800);
+   const before=uc.log.filter(x=>x.kind==='submit').flatMap(x=>x.rawFrames);
+   const acks=uc.log.filter(x=>x.kind==='poll').flatMap(x=>x.acks);
+   assert(before.length===0,'structurally corrupt Poll must not dispatch any item');
+   assert(acks.length===0,'corrupt Poll must not ack partial results');
+   uc.removeQueue('truncated');uc.notify();
+   await until(()=>uc.log.some(x=>x.kind==='submit'&&x.rawFrames.some(f=>f.requestId==='good'&&f.message?.readResult)));
+   console.log(JSON.stringify({corruptPollFrames:before.length,corruptPollAcks:acks,repairedFrames:uc.log.filter(x=>x.kind==='submit').flatMap(x=>x.rawFrames)}));
+ } else {
  uc.enqueueRaw('outer-unknown',pb.encStr(1,'outer-unknown'));
  uc.enqueueRaw('bad-json',Buffer.concat([pb.encStr(1,'bad-json'),pb.encMsg(2,pb.encStr(1,'{not-json'))]));
  uc.enqueueExec('inner-unsupported',{id:1,writeShellStdinArgs:{shellId:'1',chars:'x'}});
@@ -245,5 +259,6 @@ function startUcServer(){
  for(const id of ['outer-unknown','bad-json']){const found=frames.filter(f=>f.requestId===id);assert(found.length===1&&found[0].message?.throw,'single outer throw expected');assert(!found.some(f=>f.message?.streamClose),'outer decode error must not add close');}
  const inner=frames.filter(f=>f.requestId==='inner-unsupported');assert(inner.some(f=>f.message?.throw)&&inner.some(f=>f.message?.streamClose),'valid unsupported inner must throw+close');
  console.log(JSON.stringify({frames}));
+ }
  }finally{child.kill('SIGTERM');await Promise.race([ended,delay(2500)]);if(child.exitCode===null)child.kill('SIGKILL');uc.closeWatch();await uc.close()}
 })().catch(e=>{console.error(e);process.exitCode=1});

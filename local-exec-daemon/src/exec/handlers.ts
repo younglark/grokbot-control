@@ -1,3 +1,5 @@
+import { proto3 } from "@bufbuild/protobuf";
+import { ShellAbortReason, SandboxPolicy, SandboxPolicy_Type } from "../generated/agent.v1_pb";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
@@ -11,7 +13,7 @@ export type ExecFrameOut =
 
 export type Emit = (frame: ExecFrameOut) => void | Promise<void>;
 
-type ShellJob = { abort: (reason: string) => void; done: Promise<void> };
+type ShellJob = { abort: (reason: ShellAbortReason) => void; done: Promise<void> };
 const shells = new Map<string, ShellJob>();
 export async function requestError(requestId: string, msgId: number, error: unknown, emit: Emit): Promise<void> {
   await emit({ kind: "control", requestId, message: { throw: { id: msgId, error: String(error instanceof Error ? error.message : error) } }, cwdState: "unset" });
@@ -19,7 +21,7 @@ export async function requestError(requestId: string, msgId: number, error: unkn
 }
 export async function shutdownShells(): Promise<void> {
   const jobs = [...shells.values()];
-  jobs.forEach(j => j.abort("SHELL_ABORT_REASON_USER_ABORT"));
+  jobs.forEach(j => j.abort(ShellAbortReason.USER_ABORT));
   await Promise.all(jobs.map(j => j.done));
 }
 
@@ -143,7 +145,7 @@ export async function handleShellStream(args: {
     if (!(await fs.promises.stat(cwd)).isDirectory()) throw new Error("cwd is not a directory");
   } catch (e) { await requestError(requestId, msgId, e, emit); return; }
   const startedAt = Date.now();
-  let abortJob: (reason: string) => void = () => undefined;
+  let abortJob: (reason: ShellAbortReason) => void = () => undefined;
   const done = new Promise<void>((resolve) => {
     const child = spawn("/bin/bash", ["-lc", command], {
       cwd, detached: true,
@@ -151,7 +153,7 @@ export async function handleShellStream(args: {
       stdio: ["ignore", "pipe", "pipe"],
     });
     let finished = false;
-    let reason: string | undefined;
+    let reason: ShellAbortReason | undefined;
     let escalation: NodeJS.Timeout | undefined;
     let deadline: NodeJS.Timeout | undefined;
     let timeout: NodeJS.Timeout | undefined;
@@ -173,7 +175,7 @@ export async function handleShellStream(args: {
         const elapsed = Date.now() - startedAt;
         await emit({ kind: "client", requestId, message: { id: msgId,
           shellStream: { exit: { code: reason ? 4294967295 : (code ?? 4294967295), cwd,
-            ...(reason ? { aborted: true, abortReason: reason } : {}), localExecutionTimeMs: elapsed } },
+            ...(reason ? { aborted: true, abortReason: proto3.getEnumType(ShellAbortReason).findNumber(reason)!.name } : {}), localExecutionTimeMs: elapsed } },
           localExecutionTimeMs: elapsed } });
         await emit({ kind: "control", requestId, message: { streamClose: { id: msgId } } });
       }
@@ -197,7 +199,7 @@ export async function handleShellStream(args: {
     });
     child.once("spawn", () => {
       emit({ kind: "client", requestId, message: { id: msgId,
-        shellStream: { start: { sandboxPolicy: { type: "TYPE_INSECURE_NONE" } } }, localExecutionTimeMs: 1 } });
+        shellStream: { start: { sandboxPolicy: new SandboxPolicy({type: SandboxPolicy_Type.INSECURE_NONE}).toJson() } }, localExecutionTimeMs: 1 } });
     });
     for (const [stream, name] of [[child.stdout, "stdout"], [child.stderr, "stderr"]] as const) {
       stream?.on("data", (b: Buffer) => {
@@ -205,11 +207,11 @@ export async function handleShellStream(args: {
         stream?.pause();
         Promise.resolve(emit({ kind: "client", requestId, message: { id: msgId,
           shellStream: { [name]: { data: b.toString("utf8") } }, localExecutionTimeMs: Date.now() - startedAt } }))
-          .catch(() => abortJob("SHELL_ABORT_REASON_USER_ABORT"))
+          .catch(() => abortJob(ShellAbortReason.USER_ABORT))
           .finally(() => { if (!finished) stream?.resume(); });
       });
     }
-    if (args.timeout && args.timeout > 0) timeout = setTimeout(() => abortJob("SHELL_ABORT_REASON_TIMEOUT"), args.timeout);
+    if (args.timeout && args.timeout > 0) timeout = setTimeout(() => abortJob(ShellAbortReason.TIMEOUT), args.timeout);
   });
   shells.set(requestId, { abort: why => abortJob(why), done });
   await done;
@@ -217,7 +219,7 @@ export async function handleShellStream(args: {
 export function cancelRequest(requestId: string): boolean {
   const job = shells.get(requestId);
   if (!job) return false;
-  job.abort("SHELL_ABORT_REASON_USER_ABORT"); return true;
+  job.abort(ShellAbortReason.USER_ABORT); return true;
 }
 
 export function handleUnsupported(requestId: string, msgId: number, typeName: string, emit: Emit): void {

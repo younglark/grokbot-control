@@ -6,7 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
 const {dispatchExec,handleShellStream,cancelRequest,shutdownShells} = require('../dist/exec/handlers');
-const {decodeFields,firstVarint,unwrapConnectBody} = require('../dist/uc/pb');
+const {GrokBotUserComputerQueuedRequest} = require('../dist/generated/aiserver.v1_pb');
 const {parseQueued,UserComputerProvider} = require('../dist/uc/provider');
 const {ReplyQueue,HttpStatusError} = require('../dist/transport/replies');
 const fixtures = require('./fixtures/uc-wire.json');
@@ -15,9 +15,9 @@ async function until(f,ms=4000){const end=Date.now()+ms;while(Date.now()<end){if
 function workspace(){return fs.mkdtempSync(path.join(os.tmpdir(),'local-exec-daemon-review-'))}
 const frames=[];
 test('independent proto fixtures cover every outer oneof incl field6 cancel and int64 timestamp',()=>{
- for(const f of fixtures.frames){const fields=decodeFields(Buffer.from(f.queuedHex,'hex'));assert.equal(firstVarint(fields,3),1794055511678);const q=parseQueued(fields);assert.equal(q.kind,f.kind);assert.equal(q.requestId,'fixture-request')}
- const raw=Buffer.from('08011203616263','hex');assert.deepEqual(unwrapConnectBody(raw),raw);
- assert.throws(()=>decodeFields(Buffer.from('08ff','hex')),/truncated/);
+ for(const f of fixtures.frames){const item=GrokBotUserComputerQueuedRequest.fromBinary(Buffer.from(f.queuedHex,'hex'));assert.equal(item.enqueuedAtMs,1794055511678n);const q=parseQueued(item);assert.equal(q.kind,f.kind);assert.equal(q.requestId,'fixture-request')}
+ assert.throws(()=>GrokBotUserComputerQueuedRequest.fromBinary(Buffer.from('08ff','hex')));
+
 });
 test('shell TERM/KILL kills group containing sleep grandchild with bounded close',async()=>{
  const root=workspace(); const got=[];const id='group';

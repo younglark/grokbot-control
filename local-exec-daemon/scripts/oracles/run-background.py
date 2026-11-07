@@ -4,7 +4,7 @@ PID/network/mount isolation; exact runner process-group kill at 25s hard deadlin
 import subprocess, os, signal, json, pathlib, hashlib, sys
 root = pathlib.Path(__file__).resolve().parent
 probe = sys.argv[1] if len(sys.argv) > 1 else 'background.cjs'
-if probe not in ('background.cjs', 'background-long.cjs', 'uc-bad-frames.cjs'):
+if probe not in ('background.cjs', 'background-long.cjs', 'uc-bad-frames.cjs', 'uc-truncated-poll.cjs'):
     raise SystemExit('unsupported probe')
 lab = pathlib.Path('/workspace/local-exec-offline-lab-0793')
 cmd = ['/usr/bin/bwrap', '--unshare-all', '--die-with-parent', '--new-session',
