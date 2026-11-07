@@ -1,5 +1,7 @@
 # local-exec 场景验收矩阵（0.79.3 Linux，2026-11-08 Asia/Singapore）
 
+> 状态：t101u 第一批（e984310）**独立验收未通过**（P1×2、P2×5、P3 harness）；d75f9f0/2ee10eb 已修正，**待再审**。不宣称 drop-in。
+
 证据等级：**实测** = 未修改的官方 `dist/local-exec-daemon/main.cjs`（asar 内 sha256 `5c1424ed…be`，与分析快照一致）在 bwrap 隔离 + 假 box SSE peer 下运行的帧；**静态** = 源码行号；**推断**；**未验证**。只覆盖已检查的 0.79.3 Linux 快照，不外推 macOS/Windows/其他版本。
 
 ## 1. App → daemon 启动（静态，`dist/electron-main/main-core.cjs`，从 app.asar 按 header 偏移读出）
@@ -17,7 +19,21 @@
 - **未验证**：云端对用户电脑实际会下发哪些 ExecServerMessage（无法离线证明）。不以 assistant 工具说明推断云端路由。
 - 搜索：专用 Grep 本地不可达；Ls 可达但必报错；经 shell 调 `rg`/`grep` 依赖用户 PATH/登录快照（官方不补 rg）。
 
-## 3. 差分结果（`scripts/oracles/r3`，18 个用例；统计以 diff.py 帧级比较为准）
+## 3. 差分结果（`scripts/oracles/r3`；统计以 diff.py 帧级比较为准）
+
+2026-11-08 加固：diff.py 保留 id/requestId/kind/cwdState/throw，仅去 localExecutionTimeMs 与合并同流 chunk；校验 case 集合一致、探针步骤全 pass，否则非 0；允许差异必须列在 `deviations.json`。`OUT=/tmp/r5 ./run_all.sh`（官方+我们各 6 个探针）实测 RC=0：
+
+| 探针 | cases | same | allowed（deviations.json）|
+|---|---|---|---|
+| main | 18 | 17 | 1（sh-ident）|
+| cancel | 2 | 2 | 0 |
+| cwd | 3 | 1 | 2（cwd-save/cwd-check，安全）|
+| edges | 13 | 9 | 4（multicwd/cwd-next 安全；path-save/path-read 原子性）|
+| options | 2 | 2 | 0 |
+| rootlink | 1 | 1 | 0 |
+| 合计 | 39 | 32 | 7 |
+
+以下为旧（宽松比较）记录：
 命令：`OUT=/tmp/r3 python3 run_r3.py official-v2`；`... ours-v5 PROBE_MAIN=/repo/packages/local-exec-daemon/dist/index.js BIND:/workspace/grokbot-control:/repo`；`python3 diff.py official-v2.json ours-v5.json`。
 | 运行 | same / diff |
 |---|---|
@@ -35,7 +51,13 @@
 | shell：bash 选择 | 一致（静态 + 实测 SHELL 未设/设为 bash 两种）| `$SHELL` 含 bash，否则 PATH 查找；无则 `Can't find Bash` |
 | shell：非 login、extglob、stdin=/dev/null、无 TTY | 一致（实测）| ARG0=`--`、LOGIN=0、EXTGLOB=1、CATRC=0 |
 | shell：初始登录快照 | 一致（实测）| `.bash_profile`/`.bashrc` 的 export/函数/alias 生效、非 export 变量不生效 |
-| shell：跨调用状态 | 一致（实测用例）| export/函数/alias/shopt/`set -o` 持久；非 export 不持久；`exit` 跳过保存；unset 传播；cwd 不持久，exit.cwd=最终 pwd |
+| shell：跨调用状态 | 一致（实测用例）| export/函数/alias/shopt 持久；`set -o` 持久但**排除 errexit/nounset/pipefail/posix**（官方过滤，oracle options-read）；非 export 不持久；`exit` 跳过保存；unset 传播；cwd 不持久，exit.cwd=最终 pwd |
+| shell：请求级变量排除 | 一致（实测 vars-read）| CURSOR_REQUEST_ID/CONVERSATION_ID/AGENT_STORE、SUDO_ASKPASS、CURSOR_ASKPASS、CURSOR_SANDBOX*、*_proxy、POSIXLY_CORRECT、ELECTRON_RUN_AS_NODE 不跨调用（按变量名；官方按整行 grep）|
+| shell：多行 alias / 引号值 / 特殊函数名 | 一致（实测 alias-read、quoted-read、func-read）| BASH_ALIASES + %q 序列化 |
+| shell：首次快照期间取消/共享等待/shutdown | 一致（实测 cancel-init/check）| 入口登记；未 spawn 即 start+USER_ABORT；timeout 在 spawn 时起算（官方同）|
+| shell：root 为 symlink | 一致（实测 rootlink）| 越界 symlink 仍拒绝 |
+| shell：cwd 含换行 | **有意安全偏离** | 官方下一次调用执行 cwd 第二行（cwd-check=CWD_EXECUTED）且 exit.cwd 截断；我们 cwd 为长度前缀数据字段，不进脚本 |
+| shell：快照原子性 | **有意偏离** | 完整 START/END+大小上限才提交；仅用 builtin。PATH=/nonexistent 时官方因缺 grep 保旧状态（LAST=unset），我们完整保存（LAST=x），函数/alias 两边都保留 |
 | shell：坏 cwd | 一致（实测）| stderr 提示后在 root 执行 |
 | shell：timeout / cancel | 一致（实测 timeout；cancel 有既有 lab oracle）| |
 | shell：env 注入 | 部分 | 见 §3 剩余差异 |
@@ -48,5 +70,5 @@
 | headless/Docker | 未具备 | 需镜像自带 bash、可选 rg；无官方先例 |
 
 ## 5. 测试性质
-- 有官方 oracle：`test/shell-oracle.test.cjs`、`exec-codec.test.cjs` 的 ls 用例（对比 `test/fixtures/official-0793-oracle-r3.json`，来自官方实测帧，已去 localExecutionTimeMs、路径归一）；`scripts/oracles/r3` 全进程差分。
+- 有官方 oracle：`test/shell-review-fixes.test.cjs`（对比 `official-0793-oracle-r3-edges.json`）、`test/shell-oracle.test.cjs`、`exec-codec.test.cjs` 的 ls 用例（对比 `test/fixtures/official-0793-oracle-r3.json`，来自官方实测帧，已去 localExecutionTimeMs、路径归一）；`scripts/oracles/r3` 全进程差分。
 - 自证：codec roundtrip、8/64、promote-before-admit 等。

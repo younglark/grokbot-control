@@ -133,3 +133,21 @@ Also: superseded process regression asserts stdout `received superseded, shuttin
 
 Regressions: stall hard-cap; promote-then-admit when `replies.available` + `active<8` + full backlog.
 
+
+
+## t101u independent review → fixes (2026-11-08, Asia/Singapore)
+
+Review blocked e984310 (acceptance **failed**). Fixed in d75f9f0 (code+tests) and 2ee10eb (harness); **awaiting re-review**.
+
+| Item | Official oracle | Fix | Status |
+|---|---|---|---|
+| P1-1 cancel/timeout during first snapshot | start + USER_ABORT, marker absent | lifecycle registered on entry (cancel/shutdown cover snapshot wait, spawn, run, close); no spawn after cancel; timeout armed at spawn (official reports USER_ABORT with timeout=100ms) | matches |
+| P1-2 newline cwd injection | official **executes** injected line | cwd is a length-prefixed data field parsed only by Node | intentional security deviation |
+| P2-3 request/helper vars | unset next call | name-based exclusion list from dump_bash_state | matches (vars-read) |
+| P2-4 partial dump | official keeps old state (grep missing) | START/END + size cap, atomic commit; builtin-only dump | functions/aliases preserved; LAST=x vs official unset = documented deviation |
+| P2-5 multi-line alias | exact round-trip | BASH_ALIASES[%q]=%q | matches |
+| P2-6 errexit/nounset/pipefail | not persisted | filtered like official | matches |
+| P2-7 symlink root | runs in canonical root | logical-or-canonical root check, realpath escape guard kept | matches |
+| P3 harness | — | strict diff (ids/envelopes, case set, probe failure → non-zero), deviations.json | run_all.sh RC=0: 39 cases, 32 same, 7 allowed |
+
+Tests: `npm test` in packages/local-exec-daemon → 77 pass / 0 fail / 0 skip.
