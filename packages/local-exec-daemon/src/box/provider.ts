@@ -13,7 +13,7 @@ import {
   handleDownload,
   type ExecFrameOut,
 } from "../exec/handlers";
-import { decodeExecServerMessageValue, execServerMessageToRecord, isExecServerDecodeError } from "../exec/exec-codec";
+import { decodeExecServerMessageValue, execServerMessageToRecord, isExecServerDecodeError, prepareBoxExecFrame } from "../exec/exec-codec";
 
 export type BoxProviderOptions = {
   connection: Connection;
@@ -176,7 +176,7 @@ export class BoxProvider {
     return this.replies.enqueue(Buffer.from(JSON.stringify({ frames, ...(this.providerId ? { providerId: this.providerId } : {}) })));
   }
 
-  private emitExec = (frame: ExecFrameOut): Promise<void> => this.post([frame as unknown as JsonFrame]);
+  private emitExec = (frame: ExecFrameOut): Promise<void> => this.post([prepareBoxExecFrame(frame)]);
 
   private bump(delta: number): void {
     this.inflight += delta;

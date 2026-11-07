@@ -4,8 +4,12 @@ import {
   ExecClientMessage,
   ExecServerMessage,
 } from "../generated/agent.v1_pb";
+import type { ExecFrameOut } from "./handlers";
 
-/** Official handleExecRequest: kd.fromJsonString(..., { ignoreUnknownFields: true }). */
+/**
+ * Official handleExecRequest (daemon.formatted.cjs L136313):
+ *   kd.fromJsonString(e.serverMessageJson, { ignoreUnknownFields: !0 })
+ */
 export const EXEC_JSON_READ = { ignoreUnknownFields: true } as const;
 
 /**
@@ -28,21 +32,61 @@ export function execServerMessageToRecord(msg: ExecServerMessage): Record<string
 }
 
 /**
- * Encode outbound ExecClientMessage for messageJson.
- * Interim adapters that are not yet schema-shaped (notably ls listing) fall back
- * to the original object so behaviour is preserved; control frames must not.
+ * Interim ls adapter still emits `{ success: { path, entries } }` instead of
+ * frozen `LsSuccess.directory_tree_root`. Only that shape may bypass encode.
  */
-export function encodeExecClientMessageJson(message: Record<string, unknown>): string {
+export function isInterimLsListingMessage(message: Record<string, unknown>): boolean {
+  const lsResult = message.lsResult;
+  if (lsResult === null || typeof lsResult !== "object" || Array.isArray(lsResult)) return false;
+  const success = (lsResult as Record<string, unknown>).success;
+  if (success === null || typeof success !== "object" || Array.isArray(success)) return false;
+  const s = success as Record<string, unknown>;
+  const hasEntries = Array.isArray(s.entries);
+  const hasTree = s.directoryTreeRoot != null || s.directory_tree_root != null;
+  return hasEntries && !hasTree;
+}
+
+/** Normalize outbound ExecClientMessage object (strict; ls interim may pass through). */
+export function encodeExecClientMessage(message: Record<string, unknown>): Record<string, unknown> {
   try {
-    return JSON.stringify(ExecClientMessage.fromJson(message as JsonValue).toJson());
-  } catch {
-    return JSON.stringify(message);
+    return ExecClientMessage.fromJson(message as JsonValue).toJson() as Record<string, unknown>;
+  } catch (error) {
+    if (isInterimLsListingMessage(message)) return message;
+    throw error;
   }
 }
 
-/** Encode outbound ExecClientControlMessage (throw / streamClose / heartbeat). */
+export function encodeExecClientMessageJson(message: Record<string, unknown>): string {
+  return JSON.stringify(encodeExecClientMessage(message));
+}
+
+/** Normalize outbound ExecClientControlMessage (throw / streamClose / heartbeat). */
+export function encodeExecClientControlMessage(message: Record<string, unknown>): Record<string, unknown> {
+  return ExecClientControlMessage.fromJson(message as JsonValue).toJson() as Record<string, unknown>;
+}
+
 export function encodeExecClientControlMessageJson(message: Record<string, unknown>): string {
-  return JSON.stringify(ExecClientControlMessage.fromJson(message as JsonValue).toJson());
+  return JSON.stringify(encodeExecClientControlMessage(message));
+}
+
+/**
+ * Box outer envelope stays `{ kind, requestId, message, ... }`; only the inner
+ * `message` object is schema-normalized (same codec as UC messageJson).
+ */
+export function prepareBoxExecFrame(frame: ExecFrameOut): Record<string, unknown> {
+  if (frame.kind === "client") {
+    return { kind: "client", requestId: frame.requestId, message: encodeExecClientMessage(frame.message) };
+  }
+  if (frame.kind === "control") {
+    const out: Record<string, unknown> = {
+      kind: "control",
+      requestId: frame.requestId,
+      message: encodeExecClientControlMessage(frame.message),
+    };
+    if (frame.cwdState !== undefined) out.cwdState = frame.cwdState;
+    return out;
+  }
+  return { kind: frame.kind, requestId: frame.requestId, error: frame.error };
 }
 
 export function isExecServerDecodeError(error: unknown): boolean {

@@ -1,8 +1,9 @@
 'use strict';
 /**
  * Independent regressions for Exec* JSON codec.
- * Official inbound: kd.fromJsonString(json, { ignoreUnknownFields: true }) (daemon ~L136327).
- * Outbound client/control: *.toJson() into messageJson string.
+ * Official inbound (daemon.formatted.cjs L136313):
+ *   kd.fromJsonString(e.serverMessageJson, { ignoreUnknownFields: !0 })
+ * Outbound client/control: *.toJson(); box reuses prepareBoxExecFrame.
  */
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
@@ -14,12 +15,14 @@ const {
   decodeExecServerMessageJson,
   encodeExecClientControlMessageJson,
   encodeExecClientMessageJson,
+  encodeExecClientMessage,
   execServerMessageToRecord,
+  isInterimLsListingMessage,
+  prepareBoxExecFrame,
 } = require('../dist/exec/exec-codec');
 const wire = require('./helpers/wire-oracle.cjs');
 
 function queuedExec(requestId, serverMessageJson) {
-  // Matches uc-fake-peer buildExecFrame / buildQueued.
   const frame = Buffer.concat([
     wire.encStr(1, requestId),
     wire.encMsg(2, wire.encStr(1, serverMessageJson)),
@@ -80,8 +83,64 @@ test('outbound control throw/streamClose round-trip via generated ExecClientCont
   );
 });
 
-test('outbound client {id:7} golden-stable; schema-invalid ls falls back without throwing', () => {
+test('outbound client {id:7} golden-stable; ls interim may fall back; non-ls typo must throw', () => {
   assert.equal(encodeExecClientMessageJson({ id: 7 }), JSON.stringify({ id: 7 }));
   const fakeLs = { id: 1, lsResult: { success: { path: '/tmp', entries: [{ name: 'a', type: 'file' }] } } };
+  assert.equal(isInterimLsListingMessage(fakeLs), true);
   assert.equal(encodeExecClientMessageJson(fakeLs), JSON.stringify(fakeLs));
+
+  const typoExtra = {
+    id: 1,
+    readResult: { success: { path: '/a', content: 'hi', totalLines: 1, fileSize: '2' } },
+    typoExtra: true,
+  };
+  assert.equal(isInterimLsListingMessage(typoExtra), false);
+  assert.throws(
+    () => encodeExecClientMessage(typoExtra),
+    (e) => /unknown|cannot decode/i.test(e.message),
+  );
+  assert.throws(
+    () => encodeExecClientMessageJson(typoExtra),
+    (e) => /unknown|cannot decode/i.test(e.message),
+  );
+});
+
+test('prepareBoxExecFrame runs client/control through the same Exec* codec', () => {
+  const client = prepareBoxExecFrame({
+    kind: 'client',
+    requestId: 'box-read',
+    message: { id: 1, readResult: { success: { path: '/a', content: 'hi', totalLines: 1, fileSize: '2' } } },
+  });
+  assert.equal(client.kind, 'client');
+  assert.equal(client.requestId, 'box-read');
+  assert.equal(client.message.id, 1);
+  assert.equal(client.message.readResult.success.path, '/a');
+  assert.equal(client.message.typoExtra, undefined);
+
+  const control = prepareBoxExecFrame({
+    kind: 'control',
+    requestId: 'box-close',
+    message: { streamClose: { id: 2 } },
+    cwdState: 'unset',
+  });
+  assert.equal(control.kind, 'control');
+  assert.deepEqual(control.message, { streamClose: { id: 2 } });
+  assert.equal(control.cwdState, 'unset');
+
+  assert.throws(
+    () => prepareBoxExecFrame({
+      kind: 'client',
+      requestId: 'bad',
+      message: {
+        id: 1,
+        readResult: { success: { path: '/a', content: 'x', totalLines: 1, fileSize: '1' } },
+        typoExtra: 1,
+      },
+    }),
+    (e) => /unknown|cannot decode/i.test(e.message),
+  );
+
+  // Box envelope shape preserved for non-exec kinds
+  const fileErr = prepareBoxExecFrame({ kind: 'file-error', requestId: 'dl', error: 'nope' });
+  assert.deepEqual(fileErr, { kind: 'file-error', requestId: 'dl', error: 'nope' });
 });
