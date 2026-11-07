@@ -167,3 +167,15 @@ Reproduced first from evidence (/tmp/independent-r3-lifecycle, -locale, -cwdpers
 
 Counts: `npm test` 95 pass / 0 fail; run_all.sh 46 cases, 36 same, 10 allowed, 0 diff, lifecycle PASS, RC=0.
 Unresolved / not claimed: whether the official daemon strips inherited CURSOR_* env at spawn (unverified); behavior of official when session cwd is deleted or outside root (we fall back to root silently, unverified); not drop-in.
+
+### Round 3 review (HEAD eb79982) → fixes (2026-11-08, Asia/Singapore) — **修复待审**
+
+Reviewer confirmed prior items closed (95 pass / 46 cases). Two remaining items, reproduced first:
+
+| Item | Reproduced (before) | Fix | After |
+|---|---|---|---|
+| P2 init group residue after leader exit | /tmp/independent-r3-initgroups/probe.cjs: init leader gone; profile background (stdio redirected) still `S`, PGID/SID = init pid; marker written after shutdown | `reapInitGroup(pgid)`: at init completion (close) and at shutdown, SIGKILL the init group if members remain. Only signals when /proc shows members with pgrp==sid==pgid and no process with pid==pgid (a live pid==pgid means the id was reused by someone else; the kernel does not reuse an id while its group has members). Per-request cancel never calls it | probe: background gone before and after shutdown, marker not written; regression fails on pre-fix code, passes now; reuse-guard test leaves a foreign group leader alive |
+| P3 runner ignores step status | /tmp/independent-r3-runner-negative: probe exit 0 with `status: fail` → FAILED_STEP_RUNNER_EXIT=0 | run_r3.py checks every result; any non-`pass` → non-zero | same probe → exit 2; regression with pass control (0) and failed step (non-zero) |
+
+Counts: `npm test` 98 pass / 0 fail; run_all.sh 46 cases, 36 same, 10 allowed, 0 diff, lifecycle PASS, RC=0. Not drop-in.
+Note: reaping at init completion means background jobs started by the user's login profile do not survive the snapshot; official behavior for that case was not measured.

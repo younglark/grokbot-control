@@ -1,6 +1,6 @@
 # local-exec 场景验收矩阵（0.79.3 Linux，2026-11-08 Asia/Singapore）
 
-> 状态：t101u 第一批（e984310）独立验收未通过；d75f9f0/2ee10eb 修正后第二轮再审又提出 P2×5、P3×1，已在 10d37df（代码+回归）/5993cfa（门禁）修正，**修正待独立再审**。不宣称 drop-in。
+> 状态：t101u 第一批（e984310）独立验收未通过；d75f9f0/2ee10eb 修正后第二轮再审又提出 P2×5、P3×1，已在 10d37df（代码+回归）/5993cfa（门禁）修正；第三轮再审（eb79982）余 P2 init 进程组残留、P3 runner 未查 step 状态，已在新提交修复，**修复待审**。npm test 98 pass；差分 46/36/10 不变。不宣称 drop-in。
 
 证据等级：**实测** = 未修改的官方 `dist/local-exec-daemon/main.cjs`（asar 内 sha256 `5c1424ed…be`，与分析快照一致）在 bwrap 隔离 + 假 box SSE peer 下运行的帧；**静态** = 源码行号；**推断**；**未验证**。只覆盖已检查的 0.79.3 Linux 快照，不外推 macOS/Windows/其他版本。
 
