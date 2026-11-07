@@ -124,3 +124,20 @@ test('PGID ownership: retired after init close; reused number never reclaimed (s
   assert.deepEqual(b.afterOriginalClose, [[-70001, 'SIGKILL']], 'original residue reaped once at close');
   assert.deepEqual(b.laterShutdownSignals, [[-70001, 'SIGKILL']], 'no second signal at shutdown');
 });
+
+test('init timeout with leader exited: same-group residue holding stdout is cleaned before finish (real processes)', async () => {
+  const { initialSnapshot, terminateInitialSnapshot } = require('../dist/exec/shell-session.js');
+  const bgp = path.join(base, 'to-bg-pid'), mark = path.join(base, 'to-after');
+  // background keeps the init stdout pipe open (not redirected), so init never closes on its own
+  setProfile(`(echo $BASHPID > '${bgp}'; sleep 1.5; echo X > '${mark}') &\n`);
+  const snap = await initialSnapshot('/bin/bash', 600);
+  assert.equal(snap, '');
+  const bpid = Number(fs.readFileSync(bgp, 'utf8'));
+  await delay(100);
+  let alive; try { alive = !/\) Z /.test(fs.readFileSync(`/proc/${bpid}/stat`, 'utf8')); } catch { alive = false; }
+  assert.equal(alive, false, 'residue killed by the timeout path');
+  await delay(1700);
+  assert.equal(fs.existsSync(mark), false, 'marker never written');
+  await terminateInitialSnapshot();
+  resetShellState();
+});

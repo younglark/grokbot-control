@@ -126,10 +126,7 @@ export async function terminateInitialSnapshot(): Promise<void> {
   // Leader alive (not reaped, so its number still names our group): SIGKILL the whole group
   // (interactive bash ignores SIGTERM). Leader exited but init not closed yet: residue may hold
   // the stdout pipe; reap it once. Once retired, the number is never reclaimed.
-  if (!g.retired) {
-    if (g.child.exitCode === null && g.child.signalCode === null) signalInitGroup(g);
-    else reapInitGroup(g);
-  }
+  cleanupInitGroup(g);
   await initClosed;
 }
 
@@ -141,6 +138,18 @@ export async function terminateInitialSnapshot(): Promise<void> {
  */
 interface InitGroup { child: ReturnType<typeof spawn>; pgid: number; retired: boolean }
 let initGroup: InitGroup | null = null;
+
+/**
+ * The single cleanup entry used by every non-close path (init timeout, daemon shutdown):
+ * leader not yet reaped → its number still names our group, signal it; leader exited →
+ * reap residue via /proc (empty or reused → retire without signal). No-op once retired.
+ * The close path calls reapInitGroup once and then retires the handle unconditionally.
+ */
+function cleanupInitGroup(g: InitGroup): void {
+  if (g.retired) return;
+  if (g.child.exitCode === null && g.child.signalCode === null) signalInitGroup(g);
+  else reapInitGroup(g);
+}
 
 function signalInitGroup(g: InitGroup): void {
   if (g.retired) return;
@@ -187,7 +196,9 @@ export function initialSnapshot(bash: string, timeoutMs = 10000): Promise<string
     const group: InitGroup | null = child.pid ? { child, pgid: child.pid, retired: false } : null;
     initGroup = group;
     initClosed = new Promise<void>((r) => child.once("close", () => r()));
-    const t = setTimeout(() => { if (group && child.exitCode === null && child.signalCode === null) signalInitGroup(group); finish(""); }, timeoutMs);
+    // Timeout: clean our (not yet retired) group whether or not the leader already exited; same-group
+    // residue holding the stdout pipe would otherwise survive (review probe init-timeout).
+    const t = setTimeout(() => { if (group) cleanupInitGroup(group); finish(""); }, timeoutMs);
     child.stdout?.on("data", (b: Buffer) => { size += b.length; if (size <= MAX_STATE_BYTES * 2) chunks.push(b); });
     child.once("error", () => finish(""));
     child.once("close", () => {
