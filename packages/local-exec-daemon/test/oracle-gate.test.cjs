@@ -67,3 +67,14 @@ test('run_r3.py propagates probe failure (missing lab → non-zero)', () => {
   const r2 = spawnSync('python3', [path.join(dir, 'run_r3.py'), 'neg2'], { env: { ...process.env, OUT: tmp, PROBE: 'does-not-exist' }, encoding: 'utf8' });
   assert.notEqual(r2.status, 0);
 });
+
+test('run_r3.py: probe exits 0 but reports a failed step → non-zero (pass control → 0)', { skip: !fs.existsSync('/usr/bin/bwrap') }, () => {
+  const lab = path.join(tmp, 'lab'); fs.mkdirSync(path.join(lab, 'input'), { recursive: true });
+  const scripts = path.join(tmp, 'scripts'); fs.mkdirSync(path.join(scripts, 'probes'), { recursive: true });
+  fs.copyFileSync(path.join(dir, 'run_r3.py'), path.join(scripts, 'run_r3.py'));
+  const mk = (status) => fs.writeFileSync(path.join(scripts, 'probes', 'probe_neg.cjs'),
+    `console.log(JSON.stringify({results:[{name:'step',status:${JSON.stringify(status)}}],events:[{name:'step',frames:[]}]}));process.exit(0)`);
+  const runIt = () => spawnSync('python3', [path.join(scripts, 'run_r3.py'), 'neg-step'], { env: { ...process.env, LAB: lab, OUT: tmp, PROBE: 'neg' }, encoding: 'utf8' });
+  mk('pass'); const ok = runIt(); assert.equal(ok.status, 0, ok.stderr);
+  mk('fail'); const bad = runIt(); assert.notEqual(bad.status, 0); assert.match(bad.stderr, /PROBE STEP FAILED/);
+});

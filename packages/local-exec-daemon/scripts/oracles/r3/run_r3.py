@@ -18,7 +18,10 @@ except subprocess.TimeoutExpired: os.killpg(p.pid,signal.SIGKILL); out,err=p.com
 print('exit',p.returncode, err.decode()[:500])
 # Propagate failure: probe exit, empty output, or unparsable/empty results all fail the run.
 try:
-  d=json.loads(out); ok=bool(d.get('results')) and bool(d.get('events'))
+  d=json.loads(out); res=d.get('results'); ok=bool(res) and bool(d.get('events'))
+  # every step must report status 'pass'; a probe that exits 0 with a failed step still fails
+  bad=[r.get('name') if isinstance(r,dict) else r for r in (res or []) if not isinstance(r,dict) or r.get('status')!='pass']
+  if bad: print('PROBE STEP FAILED', label, bad, file=sys.stderr); ok=False
 except Exception: ok=False
 if p.returncode!=0 or not ok:
   print('PROBE FAILED', label, 'exit', p.returncode, 'results_ok', ok, file=sys.stderr); sys.exit(p.returncode or 2)
