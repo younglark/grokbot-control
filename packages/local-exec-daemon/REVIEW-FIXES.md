@@ -188,3 +188,13 @@ Note: reaping at init completion means background jobs started by the user's log
 
 Counts: `npm test` 98 pass / 0 fail (the earlier reapInitGroup(number) unit test replaced by the ownership simulation); run_all.sh 46 cases, 36 same, 10 allowed, 0 diff, lifecycle PASS, RC=0; /tmp/independent-r3-initgroups probe: no live process, marker not written.
 Remaining limits: residue that leaves the group (setsid/own pgrp) is not tracked; between leader reap and the close handler a fully-empty group could in theory be reused before the one close-time check (the pid==pgid guard still applies); login-profile background jobs do not survive init (official not measured). Not drop-in.
+
+### Round 5 review (HEAD 434f1cc) → fix (2026-11-08, Asia/Singapore) — **修正待独立复验**
+
+| Item | Reproduced (before) | Fix | After |
+|---|---|---|---|
+| P2 init-timeout regression | /tmp/independent-r3-init-timeout/probe.cjs on a 434f1cc worktree build: leader gone, same-group background (stdout not redirected) still `S` after the 10 s timeout, marker=true | timeout and shutdown both use one `cleanupInitGroup(handle)`: leader unreaped → group SIGKILL; leader exited → /proc reap (empty/reused → retire, no signal); no-op once retired. Close path unchanged: one reap then permanent retirement | same probe, real default 10 s, run twice: marker=false; background null in one run, in the other still listed in state `R` at the instant of return (SIGKILL already sent, not yet reaped), never wrote. New real regression (600 ms injected timeout) fails with the old timeout line, passes now |
+
+Path audit (all same-handle paths): close → reapInitGroup once + retire; timeout → cleanupInitGroup; shutdown → cleanupInitGroup then await close; signalInitGroup retires before signalling, so a later path never signals again.
+Counts: `npm test` 99 pass / 0 fail; run_all.sh 46 / 36 / 10 / 0 diff, lifecycle PASS, RC=0; stale-lifecycle 0 signals; initgroups no live process, marker false.
+Risks: finish("") does not wait for the killed residue to be reaped (signal is sent before finish); residue that left the group via setsid is not tracked; theoretical reuse window between leader reap and the first cleanup relies on the pid==pgid guard. Not drop-in.
