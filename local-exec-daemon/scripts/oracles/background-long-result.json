@@ -1,0 +1,142 @@
+{
+  "cases": [
+    {
+      "command": "sleep 6 & echo $! > bgpid; echo hi",
+      "elapsed": 5049,
+      "aliveAtExit": true,
+      "aliveAfterObserve": false,
+      "observeAfterExitMs": 2500,
+      "frames": [
+        {
+          "kind": "client",
+          "requestId": "background-six",
+          "message": {
+            "id": 1,
+            "shellStream": {
+              "start": {
+                "sandboxPolicy": {
+                  "type": "TYPE_INSECURE_NONE"
+                }
+              }
+            },
+            "localExecutionTimeMs": 4
+          }
+        },
+        {
+          "kind": "client",
+          "requestId": "background-six",
+          "message": {
+            "id": 1,
+            "shellStream": {
+              "stdout": {
+                "data": "hi\n"
+              }
+            },
+            "localExecutionTimeMs": 27
+          }
+        },
+        {
+          "kind": "control",
+          "requestId": "background-six",
+          "message": {
+            "heartbeat": {
+              "id": 1
+            }
+          }
+        },
+        {
+          "kind": "client",
+          "requestId": "background-six",
+          "message": {
+            "id": 1,
+            "shellStream": {
+              "exit": {
+                "cwd": "/state/background/root",
+                "localExecutionTimeMs": 5029
+              }
+            },
+            "localExecutionTimeMs": 5035
+          }
+        },
+        {
+          "kind": "control",
+          "requestId": "background-six",
+          "message": {
+            "streamClose": {
+              "id": 1
+            }
+          }
+        }
+      ]
+    },
+    {
+      "command": "(sleep 6; echo later) & echo $! > bgpid; echo hi",
+      "elapsed": 5037,
+      "aliveAtExit": true,
+      "aliveAfterObserve": false,
+      "observeAfterExitMs": 2500,
+      "frames": [
+        {
+          "kind": "client",
+          "requestId": "delayed-six",
+          "message": {
+            "id": 2,
+            "shellStream": {
+              "start": {
+                "sandboxPolicy": {
+                  "type": "TYPE_INSECURE_NONE"
+                }
+              }
+            },
+            "localExecutionTimeMs": 1
+          }
+        },
+        {
+          "kind": "client",
+          "requestId": "delayed-six",
+          "message": {
+            "id": 2,
+            "shellStream": {
+              "stdout": {
+                "data": "hi\n"
+              }
+            },
+            "localExecutionTimeMs": 9
+          }
+        },
+        {
+          "kind": "control",
+          "requestId": "delayed-six",
+          "message": {
+            "heartbeat": {
+              "id": 2
+            }
+          }
+        },
+        {
+          "kind": "client",
+          "requestId": "delayed-six",
+          "message": {
+            "id": 2,
+            "shellStream": {
+              "exit": {
+                "cwd": "/state/background/root",
+                "localExecutionTimeMs": 5016
+              }
+            },
+            "localExecutionTimeMs": 5018
+          }
+        },
+        {
+          "kind": "control",
+          "requestId": "delayed-six",
+          "message": {
+            "streamClose": {
+              "id": 2
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

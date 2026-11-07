@@ -255,3 +255,18 @@ GitHub Release **不会**触发发布；可在 tag 推送后再基于该 tag 建
 - 生成器 / 运行时（Buf、Connect）为 **Apache-2.0**。
 - 协议 schema 与 `vendor/proto-gen`：**无单独官方许可声明**，由维护者从 App 静态提取恢复生成；事实来自逆向 schema，见 [vendor/proto-gen/NOTICE.md](vendor/proto-gen/NOTICE.md) 与 [docs/protocol/baseline-manifest.md](docs/protocol/baseline-manifest.md)。
 - 跨进程锁依赖 `fs-native-extensions@1.5.3`（Apache-2.0）；Node 20+，Linux / macOS / Windows 预编译。详见 [docs/auth-lock.md](docs/auth-lock.md)。
+
+## 本地执行端子包：local-exec-daemon
+
+独立实现位于 [`local-exec-daemon/`](local-exec-daemon/README.md)，与现有 SDK、`gbc` CLI、`gbc-mcp` 分开安装和构建，根包仍为 `grokbot-control`。根包 npm 发布文件清单不自动包含这个私有子包。
+
+```bash
+cd local-exec-daemon
+npm ci
+npm run build
+npm test
+npm run smoke:uc
+# 可选：LOCAL_EXEC_DAEMON_ELECTRON=/path/to/electron npm run smoke:electron
+```
+
+目标基线为 App 0.79.3；目前仅离线合成控制面对照，不是完整 drop-in。审批/scope、UC 内层 ID 分配、generation/PID 抢占、完整压力与后台资源等仍有缺口，见 [修复矩阵](local-exec-daemon/REVIEW-FIXES.md) 和 [来源/许可说明](local-exec-daemon/NOTICE.md)。未修改官方安装、未接真实控制面；合成 fixture key 均明确为测试数据。

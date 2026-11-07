@@ -1,0 +1,67 @@
+{
+  "source": "/workspace/grokbot-control/docs/protocol/baselines/schema-0.79.3/aiserver.v1.proto",
+  "sha256": "056916b2f377efb78888fcb6a3e1dc12845b2356046fc17da46904bb6c7cb7bd",
+  "note": "Independent Python stdlib wire construction from frozen proto RequestFrame fields; not production pb. enqueued_at_ms=1794055511678",
+  "frames": [
+    {
+      "kind": 2,
+      "name": "exec",
+      "queuedHex": "0a0d71756575652d66697874757265123d0a0f666978747572652d72657175657374122a0a287b226964223a312c227265616441726773223a7b2270617468223a2270726f62652e747874227d7d18febcaab09b34",
+      "frameHex": "0a0f666978747572652d72657175657374122a0a287b226964223a312c227265616441726773223a7b2270617468223a2270726f62652e747874227d7d"
+    },
+    {
+      "kind": 3,
+      "name": "upload",
+      "queuedHex": "0a0d71756575652d6669787475726512130a0f666978747572652d726571756573741a0018febcaab09b34",
+      "frameHex": "0a0f666978747572652d726571756573741a00"
+    },
+    {
+      "kind": 4,
+      "name": "download",
+      "queuedHex": "0a0d71756575652d6669787475726512130a0f666978747572652d72657175657374220018febcaab09b34",
+      "frameHex": "0a0f666978747572652d726571756573742200"
+    },
+    {
+      "kind": 5,
+      "name": "retire_approval",
+      "queuedHex": "0a0d71756575652d6669787475726512130a0f666978747572652d726571756573742a0018febcaab09b34",
+      "frameHex": "0a0f666978747572652d726571756573742a00"
+    },
+    {
+      "kind": 6,
+      "name": "cancel",
+      "queuedHex": "0a0d71756575652d6669787475726512130a0f666978747572652d72657175657374320018febcaab09b34",
+      "frameHex": "0a0f666978747572652d726571756573743200"
+    },
+    {
+      "kind": 7,
+      "name": "messages_op",
+      "queuedHex": "0a0d71756575652d6669787475726512130a0f666978747572652d726571756573743a0018febcaab09b34",
+      "frameHex": "0a0f666978747572652d726571756573743a00"
+    },
+    {
+      "kind": 9,
+      "name": "local_tool",
+      "queuedHex": "0a0d71756575652d6669787475726512130a0f666978747572652d726571756573744a0018febcaab09b34",
+      "frameHex": "0a0f666978747572652d726571756573744a00"
+    },
+    {
+      "kind": 12,
+      "name": "discover_ai_tool",
+      "queuedHex": "0a0d71756575652d6669787475726512130a0f666978747572652d72657175657374620018febcaab09b34",
+      "frameHex": "0a0f666978747572652d726571756573746200"
+    },
+    {
+      "kind": 13,
+      "name": "put_file_to_url",
+      "queuedHex": "0a0d71756575652d6669787475726512130a0f666978747572652d726571756573746a0018febcaab09b34",
+      "frameHex": "0a0f666978747572652d726571756573746a00"
+    },
+    {
+      "kind": 14,
+      "name": "get_file_from_url",
+      "queuedHex": "0a0d71756575652d6669787475726512130a0f666978747572652d72657175657374720018febcaab09b34",
+      "frameHex": "0a0f666978747572652d726571756573747200"
+    }
+  ]
+}

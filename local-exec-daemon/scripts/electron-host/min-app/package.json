@@ -1,0 +1,5 @@
+{
+  "name": "local-exec-daemon-electron-host",
+  "private": true,
+  "main": "main.cjs"
+}

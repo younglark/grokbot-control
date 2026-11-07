@@ -1,0 +1,11 @@
+# Provenance and licence boundaries
+
+- `src/`: independent TypeScript implementation of observed local-exec-daemon 0.79.3 contracts. It does not copy or distribute the official daemon bundle, app.asar, native helpers or official credentials. This private research package does **not** claim an upstream licence grant or full drop-in compatibility.
+- No distribution licence has been granted for this new package; package metadata deliberately says `UNLICENSED` and `private: true`. This is not a new licence declaration for the root repository.
+- Protocol field numbers and fixtures are based on the repository's recovered schema at `../docs/protocol/baselines/schema-0.79.3/aiserver.v1.proto` (also `../proto/`). See `../vendor/proto-gen/NOTICE.md` for App version, schema provenance and unresolved schema licence. This package does not import or newly generate those vendored clients.
+- `test/helpers/wire-oracle.cjs`: independent finite-schema test codec, not the production codec. `test/fixtures/*`: independently generated Python protobuf wire goldens with source SHA256. Absolute source paths in fixture metadata document the original lab, not runtime imports.
+- `scripts/oracles/`: research harnesses adapted from the owner's existing offline lab, plus synthetic observations and input hashes. They invoke a separately supplied unmodified original input only inside an isolated namespace, with hard deadlines; the official input is NOT shipped. The small `pb.cjs` helper is lab-authored research code, not an extracted application bundle.
+- Fixed AES-GCM keys such as `Buffer.alloc(32, 7)` and credential strings prefixed `synthetic` are **test-only**, intentionally public and never usable for real accounts. Production accepts the normal parent IPC handoff; it has no hardcoded real key or login path.
+- Runtime dependency `zod` is MIT; development dependencies `typescript` are Apache-2.0 and `@types/node` MIT. Dependencies are fetched via the standalone `package-lock.json`; their own package licence files govern them. Electron is optional external test tooling and is not bundled or redistributed.
+
+For third-party schema/distribution questions, follow the root repository's conservative notice rather than assuming recovered protocol facts or the official App carry a permissive licence.

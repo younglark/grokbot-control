@@ -1,0 +1,58 @@
+import * as crypto from "node:crypto";
+import * as fs from "node:fs";
+import * as path from "node:path";
+
+export function delay(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+export function filesKeyIdFromBase64Key(keyB64: string): string {
+  return crypto.createHash("sha256").update(Buffer.from(keyB64, "base64")).digest("hex").slice(0, 16);
+}
+
+export async function writeAtomic(filePath: string, data: string, mode = 0o600): Promise<void> {
+  const dir = path.dirname(filePath);
+  await fs.promises.mkdir(dir, { recursive: true });
+  const tmp = path.join(
+    dir,
+    `.${path.basename(filePath)}.${process.pid}.${Date.now()}.${crypto.randomBytes(4).toString("hex")}.tmp`,
+  );
+  await fs.promises.writeFile(tmp, data, { encoding: "utf8", mode });
+  try {
+    await fs.promises.rename(tmp, filePath);
+  } catch (e) {
+    try {
+      await fs.promises.unlink(tmp);
+    } catch {
+      /* ignore */
+    }
+    throw e;
+  }
+}
+
+export async function readJsonIfExists<T>(filePath: string): Promise<T | null> {
+  try {
+    const raw = await fs.promises.readFile(filePath, "utf8");
+    return JSON.parse(raw) as T;
+  } catch (e: unknown) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw e;
+  }
+}
+
+export function dataRootFromEnv(env: NodeJS.ProcessEnv = process.env): string {
+  return env.SAND_DATA_ROOT || env.SAND_USER_DATA_DIR || path.join(env.HOME || "/tmp", ".sand-local-exec");
+}
+
+export function localRootFromEnv(env: NodeJS.ProcessEnv = process.env): string {
+  return env.SAND_LOCAL_EXEC_ROOT || process.cwd();
+}
+
+export function logInfo(msg: string): void {
+  console.log(`[sand-local-exec-daemon] ${msg}`);
+}
+
+export function logFatal(): void {
+  // Match official external diagnostic shape used by offline lab oracle.
+  console.error(`[sand-local-exec-daemon] fatal: Error`);
+}

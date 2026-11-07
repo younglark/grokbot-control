@@ -1,0 +1,41 @@
+{
+  "frames": [
+    {
+      "requestId": "outer-unknown",
+      "type": 3,
+      "message": {
+        "throw": {
+          "error": "This computer's local-exec daemon does not understand that request frame; update the desktop app."
+        }
+      }
+    },
+    {
+      "requestId": "bad-json",
+      "type": 3,
+      "message": {
+        "throw": {
+          "error": "cannot decode agent.v1.ExecServerMessage from JSON: Expected property name or '}' in JSON at position 1 (line 1 column 2)"
+        }
+      }
+    },
+    {
+      "requestId": "inner-unsupported",
+      "type": 3,
+      "message": {
+        "throw": {
+          "id": 1,
+          "error": "No handler found for server message of type writeShellStdinArgs"
+        }
+      }
+    },
+    {
+      "requestId": "inner-unsupported",
+      "type": 3,
+      "message": {
+        "streamClose": {
+          "id": 1
+        }
+      }
+    }
+  ]
+}
