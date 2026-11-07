@@ -84,7 +84,7 @@ function state(dir: string, s = "s", g = 1) {
 
 it("session-aware pagination is explicit, ordered numerically and never claims complete", async () => {
   const f = fixture();
-  const r = await f.ops.pull(base(f.dir));
+  const r = await f.ops.pull({ ...base(f.dir), sessionId: "s" });
   assert.equal(r.ok, true, JSON.stringify(r));
   assert.equal((r.data as any).sessions[0].completeness, "unknown");
   assert.deepEqual(
@@ -157,14 +157,17 @@ it("session isolation uses request context, not guessed message fields", async (
 it("repeated page/boundary overlap stops safely; pages are bounded", async () => {
   const f = fixture();
   f.respond(() => ({ generation: 1, entries: [row("5")] }));
-  assert.equal((await f.ops.pull(base(f.dir))).ok, true);
+  assert.equal((await f.ops.pull({ ...base(f.dir), sessionId: "s" })).ok, true);
   assert.equal(
     state(f.dir).stop_reason,
     "cursor_no_progress_or_boundary_overlap",
   );
-  assert.equal(f.calls.filter((x) => typeof x !== "string").length, 2);
+  assert.equal(
+    f.calls.filter((x) => typeof x !== "string" && x.sessionId === "s").length,
+    2,
+  );
   const g = fixture();
-  await g.ops.pull({ ...base(g.dir), maxPages: 1 });
+  await g.ops.pull({ ...base(g.dir), sessionId: "s", maxPages: 1 });
   assert.equal(state(g.dir).stop_reason, "page_budget");
 });
 it("inclusive boundary / unordered pages / zero sequences do not infer completeness", async () => {
@@ -287,7 +290,7 @@ it("lock symlinks and world-readable archive root are rejected", async () => {
 });
 it("IO crash after data rename leaves detectable checkpoint mismatch; repull repairs from head", async () => {
   const f = fixture();
-  await f.ops.pull(base(f.dir));
+  await f.ops.pull({ ...base(f.dir), sessionId: "s" });
   f.respond((r) => ({
     generation: 1,
     entries: r.beforeSeq === undefined ? [row("1", "10")] : [],
@@ -298,14 +301,17 @@ it("IO crash after data rename leaves detectable checkpoint mismatch; repull rep
     return original.call(this, rel, data);
   };
   try {
-    assert.equal((await f.ops.pull(base(f.dir))).ok, false);
+    assert.equal(
+      (await f.ops.pull({ ...base(f.dir), sessionId: "s" })).ok,
+      false,
+    );
   } finally {
     Archive.prototype.writeJson = original;
   }
   const status = await f.ops.status({ dir: f.dir });
   assert.equal((status.data as any).sessions[0].consistent, false);
   assert.equal((await f.ops.render({ dir: f.dir })).ok, false);
-  assert.equal((await f.ops.pull(base(f.dir))).ok, true);
+  assert.equal((await f.ops.pull({ ...base(f.dir), sessionId: "s" })).ok, true);
   assert.equal(state(f.dir).recovered_data_state_mismatch, true);
   assert.equal(
     state(f.dir).entries_sha256,
@@ -694,4 +700,125 @@ it("raw wire preserves unknown fields without guessing their semantics", () => {
     Buffer.from(record.wire_base64!, "base64"),
     Buffer.from(wire),
   );
+});
+it("agent-wide pull includes the unlisted default session (empty session_id) under sessions/default", async () => {
+  const f = fixture(temp(), []);
+  f.respond((r) => ({
+    generation: 0,
+    entries: r.beforeSeq === undefined && r.sessionId === "" ? [row("1")] : [],
+  }));
+  const r = await f.ops.pull(base(f.dir));
+  assert.equal(r.ok, true);
+  const text = new Archive(f.dir).read(
+    `bots/${component("a")}/sessions/default/generations/0/entries.jsonl`,
+  );
+  assert.ok(text && text.includes('"seq":"1"'));
+  const explicit = fixture();
+  await explicit.ops.pull({ ...base(explicit.dir), sessionId: "s" });
+  assert.equal(
+    explicit.calls.some((x) => typeof x !== "string" && x.sessionId === ""),
+    false,
+  );
+});
+it("budget-one pulls continue historical backfill rather than repeating head forever; generation zero omitted", async () => {
+  const f = fixture(temp(), []),
+    seen: any[] = [];
+  f.respond((r) => {
+    seen.push(r);
+    const top = r.beforeSeq === undefined ? 7 : Number(r.beforeSeq) - 1;
+    return { generation: 0, entries: top > 0 ? [row(String(top))] : [] };
+  });
+  for (let n = 0; n < 16; n++)
+    assert.equal(
+      (await f.ops.pull({ ...base(f.dir), pageSize: 1, maxPages: 1 })).ok,
+      true,
+    );
+  const a = new Archive(f.dir),
+    gd0 = `bots/${component("a")}/sessions/default/generations/0`;
+  const rows = a
+    .read(gd0 + "/entries.jsonl")!
+    .trim()
+    .split("\n")
+    .map((x) => JSON.parse(x));
+  assert.deepEqual(
+    rows.map((e) => e.seq),
+    ["1", "2", "3", "4", "5", "6", "7"],
+  );
+  assert.equal(a.json(gd0 + "/state.json").backfill_end_observed, true);
+  assert.equal(a.json(gd0 + "/state.json").completeness, "unknown");
+  assert.ok(seen.some((r) => r.beforeSeq === 6n));
+  assert.ok(seen.every((r) => r.generation === undefined));
+});
+it("global one-page budget rotates across named and default sessions", async () => {
+  const f = fixture(temp(), ["s", "z"]);
+  const seen = new Set<string>();
+  f.respond((r) => {
+    seen.add(r.sessionId);
+    return { generation: 1, entries: [row("10")] };
+  });
+  for (let n = 0; n < 3; n++)
+    assert.equal((await f.ops.pull({ ...base(f.dir), maxPages: 1 })).ok, true);
+  assert.deepEqual([...seen].sort(), ["", "s", "z"]);
+});
+it("crash does not trust unpublished backfill cursor; restored pull still progresses", async () => {
+  const f = fixture(temp(), []);
+  f.respond((r) => ({
+    generation: 1,
+    entries:
+      r.beforeSeq === undefined
+        ? [row("5")]
+        : Number(r.beforeSeq) > 1
+          ? [row(String(Number(r.beforeSeq) - 1))]
+          : [],
+  }));
+  await f.ops.pull({ ...base(f.dir), maxPages: 1, pageSize: 1 });
+  const rel = `bots/${component("a")}/sessions/default/generations/1/state.json`,
+    a = new Archive(f.dir),
+    state = a.json(rel);
+  a.writeJson(rel, {
+    ...state,
+    backfill_before_seq: "1",
+    entries_sha256: "bad",
+  });
+  await f.ops.pull({ ...base(f.dir), maxPages: 2, pageSize: 1 });
+  assert.equal(a.json(rel).recovered_data_state_mismatch, true);
+  assert.equal(a.json(rel).backfill_before_seq, "4");
+});
+it("CLI message send dryrun uses default session without reading credentials", () => {
+  const r = spawnSync(
+    process.execPath,
+    [
+      "--import",
+      "tsx",
+      "src/cli/main.ts",
+      "--json",
+      "--dry-run",
+      "message",
+      "send",
+      "--agent-id",
+      "test-only",
+      "--text",
+      "fixed-test",
+    ],
+    {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      env: { ...process.env, GBT_CREDENTIALS_DIR: "/absent/credentials" },
+    },
+  );
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(JSON.parse(r.stdout).data.session_id, "");
+});
+it("rejected oversized head response does not claim head refresh", async () => {
+  const f = fixture(temp(), []);
+  f.respond(() => ({
+    generation: 0,
+    entries: [row("1", "1", { body: Buffer.alloc(10000) })],
+  }));
+  await f.ops.pull({ ...base(f.dir), maxBytes: 1000, maxPages: 1 });
+  const st = new Archive(f.dir).json(
+    `bots/${component("a")}/sessions/default/generations/0/state.json`,
+  );
+  assert.equal(st.head_refreshed_at_ms, null);
+  assert.equal(st.next_phase, "head");
 });

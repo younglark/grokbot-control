@@ -54,13 +54,13 @@ node dist/cli/main.js --json auth logout             # 只删本工具自己的�
 
 CLI：`gbc sync pull --agent-id BOT [--session-id SESSION] --dir /absolute/private/root
 --account-id STABLE_ID --team-id none --ack-unverified-scope`；`gbc sync status|render|attachments --dir /absolute/private/root`。
-pull/render 明确授权本地写，不需要远端 `--allow-writes`；`--dry-run` 纯本地计划、无 RPC/文件。
+pull/render/attachments 明确授权本地写，不需要远端 `--allow-writes`；`--dry-run` 纯本地计划、无 RPC/文件。
 身份是操作者显式声明而非服务端验证，必须核对稳定 ID，不能用邮箱/token 哈希。
-**render 已可直接 rg 已确认 JSON UI entry 的正文**：message、send-message(text)、notice、
+**render 已可直接 rg 已确认 JSON UI entry 的正文**：message、send-message(text/attachment)、notice、
 tool-call 名称/状态/summary、附件文件引用；其余类型/省略/未知 body 仍 opaque，不猜解密。
 静态解码证据和 synthetic genuine-schema fixture 见 [transcript-body-0.79.3.md](docs/protocol/transcript-body-0.79.3.md)。
 例如 `rg '关键词' /absolute/private/root/derived -g '*.md'`；旧 opaque 归档可离线重新 render。
-每次从头有界拉取合并，不删缺失行，不承诺完整性；无 Watch/附件下载/`--all`。
+head刷新与持久化backfill交替，不删缺失行，不承诺完整性；附件单独按需下载；无Watch/`--all`。
 MCP 设 `GBT_SYNC_ROOT` 才提供 `sync_status`，另需 `GBT_SYNC_ALLOW_LOCAL_WRITES=1` 才有
 `sync_pull/sync_render/sync_attachments`（READONLY 排除写工具；scope 在启动配置；attachments 可选远端 file_path 过滤）。
 命令示例、scope 限制、格式与恢复步骤见 [docs/sync-format.md](docs/sync-format.md)。
@@ -88,3 +88,9 @@ MCP 设 `GBT_SYNC_ROOT` 才提供 `sync_status`，另需 `GBT_SYNC_ALLOW_LOCAL_W
 ## 协议 vendor
 
 正式协议源见 `proto/`；生成客户端见 `vendor/proto-gen/NOTICE.md`（App `0.79.3` commit `4739412`，本仓库从App恢复生成；生成器 Buf Connect Apache-2.0；schema 本身无单独官方许可声明）。
+
+### 同步修订
+支持默认session、generation内持久化backfill与跨调用session轮转；归档是retained observations，不是删除同步/完整镜像。
+附件仅按需App store aliases，用户上传和send-message attachment均支持；每次Resolve+条件GET，流式预算与scope绑定。
+attachments需与pull一致的`--account-id --team-id --ack-unverified-scope`。
+`--page-size 1 --max-pages 1`可做小量分页验收。详细边界见[格式文档](docs/sync-format.md)。

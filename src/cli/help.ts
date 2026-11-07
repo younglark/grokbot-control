@@ -27,19 +27,21 @@ SYNC (file-first snapshots; no SQLite):
   gbc sync status --dir /absolute/private/root [--agent-id <id>] [--session-id <sid>]
   gbc sync render --dir /absolute/private/root [--agent-id <id>] [--session-id <sid>]
   gbc sync attachments --dir /absolute/private/root [--agent-id <id>] [--session-id <sid>] [--path <remote>]
-  pull bounds: --max-pages 100 --max-bytes 33554432 --timeout-ms 30000 (defaults)
+  pull bounds: --page-size 100 --max-pages 100 --max-bytes 33554432 --timeout-ms 30000 (defaults)
   attachments bounds: --max-file-bytes 33554432 --max-bytes 67108864 --timeout-ms 30000
   --dry-run pull/render/attachments: no RPC or files. --all is not supported in v1.
+  attachments also requires --account-id/--team-id/--ack-unverified-scope.
   CLI pull/render/attachments authorize local writes; --allow-writes is NOT required.
   Identity is operator-asserted, NOT verified by auth. Use stable IDs, never email/token hash.
   Existing roots must be private 0700; files 0600. status/render are local and need no login.
   Raw bytes/base64 preserved. render exposes known JSON message/text/notice/tool-summary shapes.
   Unknown cards, omitted/blob-only bodies remain placeholders; no decryption. Use rg -g '*.md'.
   Pagination unverified live; completeness always unknown. No Watch/deletion/blob_hash body hydration.
-  attachments: on-demand ResolveGrokBotAttachmentReads for synced user-attachment paths only; not live verified.
+  attachments: on-demand ResolveGrokBotAttachmentReads for synced user-attachment and send-message attachment App store aliases only; not live verified.
   MCP: configure GBT_SYNC_ROOT; sync_status is local. sync_pull/render/attachments require independent
   GBT_SYNC_ALLOW_LOCAL_WRITES=1 plus GBT_SYNC_ACCOUNT_ID, GBT_SYNC_TEAM_ID,
   GBT_SYNC_ACK_UNVERIFIED_SCOPE=1 for pull. READONLY excludes sync mutators. No archive path tool argument.
+  Head refresh/backfill alternate; retained observations, NOT a current mirror.
 
 NOTES:
   - Default transport is live Connect to --base-url (requires auth). Use --mock only for explicit simulation.

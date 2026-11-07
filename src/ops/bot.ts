@@ -1,7 +1,12 @@
 import { GrokBotAgentHarnessKind } from "#proto-gen/aiserver";
 import type { GrokBotClient } from "../connect/client.js";
 import { mapConnectError } from "../connect/client.js";
-import { failResult, newRequestId, okResult, type ResultEnvelope } from "../dto/result.js";
+import {
+  failResult,
+  newRequestId,
+  okResult,
+  type ResultEnvelope,
+} from "../dto/result.js";
 import type { BotSummary } from "../dto/types.js";
 import { GbcError } from "../errors.js";
 import { mapBot } from "./map.js";
@@ -20,7 +25,10 @@ function requireWrite(opts: WriteOpts | undefined, action: string) {
     throw new GbcError(
       "denied",
       `refusing ${action}: pass allowWrite / --allow-writes or GBT_ALLOW_WRITES=1`,
-      { exitCode: 7, hint: "Writes are explicit; dry-run is pure and does not call RPC." },
+      {
+        exitCode: 7,
+        hint: "Writes are explicit; dry-run is pure and does not call RPC.",
+      },
     );
   }
 }
@@ -36,7 +44,26 @@ export class BotOps {
     return r;
   }
 
-  async list(opts?: { limit?: number }): Promise<ResultEnvelope<{ bots: BotSummary[]; truncated: boolean }>> {
+  /** Update/Delete RPC `id` is the numeric server id (App: serverId); accept agent_id UUID by resolving via list. */
+  private async serverId(idOrAgentId: string): Promise<string> {
+    if (/^\d+$/.test(idOrAgentId)) return idOrAgentId;
+    const res = await this.client.listGrokBotAgents({});
+    const bot = (res.agents ?? [])
+      .map(mapBot)
+      .find((b: BotSummary) => b.agent_id === idOrAgentId);
+    if (bot?.id) return bot.id;
+    throw new GbcError(
+      res.truncated ? "lookup_incomplete" : "not_found",
+      res.truncated
+        ? "agent list truncated; cannot resolve server id"
+        : `bot ${idOrAgentId} not found; no write sent`,
+      { exitCode: 5 },
+    );
+  }
+
+  async list(opts?: {
+    limit?: number;
+  }): Promise<ResultEnvelope<{ bots: BotSummary[]; truncated: boolean }>> {
     const request_id = newRequestId();
     try {
       const limit = validateLimit(opts?.limit);
@@ -63,36 +90,49 @@ export class BotOps {
     try {
       const res = await this.client.listGrokBotAgents({});
       const all = (res.agents ?? []).map(mapBot);
-      const bot = all.find((b: BotSummary) => b.agent_id === agentId || b.id === agentId);
+      const bot = all.find(
+        (b: BotSummary) => b.agent_id === agentId || b.id === agentId,
+      );
       if (bot) return this.wrapSim(okResult({ bot }, { request_id }));
       if (res.truncated) {
         return this.wrapSim(
-          failResult("lookup_incomplete", `bot ${agentId} not in a truncated ListGrokBotAgents page; existence unknown`, {
-            request_id,
-            outcome: "unknown",
-            hint: "Server list was truncated; absence is not proof of non-existence.",
-          }),
+          failResult(
+            "lookup_incomplete",
+            `bot ${agentId} not in a truncated ListGrokBotAgents page; existence unknown`,
+            {
+              request_id,
+              outcome: "unknown",
+              hint: "Server list was truncated; absence is not proof of non-existence.",
+            },
+          ),
         );
       }
       return this.wrapSim(
-        failResult("not_found", `bot ${agentId} not found in ListGrokBotAgents`, {
-          request_id,
-          hint: "There is no GetGrokBotAgent RPC; get = list + filter.",
-        }),
+        failResult(
+          "not_found",
+          `bot ${agentId} not found in ListGrokBotAgents`,
+          {
+            request_id,
+            hint: "There is no GetGrokBotAgent RPC; get = list + filter.",
+          },
+        ),
       );
     } catch (e) {
       return this.fromErr(e, request_id);
     }
   }
 
-  async create(input: {
-    name: string;
-    description?: string;
-    title?: string;
-    agentId?: string;
-    language?: string;
-    kickstart?: boolean;
-  }, write?: WriteOpts): Promise<ResultEnvelope<{ bot: BotSummary; agent_id: string }>> {
+  async create(
+    input: {
+      name: string;
+      description?: string;
+      title?: string;
+      agentId?: string;
+      language?: string;
+      kickstart?: boolean;
+    },
+    write?: WriteOpts,
+  ): Promise<ResultEnvelope<{ bot: BotSummary; agent_id: string }>> {
     const request_id = newRequestId();
     if (write?.dryRun) {
       return this.wrapSim(
@@ -133,7 +173,9 @@ export class BotOps {
         language: input.language,
       });
       const bot = mapBot(res.agent);
-      return this.wrapSim(okResult({ bot, agent_id: bot.agent_id || agentId }, { request_id }));
+      return this.wrapSim(
+        okResult({ bot, agent_id: bot.agent_id || agentId }, { request_id }),
+      );
     } catch (e) {
       return this.fromErr(e, request_id, true);
     }
@@ -146,12 +188,29 @@ export class BotOps {
   ): Promise<ResultEnvelope<{ bot: BotSummary }>> {
     const request_id = newRequestId();
     if (write?.dryRun) {
-      return this.wrapSim(okResult({ bot: { agent_id: agentId, id: agentId, name: patch.name || "", description: patch.description || "", title: patch.title || "", harness: "", role: "", kind: "", viewer_session_id: "" } }, { request_id, code: "dry_run" }));
+      return this.wrapSim(
+        okResult(
+          {
+            bot: {
+              agent_id: agentId,
+              id: agentId,
+              name: patch.name || "",
+              description: patch.description || "",
+              title: patch.title || "",
+              harness: "",
+              role: "",
+              kind: "",
+              viewer_session_id: "",
+            },
+          },
+          { request_id, code: "dry_run" },
+        ),
+      );
     }
     try {
       requireWrite(write, "bot.update");
       const res = await this.client.updateGrokBotAgent({
-        id: agentId,
+        id: await this.serverId(agentId),
         name: patch.name,
         description: patch.description,
         title: patch.title,
@@ -163,27 +222,39 @@ export class BotOps {
     }
   }
 
-  async delete(agentId: string, write?: WriteOpts): Promise<ResultEnvelope<{ deleted: boolean; note: string }>> {
+  async delete(
+    agentId: string,
+    write?: WriteOpts,
+  ): Promise<ResultEnvelope<{ deleted: boolean; note: string }>> {
     const request_id = newRequestId();
     if (write?.dryRun) {
       return this.wrapSim(
         okResult(
-          { deleted: false, note: "dry-run: would call DeleteGrokBotAgent; sidebar cleanup unverified" },
+          {
+            deleted: false,
+            note: "dry-run: would call DeleteGrokBotAgent; sidebar cleanup unverified",
+          },
           { request_id, code: "dry_run" },
         ),
       );
     }
     if (write?.confirm !== agentId) {
       return this.wrapSim(
-        failResult("denied", "delete requires --confirm=<agent_id> matching the resource", {
-          request_id,
-          hint: `gbc bot delete --agent-id ${agentId} --confirm=${agentId} --allow-writes`,
-        }),
+        failResult(
+          "denied",
+          "delete requires --confirm=<agent_id> matching the resource",
+          {
+            request_id,
+            hint: `gbc bot delete --agent-id ${agentId} --confirm=${agentId} --allow-writes`,
+          },
+        ),
       );
     }
     try {
       requireWrite(write, "bot.delete");
-      await this.client.deleteGrokBotAgent({ id: agentId });
+      await this.client.deleteGrokBotAgent({
+        id: await this.serverId(agentId),
+      });
       return this.wrapSim(
         okResult(
           {
@@ -194,6 +265,16 @@ export class BotOps {
         ),
       );
     } catch (e) {
+      if (e instanceof GbcError && e.code === "not_found")
+        return this.wrapSim(
+          okResult(
+            {
+              deleted: false,
+              note: "agent_id not present in complete ListGrokBotAgents; no delete RPC sent (already absent).",
+            },
+            { request_id },
+          ),
+        );
       if (e instanceof GbcError) return this.fromErr(e, request_id, true);
       const mapped = mapConnectError(e, request_id, { write: true });
       // App treats NotFound as ok on delete.
@@ -212,8 +293,13 @@ export class BotOps {
     }
   }
 
-  private fromErr(e: unknown, request_id: string, write = false): ResultEnvelope<never> {
-    const err = e instanceof GbcError ? e : mapConnectError(e, request_id, { write });
+  private fromErr(
+    e: unknown,
+    request_id: string,
+    write = false,
+  ): ResultEnvelope<never> {
+    const err =
+      e instanceof GbcError ? e : mapConnectError(e, request_id, { write });
     return this.wrapSim(
       failResult(err.code, err.message, {
         outcome: err.outcome,

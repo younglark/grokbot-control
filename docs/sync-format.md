@@ -1,159 +1,75 @@
-# 文件优先 Transcript 同步 v1
+# 文件优先观察归档（无 SQLite）
 
-实现日期：2026-11-07（Asia/Shanghai）。协议基线 App 0.79.3。
-只用 mock/本地 generated Connect transport 验证；**本功能未 live 验证**。
-这是可恢复的快照观察归档，不是完整备份、实时增量镜像或新任务系统。无 SQLite。
+基线 App 0.79.3。身份仍为 operator_asserted_unverified，不是 server_verified。
+本地目录0700，文件0600，凭据独立保存；不得把真实归档提交仓库。
 
-## 使用
-
-```bash
-# 已通过本工具独立登录；以下示例不表示已经实际调用生产服务
-node dist/cli/main.js --json sync pull --agent-id BOT --session-id SESSION \
-  --dir "$HOME/gbc-archive-user-team" --account-id STABLE_USER_ID \
-  --team-id none --ack-unverified-scope
-node dist/cli/main.js --json sync status --dir "$HOME/gbc-archive-user-team"
-node dist/cli/main.js --json sync render --dir "$HOME/gbc-archive-user-team"
-node dist/cli/main.js --json sync attachments --dir "$HOME/gbc-archive-user-team" \
-  [--agent-id BOT] [--session-id SESSION] [--path remote/file]
-ls "$HOME/gbc-archive-user-team/bots"
-rg 'entry_kind|blob_hash' "$HOME/gbc-archive-user-team/bots" -g '*.jsonl'
-rg '需要查找的消息文本' "$HOME/gbc-archive-user-team/derived" -g '*.md'
+## CLI
+```sh
+gbc sync pull --agent-id BOT --dir /absolute/archive --account-id STABLE_ID --team-id none --ack-unverified-scope --page-size 100 --max-pages 100
+gbc sync status --dir /absolute/archive
+gbc sync render --dir /absolute/archive
+gbc sync attachments --agent-id BOT --dir /absolute/archive --account-id STABLE_ID --team-id none --ack-unverified-scope
+# --session-id SESSION 限命名会话，省略为agent下已归档会话；--path 为远端canonical alias过滤
 ```
+`message send/status` 省略 --session-id 使用默认会话，MCP/SDK一致。附件不在pull中默认下载。
+--dry-run不读写归档、不登录或RPC。未知/重复flag拒绝。CLI显式命令即本地写授权，不需远端allow-writes。
+MCP root/身份启动固定：GBT_SYNC_ROOT、GBT_SYNC_ACCOUNT_ID、GBT_SYNC_TEAM_ID、GBT_SYNC_ACK_UNVERIFIED_SCOPE=1；
+另需GBT_SYNC_ALLOW_LOCAL_WRITES=1暴露pull/render/attachments；GBT_MCP_READONLY=1排除所有本地写工具。
+GBT_ALLOW_WRITES不打开本地同步写开关。scope在任何下载RPC前核对backend/account/team/assurance。
+此绑定不能发现操作者在相同声明ID下实际换凭据。换账户必须重新确认，使用独立archive。
 
-`pull` 每次要求一个 `--agent-id`；可省略 `--session-id`，按 session 列表逐一拉取（最多 50 个）。
-`--all` 暂不支持；不会因漏传/拼错 flag 扩大同步范围。sync flags 严格检查重复/未知值。
-成功 stdout 是单个 envelope + 有界摘要，不吐正文；失败沿用 stderr JSON/原有退出码。
-`status` / `render` 不需要登录、不创建 AuthProvider、不发 RPC。
-`--dry-run` pull/render 不读写归档、不读取凭据、不发 RPC。
-CLI 显式 pull/render 即本地写意图；**不需要远端 `--allow-writes`**。
-
-## 身份边界（务必读）
-
-现有 AuthProvider 只提供 backend、account_label、has_token 等，没有服务端验证的稳定账户 ID，
-不能把 label、邮箱、未验证 JWT claim 或 token 哈希冒充账户身份。
-因此 v1 要求操作者每次显式传稳定账户 ID 和 team ID（无 team 填 `none`），并确认
-`--ack-unverified-scope`。manifest 保存 assurance=`operator_asserted_unverified`。
-后续 pull 比较 backend/account/team/assurance，任何不符在 RPC 前拒绝。
-
-**这只能防止显式 scope 写错，不能检测“同一 scope 参数但凭据实际换了账户”。**
-操作者必须从可信来源核对 ID；登录/换账户/团队后重新核对，并使用独立根目录。
-若无法确认稳定 ID，勿把此归档当成经身份验证的备份。当前 team-id 只作归档绑定，
-不是远端 team 选择器，也不会伪造/添加 team 请求头。后续有 verified whoami 才可升级 assurance。
-邮箱形式的 account-id 被拒绝；不会读取 App 私有数据或复制桌面凭据。
-
-MCP 启动配置（不是工具输入）:
-
-```bash
-GBT_SYNC_ROOT="$HOME/gbc-archive-user-team" \
-GBT_SYNC_ALLOW_LOCAL_WRITES=1 \
-GBT_SYNC_ACCOUNT_ID=STABLE_USER_ID GBT_SYNC_TEAM_ID=none \
-GBT_SYNC_ACK_UNVERIFIED_SCOPE=1 node dist/mcp/main.js
+## 布局
 ```
-
-未设 root 不暴露 sync 工具；设 root 默认仅 `sync_status`。
-独立 `GBT_SYNC_ALLOW_LOCAL_WRITES=1` 才增加 `sync_pull` / `sync_render` / `sync_attachments`。
-`GBT_MCP_READONLY=1` 无条件去掉写工具。工具参数不接受归档根目录/scope；`sync_attachments` 的可选 `path` 是远端 file_path 过滤，不是本地路径。root 和身份在启动时固定。
-`GBT_ALLOW_WRITES` 不启用本地同步。pull 仍然只发远端读 RPC。
-SDK 使用 `plane.sync`，或直接 `new SyncOps(client, backend, simulated)`。
-
-## 目录与格式
-
-```text
-<account-team-root>/                    # 0700
-  manifest.json                        # format_version=1、scope、session 索引
-  bots/id-<base64url(agent-id)>/
-    bot.json                           # 原始 bot ProtoJSON；不承诺是完整配置备份
-    sessions/id-<base64url(session-id)>/
-      session.json                     # 请求作用域、raw session、最后发布的 current_generation
-      generations/<generation>/
-        entries.jsonl                  # 当前已观察到的各 seq 最新版本；不是逐条消息聊天文本
-        state.json                     # 数据摘要、分页观察、完整性/停止原因
-    attachments/
-      objects/sha256-<hex>             # 按需下载的原始字节（0600）；永不存 signed URL
-      refs/id-<base64url(remote-path)>.json  # 状态/哈希/相对路径；失败也记录
-  .sync/
-    lock                               # 单写锁，随机 token/PID
-    staging/<uuid>.tmp                  # 同一文件系统上的临时文件；崩溃可有残留
-  derived/id-<agent>/id-<session>/transcript.md   # render 才生成，可重建，可能滞后
+manifest.json                        # 账户声明、session索引、下轮session轮转位置
+bots/id-<agent>/bot.json
+bots/id-<agent>/sessions/default/     # 默认会话：wire session_id=""
+bots/id-<agent>/sessions/id-<session>/
+  session.json                       # current_generation指针；代际变化则null
+  generations/<generation>/
+    entries.jsonl                    # retained observations，不是当前有效镜像
+    state.json                       # checksum、head刷新时间、backfill游标/阶段/覆盖观察
+bots/id-<agent>/attachments/
+  objects/sha256-<content-hash>        # 完整内容，不存signed URL
+  refs-v2/<sha256(session)>/<sha256(canonical-path)>.json
+.sync/lock
+.sync/staging/<uuid>.tmp
+derived/<agent>/<session>/transcript.md
 ```
+ID组件base64url，默认session用default。远端路径不作为本地写路径。
+旧format_version=1归档继续可读；旧无scope/session的refs不迁移为可信当前ref，必须重新Resolve下载；旧对象可保留历史。
+旧state缺backfill字段从head重建。数据/state checksum不符重拉，从head恢复，不信旧游标。
+status一致仅证明本地checksum，不代表服务端完整或最新。Markdown可重建，pull/attachments后需render。
 
-所有文件 0600；已有根目录必须当前 OS 用户所有且不开放组/其他权限，否则拒绝而非静默 chmod。
-路径根和每层目录不允许 symlink；文件不允许 symlink/hardlink，读取使用 O_NOFOLLOW。
-远端 ID 只经 base64url 编码作路径组件，限制 120 UTF-8 bytes、禁止控制字符；不使用标题/附件名作路径。
-祖先目录要求当前用户/root 所有，禁止 group/world 可写（带 sticky bit 的临时目录除外）。
-安全模型是 POSIX 当前用户私有目录；**不是对抗同 UID 恶意并发进程的沙箱**。
-目录 fsync/O_NOFOLLOW 目前仅在 Linux 本地测试；Windows 不声明支持。不要放在不提供这些保证的网络盘。
+## 分页、backfill与真实性
+List以before_seq排他回翻，首次省略before_seq；generation=0省略与App对齐。seq/updated_seq以uint64字符串和BigInt排序。
+page-size默认100，1..500；max-pages默认100硬顶1000；max-bytes默认32MiB硬顶256MiB；timeout默认30s硬顶300s。
+一个命令共享预算，session稳定排序+跨命令轮转，预算耗尽不推进未处理session。每session单独记录本次页数/字节。
+第一次从head取页，接已有最早backfill游标继续；预算仅1页时下轮backfill，再下轮head，防止重复头页饿死深历史。
+head刷新与backfill进度分开；head不会把更老游标倒退。空页只是结束观察，不编造complete。
+不前进/重叠边界停止并记录；generation变化不跨代合并，current_generation=null要求重拉。
+JSONL先落盘fsync/rename，再写state校验和，最后manifest；异常可重放，绝不宣称跨文件事务。
+所有单session entries/state及render输出各限64MiB。历史不因未返回就删除；旧generation保留但不在current指针中。
 
-JSONL 每行保存：agent_id/session_id（来自请求上下文）、generation、seq/updated_seq 十进制字符串、
-entry_id（可缺失）、entry_kind、body_base64（可缺失）、body_omitted、blob_hash、decode_status、
-encryption_status、raw ProtoJSON、wire_base64（真实 protobuf 返回时含未知 wire 字段）、untrusted=true。
-0.79.3 静态代码已确认内层为 JSON UI entry；已支持结构保存 decoded 子对象（正文/角色/时间/工具 summary），
-decode_status=decoded、encryption_status=plaintext_json；其余保留 opaque/absent/omitted 和原因，不凭失败推断加密。
-消息时间/角色来自通过校验的 body 字段而非外层 entry；observed_at_ms 只是抓取时间。
-完整证据与支持列表见 [transcript-body-0.79.3.md](protocol/transcript-body-0.79.3.md)。
-若更高 updated_seq 的正文被省略，先前可用正文单独留在 last_available_body，带原版本号；不冒充新正文。
+**completeness始终unknown**。未实现Watch/deletes/cursorTooOld、明确删除同步、omitted单seq补读、blob_hash正文补读；
+无法证明跨页事务一致性，也不保证旧行变更均被刷新。backfill到空页不等于全文正文/附件全量完整。
+保留的历史行可能已被远端删除，视图明确标注retained observations，不能当当前镜像。
 
-JSONL 为本地权威记录；Markdown 是派生视图。render 现在可直接 grep 已确认 JSON 子集的文本：
-message.content、send-message(text).message.content、notice.text、tool-call 名称/状态/summary、user-attachment 文件引用。
-工具 summary 不冒充完整工具结果；非文本卡片等未知类型仍占位。body 解码限 4MiB，超限不裁原 bytes、只保持 opaque。
-既有 opaque 归档可直接离线 render 升级；render 重新校验 bytes，不信缓存 decoded，且不修改 JSONL/state。
-下一次 pull 也会刷新同版本 entry 的 decoder 缓存。旧版本正文会标“NOT current revision”，不冒充新消息。
-正文以缩进 code block 输出，HTML/Markdown 不活化、terminal/bidi 控制符转义，时间显示 Asia/Shanghai。
-外来正文/字段始终是不可信数据，不能作为 agent 指令执行。不要对原始档案和 derived 同时全文 grep，
-建议用 `-g '*.jsonl'` 或 `-g '*.md'` 选一种。
+## 按需附件
+来源仅已确认UI entry：user-attachment.file_path、send-message(message.type=attachment).message.url。
+只支持App已证实store alias：/home/box/{agent-data|sand-data}/agents/<safe-agent-dir>/{attachments|assets}/<64hex>.<ext>，
+规范为agent-data；严格file://可转换。中文/长显示文件名保留为数据，绝不作为本地写路径。任意本机绝对路径、../、非规范file URL拒绝。
+外部链接、workspace任意路径、cloud-composer artifact、未知卡片明确unsupported，不任意抓URL。
+每agent/session/canonical-path独立ResolveGrokBotAttachmentReads。仅STORE+合法size/expiry/nonempty-etag+HTTPS才GET；
+NOT_IN_STORE/NO_STORAGE不盲fallback。重复/冲突Resolve行拒绝。ReadGrokBotAgentAttachmentChunk后续再做。
+每次都Resolve；已下载对象先校验本地hash，再条件GET If-None-Match。304且etag/size匹配才复用；新内容新hash，旧对象留历史。
+旧ref不被当作服务端最新证明。403最多再Resolve一次，总预算/截止时间共用。
+流式写private staging，边读hash/计量，超过单文件/总预算立即取消并丢弃staging；失败耗用仍计网络预算。
+默认单文件32MiB（硬128）、命令总64MiB（硬256）、命令30s（硬300）。安全schema与元数据枚举本地扫描仍是有限CPU工作；本地fsync不可强杀。
+全GET只接受200；304仅条件请求；不接受未请求的206。完整size/hash成功后fsync/rename才发布ref/entry/state。
+每次归档改写同样64MiB检查。all failed -> attachments_failed，部分失败 -> partial，详情结构化给出；没有附件是0结果，不能冒充下载验收通过。
+signed URL/Bearer从不落盘或回显；下载GET不附带Connect鉴权。只允许公开HTTPS、标准443、无userinfo/hash，DNS解析拒绝私有/loopback/reserved结果且钉住解析地址，TLS校验正常，拒绝重定向。
+这信任已登录backend提供的数据、OS DNS/TLS与注入SDK代码；不是同UID恶意进程沙箱。custom fetch仅SDK测试/可信集成，CLI/MCP不暴露绕过policy开关。
+0700/0600不是磁盘加密，原始记录及base64都可能有明文，整个archive按敏感信息保护。
 
-## RPC 与分页假设
-
-sync 不消费现有 `message.history` 摘要 DTO，而是直接调用：
-- ListGrokBotAgents：筛选 bot；若远端 truncated，未找到不宣称不存在。
-- ListGrokBotAgentSessions：获取显式 session；空/重复/错误 agent 作用域拒绝。缺失的本地 session 不删除。
-- ListGrokBotTranscriptEntries：始终传 agentId/sessionId/limit=100；响应 generation 作为后续请求的 generation。
-
-entry 内没有 session_id；List 响应也不回显它，session 来自请求。
-假设 before_seq 为排他向前翻页；下一页取本页最小 seq。数值排序用 BigInt，不用 JS number。
-空页、seq=0 只是观察到的停止条件，不证明全量。重复/重叠边界/游标不前进立即停止并记录。
-**before_seq 排他性、limit、排序、generation 稳定性、updated_seq_locked 的服务端语义均未 live 验证**；
-page 响应 metadata 保存在 state.pages，包含 cloud peer/unread anchor/updated_seq_locked（若响应存在）。
-没有把上述字段解释成跨页事务一致性证明。completeness 始终 `unknown`，无 complete=true。
-
-每次 pull 从历史头重新开始，不从旧 checkpoint 跳过已存在 seq；按 (scope,agent,session,generation,seq)
-幂等合并，较大 updated_seq 胜出，相同版本优先非 omitted。entry_id 只是可选关联 ID。
-不因本轮未看到某行而删除。代际分目录，绝不跨 generation 合并；扫描中 generation 切换则不发布该轮数据，
-将 session 的 current_generation 置 null、要求重新 pull。保留旧代际但不冒充当前。
-current_generation 仅表示最后一次成功发布的观察代际，不代表此刻服务端仍处于此代际。
-
-默认全次 pull 预算：100 页 / 32MiB / 30s；可设 --max-pages/--max-bytes/--timeout-ms，
-硬上限 1000 页 / 256MiB / 300s。时间预算限制 RPC 和分页，不中断同步 fsync/本地合并。
-ControlPlane 的 sync 专用 Connect client 限每个解压后响应 16MiB；直接注入自定义 client 时须自行限制传输层。
-bytes 统计是 response/归档行大小的保守预算，超限页不发布。单 session 合并结果/state 各限 64MiB；
-本地 status/render 最多 50 个 session，manifest 索引最多 10000 条。超限清晰报错/记录 budget，绝不静默裁正文。
-
-## 锁、发布与恢复
-
-整次 pull/render 持单写锁；status 不取写锁，只报告 checksum 一致性（并发写时可能暂时 false）。
-每 session 只在分页结束后合并、写一次正式 entries，不逐页重写整个 JSONL。
-文件通过 .sync/staging、写入+fsync、rename、目录 fsync 发布；先 entries，再带 SHA-256 的 state，
-再 session generation 指针和 manifest 索引。manifest 为索引，不保存重复游标。
-多文件不假装具备单事务原子性；state checksum 是数据/检查点崩溃窗口的检测机制。
-若数据已写但 state 未写，status consistent=false、render 拒绝；重新 pull 从头拉并合并有效本地 JSONL，
-发布新 checksum 并记 recovered_data_state_mismatch。损坏/错 scope 的本地 JSONL 拒绝自动修复。正文与 Markdown 的可读性不改变此发布顺序。
-新 session 发布索引前崩溃可能有未索引数据；再次 pull 同一 agent/session 会重新接纳，不依赖索引跳页。
-远端/IO 报错不推进未提交检查点；可能已有其他 session 成功发布（不是整次原子事务）。
-
-进程正常失败会释放自己 token 的锁；强杀后锁**不会自动删**。先确认无任何 writer，人工移除 lock 后重试。
-不要仅凭 PID 不存在就盲删；staging 残留不参与恢复/渲染，可在确认无 writer 后人工清理。
-凭据在原有独立 credential store 中，不主动复制 headers/token 或请求附件签名 URL。
-原始 protobuf 数据自身仍可能含敏感文本/引用，整个归档应视为敏感资料。
-归档不额外提供 at-rest 加密；0700/0600 不等于磁盘加密，base64 也不是加密。
-
-## 明确未实现
-
-Watch/replay/deletes/cleared/cursor-too-old 的实时增量处理、可验证完整性、verified account identity、
-通用/未知卡片解码、解密、transcript blob_hash 正文补读、ReadGrokBotAgentAttachmentChunk、Watch/删除、--all、文件分片/压缩/自动垃圾回收。
-附件下载是独立命令 `sync attachments`：只处理已同步 entries 中的 user-attachment.file_path；
-经 ResolveGrokBotAttachmentReads，仅 outcome=STORE 且未过期的 https URL 才会 GET 落盘。
-**未 live 验证**；signed URL 永不写入归档或结果摘要。blob_hash 不是附件，也不在本命令下载。
-不把远端 file_path/file_name 当作本地写路径；对象按内容 SHA-256 命名。
-原有 message.history 仅窄修 entryKind/bodyOmitted 映射，仍是摘要 API、不是导出层。
-
-render 输出单 session 上限 64MiB，超限报错不截正文；JSONL 仍保留原始数据。新增解码器不增加生产 RPC。
+## 证据与验收
+详见 protocol/attachment-pagination-0.79.3.md。静态代码证据不能替代live验证；每次真实验收单独记录范围与结果。

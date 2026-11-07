@@ -20,6 +20,10 @@ export function component(id: string): string {
     );
   return "id-" + Buffer.from(id).toString("base64url");
 }
+/** Default (unlisted) session has empty session_id on the wire (App omits it). */
+export function sessionComponent(id: string): string {
+  return id === "" ? "default" : component(id);
+}
 export class Archive {
   readonly root: string;
   constructor(root: string, create = false) {
@@ -206,6 +210,51 @@ export class Archive {
     };
   }
 
+  stage() {
+    const rel = ".sync/staging/" + randomUUID() + ".tmp";
+    const tmp = this.file(rel, true);
+    const fd = fs.openSync(
+      tmp,
+      fs.constants.O_WRONLY |
+        fs.constants.O_CREAT |
+        fs.constants.O_EXCL |
+        fs.constants.O_NOFOLLOW,
+      0o600,
+    );
+    let open = true,
+      exists = true;
+    const close = () => {
+      if (open) {
+        fs.closeSync(fd);
+        open = false;
+      }
+    };
+    return {
+      write: (bytes: Uint8Array) => {
+        let off = 0;
+        while (off < bytes.length)
+          off += fs.writeSync(fd, bytes, off, bytes.length - off);
+      },
+      commit: (target: string) => {
+        const dest = this.file(target, true);
+        fs.fsyncSync(fd);
+        close();
+        this.file(target);
+        fs.renameSync(tmp, dest);
+        exists = false;
+        this.syncDir(path.dirname(dest));
+        this.syncDir(path.dirname(tmp));
+      },
+      discard: () => {
+        close();
+        if (exists) {
+          fs.unlinkSync(tmp);
+          exists = false;
+          this.syncDir(path.dirname(tmp));
+        }
+      },
+    };
+  }
   /** Binary counterpart of atomic(); never follows symlinks. */
   atomicBytes(rel: string, data: Uint8Array) {
     const target = this.file(rel, true),

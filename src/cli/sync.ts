@@ -20,15 +20,25 @@ export async function syncCommand(
           "--account-id",
           "--team-id",
           "--max-pages",
+          "--page-size",
           "--max-bytes",
           "--timeout-ms",
         ]
       : []),
     ...(verb === "attachments"
-      ? ["--path", "--max-bytes", "--max-file-bytes", "--timeout-ms"]
+      ? [
+          "--path",
+          "--max-bytes",
+          "--max-file-bytes",
+          "--timeout-ms",
+          "--account-id",
+          "--team-id",
+        ]
       : []),
   ]);
-  const switches = new Set(verb === "pull" ? ["--ack-unverified-scope"] : []);
+  const switches = new Set(
+    ["pull", "attachments"].includes(verb) ? ["--ack-unverified-scope"] : [],
+  );
   const seen = new Set<string>();
   for (let j = 2; j < rest.length; j++) {
     const k = rest[j].split("=")[0];
@@ -73,6 +83,9 @@ export async function syncCommand(
       agentId,
       sessionId,
       path: flag(rest, "--path"),
+      accountId: flag(rest, "--account-id") ?? "",
+      teamId: flag(rest, "--team-id") ?? "",
+      acknowledgeUnverifiedScope: hasFlag(rest, "--ack-unverified-scope"),
       dryRun: globals.dryRun,
       maxBytes: number("--max-bytes"),
       maxFileBytes: number("--max-file-bytes"),
@@ -91,6 +104,7 @@ export async function syncCommand(
     teamId: flag(rest, "--team-id") ?? "",
     acknowledgeUnverifiedScope: hasFlag(rest, "--ack-unverified-scope"),
     dryRun: globals.dryRun,
+    pageSize: number("--page-size"),
     maxPages: number("--max-pages"),
     maxBytes: number("--max-bytes"),
     timeoutMs: number("--timeout-ms"),

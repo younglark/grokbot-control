@@ -1,4 +1,5 @@
 import path from "node:path";
+import { publicHttpsFetch } from "./download-policy.js";
 import fs from "node:fs";
 import {
   decodeStored,
@@ -10,14 +11,14 @@ import { renderEntry, dataBlock } from "./render.js";
 import { GbcError } from "../errors.js";
 import { okResult, failResult, type ResultEnvelope } from "../dto/result.js";
 import type { GrokBotClient } from "../connect/client.js";
-import { Archive, component, hash } from "./fs.js";
+import { Archive, component, hash, sessionComponent } from "./fs.js";
 import {
   ATTACHMENT_DOWNLOADER,
   DEFAULT_ATTACH,
   HARD_ATTACH,
   acceptStoreRead,
   assertRemotePath,
-  downloadHttpsBytes,
+  downloadToStage,
   objectRel,
   redactAttachmentError,
   refRel,
@@ -40,6 +41,7 @@ export type PullInput = {
   teamId: string;
   acknowledgeUnverifiedScope: boolean;
   dryRun?: boolean;
+  pageSize?: number;
   maxPages?: number;
   maxBytes?: number;
   timeoutMs?: number;
@@ -51,6 +53,9 @@ export type LocalInput = {
   dryRun?: boolean;
 };
 export type AttachmentsInput = LocalInput & {
+  accountId: string;
+  teamId: string;
+  acknowledgeUnverifiedScope: boolean;
   /** Optional exact remote file_path filter (not a local path). */
   path?: string;
   maxBytes?: number;
@@ -100,7 +105,10 @@ function bounded(v: number | undefined, def: number, max: number): number {
     throw new GbcError("invalid_argument", `sync bound must be 1..${max}`);
   return n;
 }
-function scope(backend: string, i: PullInput): Scope {
+function scope(
+  backend: string,
+  i: { accountId: string; teamId: string; acknowledgeUnverifiedScope: boolean },
+): Scope {
   if (!i.acknowledgeUnverifiedScope || !i.accountId || !i.teamId)
     throw new GbcError(
       "denied",
@@ -130,7 +138,7 @@ function botDir(id: string) {
   return `bots/${component(id)}`;
 }
 function sessionDir(a: string, s: string) {
-  return `${botDir(a)}/sessions/${component(s)}`;
+  return `${botDir(a)}/sessions/${sessionComponent(s)}`;
 }
 function genDir(a: string, s: string, g: number) {
   return `${sessionDir(a, s)}/generations/${generation(g)}`;
@@ -156,7 +164,7 @@ function manifest(a: Archive, expected?: Scope, create = false) {
     );
   for (const x of m.sessions) {
     component(x.agent_id);
-    component(x.session_id);
+    sessionComponent(x.session_id);
   }
   if (
     expected &&
@@ -266,6 +274,11 @@ function merge(out: Map<string, Entry>, e: Entry) {
           ? { updated_seq: old.updated_seq, body_base64: old.body_base64 }
           : old.last_available_body;
     }
+    if (old?.attachment_local) {
+      const a = decodeStored(old).decoded?.attachment?.file_path,
+        b = decodeStored(e).decoded?.attachment?.file_path;
+      if (a !== undefined && a === b) e.attachment_local = old.attachment_local;
+    }
     out.set(e.seq, e);
   } else if (
     e.updated_seq === old.updated_seq &&
@@ -304,7 +317,7 @@ function fail(e: unknown): ResultEnvelope {
     known
       ? e.message
       : "sync/local IO failed; archive preserved; rerun from history head after resolving cause",
-    { retryable: false },
+    { retryable: false, details: known ? e.details : undefined },
   );
 }
 
@@ -314,7 +327,7 @@ export class SyncOps {
     private client: GrokBotClient,
     private backend: string,
     private simulated = false,
-    private fetchImpl: FetchFn = globalThis.fetch.bind(globalThis),
+    private fetchImpl: FetchFn = publicHttpsFetch,
   ) {}
   private async result(
     fn: () => Promise<unknown>,
@@ -402,6 +415,17 @@ export class SyncOps {
               "not_found",
               "explicit session not returned uniquely by session RPC",
             );
+          // The default conversation has empty session_id and is not returned by
+          // ListGrokBotAgentSessions (live 2026-11-07); include it for agent-wide pulls.
+          if (
+            i.sessionId === undefined &&
+            !sessions.some((s) => s.sessionId === "")
+          )
+            sessions.push({
+              agentId: i.agentId,
+              sessionId: "",
+              default_unlisted: true,
+            });
           if (sessions.length > 50)
             throw new GbcError(
               "resource_exhausted",
@@ -409,7 +433,7 @@ export class SyncOps {
             );
           const seenSessions = new Set<string>();
           for (const s of sessions) {
-            component(s.sessionId);
+            sessionComponent(s.sessionId);
             if (s.agentId !== i.agentId || seenSessions.has(s.sessionId))
               throw new GbcError(
                 "failed_precondition",
@@ -430,10 +454,62 @@ export class SyncOps {
             );
           a.atomic(`${botDir(i.agentId)}/bot.json`, botJson);
           const summaries: unknown[] = [];
-          for (const s of sessions) {
+          sessions.sort((a, b) => a.sessionId.localeCompare(b.sessionId));
+          const rotation = Number.isInteger(m.next_session_index)
+            ? m.next_session_index % Math.max(1, sessions.length)
+            : 0;
+          sessions = [
+            ...sessions.slice(rotation),
+            ...sessions.slice(0, rotation),
+          ];
+          const pageSize = bounded(i.pageSize, 100, 500);
+          for (const [sessionIndex, s] of sessions.entries()) {
             const sid = s.sessionId as string;
-            let g: number | undefined,
-              before: string | undefined,
+            if (
+              pages >= maxPages ||
+              bytes >= maxBytes ||
+              Date.now() >= deadline
+            ) {
+              summaries.push({
+                session_id: sid,
+                published: false,
+                pages: 0,
+                bytes: 0,
+                stop_reason: "command_budget_before_session",
+              });
+              continue;
+            }
+            const priorSession = a.json(
+              `${sessionDir(i.agentId, sid)}/session.json`,
+            );
+            const priorG = priorSession?.current_generation;
+            let previous: any, priorText: string | undefined;
+            if (Number.isInteger(priorG)) {
+              const pg = genDir(i.agentId, sid, priorG);
+              previous = a.json(`${pg}/state.json`);
+              priorText = a.read(`${pg}/entries.jsonl`);
+              if (
+                priorText === undefined ||
+                previous?.entries_sha256 !== hash(priorText)
+              )
+                previous = undefined;
+            }
+            const startPages = pages,
+              startBytes = bytes;
+            // Budget-one calls alternate HEAD refresh and continuation BACKFILL.
+            const resumeOnly =
+              previous?.next_phase === "backfill" &&
+              previous?.backfill_before_seq != null;
+            let backfillCursor: string | undefined =
+              previous?.backfill_before_seq ?? undefined;
+            let reachedOldest = previous?.backfill_end_observed === true;
+            let isHead = !resumeOnly,
+              headObserved = false,
+              pageAccepted = false;
+            let g: number | undefined = resumeOnly ? priorG : undefined,
+              before: string | undefined = resumeOnly
+                ? backfillCursor
+                : undefined,
               stop = "page_budget",
               fetched = new Map<string, Entry>();
             const pageMeta: unknown[] = [];
@@ -445,8 +521,8 @@ export class SyncOps {
               const res = await call("listGrokBotTranscriptEntries", {
                 agentId: i.agentId,
                 sessionId: sid,
-                limit: 100,
-                ...(g === undefined ? {} : { generation: g }),
+                limit: pageSize,
+                ...(g === undefined || g === 0 ? {} : { generation: g }),
                 ...(before === undefined ? {} : { beforeSeq: BigInt(before) }),
               });
               pages++;
@@ -456,6 +532,10 @@ export class SyncOps {
                 break;
               }
               g = nextG;
+              if (isHead && priorG !== g) {
+                backfillCursor = undefined;
+                reachedOldest = false;
+              }
               const responseSize = Buffer.byteLength(
                 JSON.stringify(jsonSafe(res)),
               );
@@ -477,6 +557,10 @@ export class SyncOps {
               const { entries: _entries, ...meta } = jsonSafe(res);
               pageMeta.push({ before_seq: before ?? null, response: meta });
               if (!rows.length) {
+                pageAccepted = true;
+                if (isHead) headObserved = true;
+                if (!isHead || backfillCursor === undefined)
+                  reachedOldest = true;
                 stop = "empty_page_unverified";
                 break;
               }
@@ -493,8 +577,25 @@ export class SyncOps {
                 stop = "cursor_no_progress_or_boundary_overlap";
                 break;
               }
+              pageAccepted = true;
+              if (isHead) headObserved = true;
               for (const e of rows) merge(fetched, e);
-              before = String(min);
+              if (isHead) {
+                if (
+                  backfillCursor === undefined ||
+                  BigInt(backfillCursor) > min!
+                )
+                  backfillCursor = String(min);
+                before = backfillCursor;
+                isHead = false;
+                if (reachedOldest) {
+                  stop = "head_refreshed_history_previously_observed";
+                  break;
+                }
+              } else {
+                before = String(min);
+                backfillCursor = before;
+              }
               if (min === 0n) {
                 stop = "seq_zero_unverified";
                 break;
@@ -556,7 +657,23 @@ export class SyncOps {
               pagination_live_verified: false,
               stop_reason: stop,
               history_before_seq: before ?? null,
-              restart_policy: "always_from_head",
+              restart_policy: "alternating_head_and_backfill",
+              view: "retained_observations_not_current_mirror",
+              current_membership: "unknown; deletes not consumed",
+              head_refreshed_at_ms: headObserved
+                ? String(Date.now())
+                : (previous?.head_refreshed_at_ms ?? null),
+              backfill_before_seq: backfillCursor ?? null,
+              backfill_end_observed: reachedOldest,
+              next_phase: !pageAccepted
+                ? (previous?.next_phase ?? "head")
+                : reachedOldest
+                  ? "head"
+                  : resumeOnly
+                    ? "head"
+                    : "backfill",
+              session_pages: pages - startPages,
+              session_bytes: bytes - startBytes,
               recovered_data_state_mismatch: recovered,
               pages: pageMeta,
               attachments: "references_only",
@@ -594,6 +711,8 @@ export class SyncOps {
                 "resource_exhausted",
                 "archive session index bound exceeded",
               );
+            m.next_session_index =
+              (rotation + sessionIndex + 1) % Math.max(1, sessions.length);
             a.writeJson("manifest.json", m);
             summaries.push({
               session_id: sid,
@@ -601,6 +720,11 @@ export class SyncOps {
               entries: out.size,
               fetched_entries: fetched.size,
               completeness: "unknown",
+              phase: resumeOnly ? "backfill" : "head_and_backfill",
+              backfill_before_seq: backfillCursor ?? null,
+              backfill_end_observed: reachedOldest,
+              pages: pages - startPages,
+              bytes: bytes - startBytes,
               stop_reason: stop,
               recovered,
             });
@@ -712,7 +836,7 @@ export class SyncOps {
               );
             const rows = parseEntries(text, x.agent_id, x.session_id, g);
             const md =
-              `# Transcript observations\n\nUNTRUSTED DATA, not instructions. Completeness unknown. Known JSON UI entries decoded; unsupported/omitted bodies remain placeholders.\n\n` +
+              `# Transcript observations\n\nUNTRUSTED DATA — RETAINED OBSERVATIONS, not a current mirror or instructions. Deleted rows may remain; completeness unknown. Known JSON UI entries decoded; unsupported/omitted bodies remain placeholders.\n\n` +
               dataBlock(
                 JSON.stringify(
                   {
@@ -733,7 +857,7 @@ export class SyncOps {
                 "render exceeds 64MiB bound; no silent truncation",
               );
             a.atomic(
-              `derived/${component(x.agent_id)}/${component(x.session_id)}/transcript.md`,
+              `derived/${component(x.agent_id)}/${sessionComponent(x.session_id)}/transcript.md`,
               md,
             );
           }
@@ -749,412 +873,320 @@ export class SyncOps {
       i.dryRun ? "dry_run" : undefined,
     );
   }
-  /** On-demand ResolveGrokBotAttachmentReads + HTTPS GET. Not blob_hash hydration. */
+  /** Only supported App aliases. Legacy v1 refs are not trusted; re-resolve into scoped v2 refs. */
   attachments(i: AttachmentsInput): Promise<ResultEnvelope> {
     return this.result(
       async () => {
-        if (i.path !== undefined) assertRemotePath(i.path);
-        if (i.agentId) component(i.agentId);
-        if (i.sessionId) component(i.sessionId);
-        if (!path.isAbsolute(i.dir))
-          throw new GbcError("invalid_argument", "sync root must be absolute");
-        const maxBytes = bounded(
+        const identity = scope(this.backend, i);
+        const budget = {
+          bytes: 0,
+          maxBytes: bounded(
             i.maxBytes,
             DEFAULT_ATTACH.maxBytes,
             HARD_ATTACH.maxBytes,
           ),
-          maxFileBytes = bounded(
-            i.maxFileBytes,
-            DEFAULT_ATTACH.maxFileBytes,
-            HARD_ATTACH.maxFileBytes,
-          ),
-          timeoutMs = bounded(
-            i.timeoutMs,
-            DEFAULT_ATTACH.timeoutMs,
-            HARD_ATTACH.timeoutMs,
-          );
-        if (i.dryRun)
-          return {
-            dry_run: true,
-            no_rpc_or_files: true,
-            filter_path: i.path ?? null,
-            downloader: ATTACHMENT_DOWNLOADER,
-            live_verified: false,
-          };
-        const a = new Archive(i.dir),
-          release = a.lock();
+          deadline:
+            Date.now() +
+            bounded(
+              i.timeoutMs,
+              DEFAULT_ATTACH.timeoutMs,
+              HARD_ATTACH.timeoutMs,
+            ),
+        };
+        const maxFile = bounded(
+          i.maxFileBytes,
+          DEFAULT_ATTACH.maxFileBytes,
+          HARD_ATTACH.maxFileBytes,
+        );
+        if (!path.isAbsolute(i.dir))
+          throw new GbcError("invalid_argument", "sync root must be absolute");
+        const filter =
+          i.path === undefined ? undefined : assertRemotePath(i.path);
+        if (i.dryRun) return { dry_run: true, no_rpc_or_files: true };
+        const a = new Archive(i.dir);
+        manifest(a, identity);
+        const release = a.lock();
         try {
-          const m = manifest(a),
+          const m = manifest(a, identity),
             selected = this.selected(m, i);
           if (!selected.length)
-            throw new GbcError(
-              "not_found",
-              "no matching sessions in archive; pull first",
-            );
-          type Wanted = {
-            agent_id: string;
-            session_id: string;
-            generation: number;
-            seq: string;
-            remote_path: string;
-            file_name?: string;
-          };
-          const wanted: Wanted[] = [];
-          const sessionRows = new Map<
-            string,
-            { agent: string; session: string; g: number; entries: Map<string, Entry> }
-          >();
+            throw new GbcError("not_found", "no archived sessions selected");
+          const results: any[] = [];
+          let updated = 0;
           for (const x of selected) {
-            const local = a.json(
-              `${sessionDir(x.agent_id, x.session_id)}/session.json`,
+            const g = generation(
+              a.json(`${sessionDir(x.agent_id, x.session_id)}/session.json`)
+                ?.current_generation,
             );
-            if (local?.current_generation === null)
+            const gd = genDir(x.agent_id, x.session_id, g),
+              state = a.json(`${gd}/state.json`),
+              old = a.read(`${gd}/entries.jsonl`);
+            if (old === undefined || state?.entries_sha256 !== hash(old))
               throw new GbcError(
                 "failed_precondition",
-                "generation changed; repull before attachments",
+                "data/state mismatch; repull first",
               );
-            const g = generation(local?.current_generation),
-              gd = genDir(x.agent_id, x.session_id, g);
-            const text = a.read(`${gd}/entries.jsonl`),
-              state = a.json(`${gd}/state.json`);
-            if (text === undefined || state?.entries_sha256 !== hash(text))
-              throw new GbcError(
-                "failed_precondition",
-                "data/state mismatch; rerun pull before attachments",
-              );
-            const rows = parseEntries(text, x.agent_id, x.session_id, g);
-            sessionRows.set(`${x.agent_id}\0${x.session_id}`, {
-              agent: x.agent_id,
-              session: x.session_id,
-              g,
-              entries: rows,
-            });
+            const rows = parseEntries(old, x.agent_id, x.session_id, g);
+            const refs = new Map<string, Entry[]>();
             for (const e of rows.values()) {
               const d = decodeStored(e).decoded;
-              if (d?.kind !== "user-attachment" || !d.attachment?.file_path)
-                continue;
-              const rp = assertRemotePath(d.attachment.file_path);
-              if (i.path !== undefined && rp !== i.path) continue;
-              wanted.push({
-                agent_id: x.agent_id,
-                session_id: x.session_id,
-                generation: g,
-                seq: e.seq,
-                remote_path: rp,
-                file_name: d.attachment.file_name,
-              });
-            }
-          }
-
-          const verifyExisting = (
-            agentId: string,
-            rp: string,
-          ): AttachmentLocal | undefined => {
-            const existingRef = a.json(refRel(agentId, rp));
-            if (
-              existingRef?.status !== "ok" ||
-              typeof existingRef.content_sha256 !== "string" ||
-              existingRef.relative_path !==
-                objectRel(agentId, existingRef.content_sha256)
-            )
-              return undefined;
-            try {
-              const abs = a.file(objectRel(agentId, existingRef.content_sha256));
-              const fd = fs.openSync(
-                abs,
-                fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW,
-              );
-              let bytes: Buffer;
+              if (!d?.attachment) continue;
+              let rp: string;
               try {
-                const st = fs.fstatSync(fd);
-                if (!st.isFile() || st.nlink !== 1 || st.size > maxFileBytes)
-                  return undefined;
-                bytes = fs.readFileSync(fd);
-              } finally {
-                fs.closeSync(fd);
-              }
-              if (sha256Hex(bytes) !== existingRef.content_sha256)
-                return undefined;
-              return {
-                remote_path: rp,
-                status: "ok",
-                relative_path: existingRef.relative_path,
-                content_sha256: existingRef.content_sha256,
-                size_bytes: existingRef.size_bytes,
-                content_type: existingRef.content_type,
-                etag: existingRef.etag,
-                reason: "already_present",
-                observed_at_ms: String(Date.now()),
-                live_verified: false,
-              };
-            } catch {
-              return undefined;
-            }
-          };
-          const byAgent = new Map<string, string[]>();
-          const results: AttachmentLocal[] = [];
-          const pathResult = new Map<string, AttachmentLocal>();
-          for (const w of wanted) {
-            const key = `${w.agent_id}\0${w.remote_path}`;
-            if (pathResult.has(key)) continue;
-            const existing = verifyExisting(w.agent_id, w.remote_path);
-            if (existing) {
-              pathResult.set(key, existing);
-              results.push(existing);
-              continue;
-            }
-            const list = byAgent.get(w.agent_id) ?? [];
-            if (!list.includes(w.remote_path)) list.push(w.remote_path);
-            byAgent.set(w.agent_id, list);
-          }
-          const deadline = Date.now() + timeoutMs;
-          let spent = 0;
-          const call = async (method: string, req: unknown): Promise<any> => {
-            const ms = deadline - Date.now();
-            if (ms <= 0)
-              throw new GbcError(
-                "deadline_exceeded",
-                "attachment time budget exhausted",
-              );
-            const ac = new AbortController();
-            let timer: NodeJS.Timeout | undefined;
-            try {
-              return await Promise.race([
-                this.client[method](req, { timeoutMs: ms, signal: ac.signal }),
-                new Promise((_, reject) => {
-                  timer = setTimeout(() => {
-                    ac.abort();
-                    reject(
-                      new GbcError(
-                        "deadline_exceeded",
-                        "attachment time budget exhausted",
-                      ),
-                    );
-                  }, ms);
-                }),
-              ]);
-            } finally {
-              clearTimeout(timer);
-            }
-          };
-          for (const [agentId, paths] of byAgent) {
-            for (let iPath = 0; iPath < paths.length; iPath += DEFAULT_ATTACH.resolveBatch) {
-              const batch = paths.slice(iPath, iPath + DEFAULT_ATTACH.resolveBatch);
-              // Prefer session_id only when filtering a single session (optional in proto).
-              const sessionHint =
-                i.sessionId && selected.every((s: any) => s.session_id === i.sessionId)
-                  ? i.sessionId
-                  : undefined;
-              let res: any;
-              try {
-                res = await call("resolveGrokBotAttachmentReads", {
-                  agentId,
-                  paths: batch,
-                  ...(sessionHint ? { sessionId: sessionHint } : {}),
+                rp = assertRemotePath(d.attachment.file_path);
+              } catch {
+                results.push({
+                  agent_id: x.agent_id,
+                  session_id: x.session_id,
+                  seq: e.seq,
+                  status: "unsupported",
+                  reason: "unsupported_attachment_reference",
                 });
-              } catch (e) {
-                const red = redactAttachmentError(e);
-                for (const rp of batch) {
-                  const local: AttachmentLocal = {
-                    remote_path: rp,
-                    status: red.status,
-                    reason: red.reason,
-                    observed_at_ms: String(Date.now()),
-                    live_verified: false,
-                  };
-                  pathResult.set(`${agentId}\0${rp}`, local);
-                  results.push(local);
-                }
                 continue;
               }
-              const reads = new Map<string, any>();
-              for (const r of res.reads ?? []) reads.set(String(r.path), r);
-              for (const rp of batch) {
-                const key = `${agentId}\0${rp}`;
-                const accepted = acceptStoreRead(
-                  rp,
-                  reads.get(rp),
-                  Date.now(),
-                );
-                if (!accepted.ok) {
-                  const local: AttachmentLocal = {
-                    remote_path: rp,
-                    status: accepted.status,
-                    reason: accepted.reason,
-                    observed_at_ms: String(Date.now()),
-                    live_verified: false,
-                  };
-                  a.writeJson(refRel(agentId, rp), {
-                    ...local,
-                    downloader: ATTACHMENT_DOWNLOADER,
-                  });
-                  pathResult.set(key, local);
-                  results.push(local);
-                  continue;
-                }
-                const store = accepted.store;
-                if (
-                  store.size_bytes !== undefined &&
-                  store.size_bytes > maxFileBytes
-                ) {
-                  const local: AttachmentLocal = {
-                    remote_path: rp,
-                    status: "error",
-                    reason: "size_or_budget",
-                    size_bytes: store.size_bytes,
-                    observed_at_ms: String(Date.now()),
-                    live_verified: false,
-                  };
-                  a.writeJson(refRel(agentId, rp), {
-                    ...local,
-                    downloader: ATTACHMENT_DOWNLOADER,
-                  });
-                  pathResult.set(key, local);
-                  results.push(local);
-                  continue;
-                }
-                if (
-                  store.size_bytes !== undefined &&
-                  spent + store.size_bytes > maxBytes
-                ) {
-                  const local: AttachmentLocal = {
-                    remote_path: rp,
-                    status: "error",
-                    reason: "size_or_budget",
-                    observed_at_ms: String(Date.now()),
-                    live_verified: false,
-                  };
-                  pathResult.set(key, local);
-                  results.push(local);
-                  continue;
-                }
-                const remain = deadline - Date.now();
-                if (remain <= 0) {
-                  const local: AttachmentLocal = {
-                    remote_path: rp,
-                    status: "error",
-                    reason: "timeout",
-                    observed_at_ms: String(Date.now()),
-                    live_verified: false,
-                  };
-                  pathResult.set(key, local);
-                  results.push(local);
-                  continue;
-                }
+              if (filter !== undefined && rp !== filter) continue;
+              refs.set(rp, [...(refs.get(rp) ?? []), e]);
+            }
+            for (const [rp, entries] of refs) {
+              const rr = refRel(x.agent_id, rp, x.session_id);
+              let previous = a.json(rr),
+                checked: any;
+              if (
+                previous?.status === "ok" &&
+                /^[a-f0-9]{64}$/.test(previous.content_sha256 ?? "") &&
+                previous.relative_path ===
+                  objectRel(x.agent_id, previous.content_sha256)
+              ) {
                 try {
-                  const { bytes, content_type } = await downloadHttpsBytes(
-                    store.url,
-                    {
-                      maxBytes: maxFileBytes,
-                      expectedSize: store.size_bytes,
-                      timeoutMs: remain,
-                      fetchImpl: this.fetchImpl,
-                    },
+                  const fd = fs.openSync(
+                    a.file(previous.relative_path),
+                    fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW,
                   );
-                  if (spent + bytes.byteLength > maxBytes) {
-                    const local: AttachmentLocal = {
+                  try {
+                    const st = fs.fstatSync(fd);
+                    if (st.size <= maxFile && st.nlink === 1) {
+                      const h = (await import("node:crypto")).createHash(
+                          "sha256",
+                        ),
+                        buf = Buffer.alloc(65536);
+                      let n;
+                      while (
+                        (n = fs.readSync(fd, buf, 0, buf.length, null)) > 0
+                      ) {
+                        if (Date.now() >= budget.deadline) throw new Error();
+                        h.update(buf.subarray(0, n));
+                      }
+                      if (
+                        h.digest("hex") === previous.content_sha256 &&
+                        st.size === previous.size_bytes
+                      )
+                        checked = previous;
+                    }
+                  } finally {
+                    fs.closeSync(fd);
+                  }
+                } catch {
+                  checked = undefined;
+                }
+              }
+              let local: AttachmentLocal;
+              try {
+                let complete = false;
+                for (let attempt = 0; attempt < 2; attempt++) {
+                  const ms = budget.deadline - Date.now();
+                  if (ms <= 0)
+                    throw new GbcError(
+                      "deadline_exceeded",
+                      "attachment deadline",
+                    );
+                  const ac = new AbortController(),
+                    timer = setTimeout(() => ac.abort(), ms);
+                  let res: any;
+                  try {
+                    res = await Promise.race([
+                      this.client.resolveGrokBotAttachmentReads(
+                        {
+                          agentId: x.agent_id,
+                          paths: [rp],
+                          ...(x.session_id ? { sessionId: x.session_id } : {}),
+                        },
+                        { signal: ac.signal, timeoutMs: ms },
+                      ),
+                      new Promise((_, reject) =>
+                        ac.signal.addEventListener(
+                          "abort",
+                          () =>
+                            reject(
+                              new GbcError(
+                                "deadline_exceeded",
+                                "attachment deadline",
+                              ),
+                            ),
+                          { once: true },
+                        ),
+                      ),
+                    ]);
+                  } finally {
+                    clearTimeout(timer);
+                  }
+                  if (
+                    !Array.isArray(res.reads) ||
+                    res.reads.length !== 1 ||
+                    res.reads[0].path !== rp
+                  )
+                    throw new GbcError(
+                      "failed_precondition",
+                      "conflicting attachment resolution",
+                    );
+                  const accepted = acceptStoreRead(
+                    rp,
+                    res.reads[0],
+                    Date.now(),
+                  );
+                  if (!accepted.ok) {
+                    local = {
                       remote_path: rp,
-                      status: "error",
-                      reason: "size_or_budget",
+                      status: accepted.status,
+                      reason: accepted.reason,
                       observed_at_ms: String(Date.now()),
                       live_verified: false,
                     };
-                    pathResult.set(key, local);
-                    results.push(local);
-                    continue;
+                    complete = true;
+                    break;
                   }
-                  const digest = sha256Hex(bytes);
-                  const rel = objectRel(agentId, digest);
-                  a.atomicBytes(rel, bytes);
-                  spent += bytes.byteLength;
-                  const local: AttachmentLocal = {
-                    remote_path: rp,
-                    status: "ok",
-                    relative_path: rel,
-                    content_sha256: digest,
-                    size_bytes: bytes.byteLength,
-                    content_type: store.content_type ?? content_type,
-                    etag: store.etag,
-                    observed_at_ms: String(Date.now()),
-                    live_verified: false,
-                  };
-                  a.writeJson(refRel(agentId, rp), {
-                    ...local,
-                    downloader: ATTACHMENT_DOWNLOADER,
-                  });
-                  pathResult.set(key, local);
-                  results.push(local);
-                } catch (e) {
-                  const red = redactAttachmentError(e);
-                  const local: AttachmentLocal = {
-                    remote_path: rp,
-                    status: red.status,
-                    reason: red.reason,
-                    observed_at_ms: String(Date.now()),
-                    live_verified: false,
-                  };
-                  a.writeJson(refRel(agentId, rp), {
-                    ...local,
-                    downloader: ATTACHMENT_DOWNLOADER,
-                  });
-                  pathResult.set(key, local);
-                  results.push(local);
+                  const store = accepted.store;
+                  const sink = a.stage();
+                  try {
+                    const transfer = await downloadToStage(store.url, {
+                      maxBytes: maxFile,
+                      expectedSize: store.size_bytes!,
+                      budget,
+                      fetchImpl: this.fetchImpl,
+                      etag: checked?.etag,
+                      sink,
+                    });
+                    if (transfer.status === 403) {
+                      if (attempt === 0) continue;
+                      throw new GbcError(
+                        "permission_denied",
+                        "attachment URL rejected after refresh",
+                      );
+                    }
+                    if (transfer.status === 304) {
+                      if (
+                        !checked ||
+                        checked.etag !== store.etag ||
+                        checked.size_bytes !== store.size_bytes
+                      )
+                        throw new GbcError(
+                          "failed_precondition",
+                          "304 metadata mismatch",
+                        );
+                      local = {
+                        ...checked,
+                        reason: "not_modified",
+                        observed_at_ms: String(Date.now()),
+                        live_verified: false,
+                      };
+                    } else {
+                      const rel = objectRel(x.agent_id, transfer.digest!);
+                      sink.commit(rel);
+                      local = {
+                        remote_path: rp,
+                        status: "ok",
+                        relative_path: rel,
+                        content_sha256: transfer.digest,
+                        size_bytes: transfer.size,
+                        etag: store.etag,
+                        content_type: store.content_type,
+                        observed_at_ms: String(Date.now()),
+                        live_verified: false,
+                      };
+                    }
+                    complete = true;
+                    break;
+                  } finally {
+                    sink.discard();
+                  }
                 }
+                if (!complete)
+                  throw new GbcError(
+                    "unavailable",
+                    "attachment transfer incomplete",
+                  );
+              } catch (e) {
+                const red = redactAttachmentError(e);
+                local = {
+                  remote_path: rp,
+                  ...red,
+                  observed_at_ms: String(Date.now()),
+                  live_verified: false,
+                };
               }
+              // Preserve old content address as historical, never claim it is the new current ref.
+              const historical =
+                previous?.status === "ok" &&
+                previous.content_sha256 !== local!.content_sha256
+                  ? {
+                      content_sha256: previous.content_sha256,
+                      relative_path: previous.relative_path,
+                    }
+                  : previous?.historical;
+              a.writeJson(rr, {
+                ...local!,
+                historical,
+                scope: identity,
+                agent_id: x.agent_id,
+                session_id: x.session_id,
+                downloader: ATTACHMENT_DOWNLOADER,
+              });
+              for (const e of entries) e.attachment_local = local!;
+              results.push({
+                agent_id: x.agent_id,
+                session_id: x.session_id,
+                ...local!,
+                etag: undefined,
+              });
             }
-          }
-          // Update entries + state + optional derived markdown references.
-          let updatedSessions = 0;
-          for (const row of sessionRows.values()) {
-            let changed = false;
-            for (const e of row.entries.values()) {
-              const d = decodeStored(e).decoded;
-              if (d?.kind !== "user-attachment" || !d.attachment?.file_path)
-                continue;
-              const rp = d.attachment.file_path;
-              const local = pathResult.get(`${row.agent}\0${rp}`);
-              if (!local) continue;
-              e.attachment_local = local;
-              changed = true;
-            }
-            if (!changed) continue;
-            const gd = genDir(row.agent, row.session, row.g);
             const text =
-              [...row.entries.values()]
+              [...rows.values()]
                 .sort((a, b) => (BigInt(a.seq) < BigInt(b.seq) ? -1 : 1))
                 .map((e) => JSON.stringify(e))
-                .join("\n") + (row.entries.size ? "\n" : "");
-            const prev = a.json(`${gd}/state.json`) ?? {};
-            const state = {
-              ...prev,
-              entries_sha256: hash(text),
-              entries: row.entries.size,
-              attachments: "on_demand_partial",
-              attachment_downloader: ATTACHMENT_DOWNLOADER,
-              attachment_live_verified: false,
-            };
+                .join("\n") + (rows.size ? "\n" : "");
+            if (Buffer.byteLength(text) > 64 * 1024 * 1024)
+              throw new GbcError(
+                "resource_exhausted",
+                "attachment archive exceeds 64MiB",
+              );
             a.atomic(`${gd}/entries.jsonl`, text);
-            a.writeJson(`${gd}/state.json`, state);
-            updatedSessions++;
+            a.writeJson(`${gd}/state.json`, {
+              ...state,
+              entries_sha256: hash(text),
+              attachments: "on_demand_partial",
+              view: "retained_observations_not_current_mirror",
+            });
+            updated++;
           }
-          // Summaries must never include signed URLs.
+          const good = results.filter((r) => r.status === "ok").length,
+            bad = results.length - good;
+          if (bad)
+            throw new GbcError(
+              good ? "partial" : "attachments_failed",
+              "attachment results contain failures/unsupported references",
+              {
+                details: {
+                  results,
+                  bytes_consumed: budget.bytes,
+                  updated_sessions: updated,
+                },
+              },
+            );
           return {
-            downloader: ATTACHMENT_DOWNLOADER,
+            results,
+            requested_paths: results.length,
+            bytes_consumed: budget.bytes,
+            updated_sessions: updated,
             live_verified: false,
-            requested_paths: [...byAgent.values()].reduce((n, p) => n + p.length, 0),
-            results: results.map((r) => ({
-              remote_path: r.remote_path,
-              status: r.status,
-              relative_path: r.relative_path,
-              content_sha256: r.content_sha256,
-              size_bytes: r.size_bytes,
-              content_type: r.content_type,
-              reason: r.reason,
-              observed_at_ms: r.observed_at_ms,
-            })),
-            updated_sessions: updatedSessions,
-            bytes_downloaded: spent,
-            note: "On-demand user-attachment download via ResolveGrokBotAttachmentReads; not live verified. Signed URLs never stored. blob_hash body hydration and ReadGrokBotAgentAttachmentChunk not implemented. Chunked RPC remains future work.",
           };
         } finally {
           release();

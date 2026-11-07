@@ -1,34 +1,34 @@
-# 实现状态（本地，2026-11-07 Asia/Shanghai）
+# 实现状态（2026-11-07，JST）
 
-| 能力 | CLI | MCP | Connect | 测试 | Live |
-|---|---|---|---|---|---|
-| bot create (Temporal) | ✅ | ✅ create_bot | ✅ | ✅ mock+schema | ❌ 未验 |
-| bot list/get(list筛) | ✅ | ✅ | ✅ | ✅ | ❌ |
-| bot update/delete+confirm+dry-run | ✅ | ✅ | ✅ | ✅ | ❌ |
-| message send（无 task id） | ✅ | ✅ | ✅ | ✅ | ❌ |
-| send status / history / sessions | ✅ | ✅ | ✅ | ✅ | ❌ |
-| progress status/todos/tasks/subagents/interrupt | ✅ | ✅ | ✅ | ✅ mock | ❌ |
-| SidebarSections CRUD/move + base | ✅ | ✅ | ✅ | ✅ conflict | ❌ |
-| 文件快照 sync pull / status / render | ✅ | ✅ 启动配置 root + 独立本地写开关 | ✅ 只读 List RPC | ✅ mock/generated transport/FS 恢复 | ❌ 未验 |
-| sync attachments（按需 user-attachment） | ✅ | ✅ sync_attachments（同本地写开关） | ✅ ResolveGrokBotAttachmentReads + HTTPS GET | ✅ mock | ❌ 未验 |
-| Room | unsupported | — | — | — | — |
-| Auth login-begin/complete/poll/refresh/logout（证据驱动，静态逆向） | ✅ | ✅ login_begin/complete/cancel/logout | ✅ | ✅ fake fetch + 本地 fake 后端跨进程 | ✅ 真实浏览器登录 + 只读 RPC（bot list/sidebar list/status）一次人工验证；❌ refresh（需配置 client_id）与写操作未 live 验 |
-| unknown 丢响应 / 不盲重试 | ✅ | ✅ | ✅ | ✅ | — |
+本轮修订基于939e4f7，包含以下修复与隔离验收证据。
 
-`simulated: true` 仅 mock。
+## 本轮修复
+- 保留前次5个未提交修复：update/delete通过List将UUID映射server-id；默认会话使用wire空session和sessions/default。
+- store alias严格规范化两App root/file URL，refs使用session/path SHA-256，中文文件名仅元数据；不读本机alias路径。
+- streaming staging/hash/大小/总预算/截止时间、strict STORE/HTTP、403最多重Resolve一次、公开HTTPS DNS pinning、无Bearer给下载URL。
+- attachments绑定backend/声明account/team/ack；旧无作用域refs不直接信任；scope仍operator_asserted_unverified。
+- user-attachment与send-message attachment两种已证实来源；外部URL/未知路径unsupported。
+- 每次Resolve+条件GET，304先本地完整性检验，远端etag/size匹配才复用；旧对象保留历史。
+- head刷新与generation内backfill游标分离，单页调用交替，两种session跨调用轮转；budget耗尽不推进未处理session。
+- JSONL/data-before-state恢复、64MiB边界、partial/failure结构化；视图标注retained observations，非当前镜像。
 
-协议 vendor：App **0.79.3**（2026-11-07 本仓库从App恢复生成）。上表 Live ✅ 一行是在**旧 0.78.4 vendor** 下完成的；0.79.3 vendor 仅离线验证（`verify_generated.mjs` + `test/proto-vendor-contract.test.ts`），未 live 调用。除 sync 无损归档保留的原始字段外，0.79.x 新增字段仍未暴露为独立 SDK/CLI/MCP 能力。
+## 回归
+npm test **128/128**；build/typecheck通过；test:protocol-tools **5/5**；git diff --check通过。
+测试覆盖scope拒绝、严格路径/URL/metadata、超限stream取消/失败字节计数、截止时间、403/304/同路径版本、坏对象重下载、symlink、backfill进展/公平/崩溃恢复。
 
-同步首版（详见 [sync-format.md](sync-format.md)）：CLI/MCP 共用 SyncOps；session-aware 原始 entry JSONL，
-uint64 字符串/bytes base64、generation 分隔；只做有界重拉合并，不是 Watch 增量/完整备份。
-identity assurance=operator_asserted_unverified，不能自动检测凭据换账户。
-已基于 0.79.3 coordinator 的 TextDecoder -> JSON.parse -> Are/_b 路径支持 message、send-message(text)、
-notice、tool-call name/status/summary、user-attachment 引用的可读 Markdown；未知/省略/blob-only 仍 opaque。
-无通用卡片解码/解密、无 blob_hash 正文补读、无 --all。按需附件下载见 sync attachments（未 live 验证）。证据见 [transcript-body-0.79.3.md](protocol/transcript-body-0.79.3.md)。
-原 message.history 修正 entryKind/bodyOmitted 映射，不改变摘要 API 或假称已能导出明文。
+## 隔离真实后端验收
+证据在仓库外/workspace/gbc-live-fix-20261107132918（0700），不得提交真实archive。
+只创建本轮唯一临时bot，发送1条测试指令，没有修改/向现有bot发消息，没有修改共享sidebar或联系第三方。
+- 真实默认会话generation0：page-size=1/max-pages=1，8次pull，4个唯一seq。
+- 实际before边界排他、0 generation省略；backfill cursor从4→3→2→1→空页观察，重抓head不阻止backfill进展。
+- bot发出send-message attachment，file:// alias，显示中文名“验收测试.txt”。下载36 bytes，固定测试标记/中文/本地hash均匹配。
+- 第二次真实Resolve+条件GET得到not_modified，body 0 bytes；同hash对象复用。render包含本地ref；status checksum一致。
+- 实际CLI status/render成功；MCP readonly sync_status成功且不暴露写工具。
+- finally删除临时bot，最终27个bot与初始27个ID相同，测试ID不在列表，初始缺失0。
 
-本轮离线验证：`npm test` 109/109；`npm run test:protocol-tools` 5/5；`npm run build`、`npm run typecheck`、`git diff --check` 通过。
-含按需附件 mock（Resolve + HTTPS GET、幂等跳过、not_in_store、MCP 写开关/READONLY）。未 live 调用生产。
-包含 CLI 子进程、MCP stdio、generated Connect mock、uint64/未知 wire 字段、
-分页/代际变化/重拉合并、身份不匹配、锁/权限/路径、崩溃检查点恢复测试。
-未调用真实同步 RPC；不表示生产分页/身份/消息解码已验证。
+## 仍未覆盖（不得扩大声称）
+真实服务没有返回命名session，本轮命名+default公平只有回归测试证据；没有凭空创建不确定会话。
+真实user-attachment上传、同路径可变覆盖、URL403/过期、超限下载等没有live执行；有mock/静态覆盖不等于live通过。
+未实现Watch/deletes/clear/cursorTooOld实时补偿、omitted/blob正文补读、chunk fallback、artifact/任意workspace/外链下载。
+全历史行/正文/附件完整性仍unknown；不证明跨页事务快照一致，不保证头页之外旧行变更被刷新。
+账户ID无verified whoami，本次仅隔离验收声明namespace，不冒充server_verified稳定身份；操作者必须自行核对生产账户。

@@ -19,7 +19,7 @@ export type DecodedBody = {
   role_source?: "body.role" | "ui-kind";
   timestamp_ms?: string;
   text?: string;
-  message_type?: "text";
+  message_type?: "text" | "attachment";
   tool_name?: string;
   tool_status?: string;
   attachment?: { file_path: string; file_name?: string };
@@ -98,6 +98,23 @@ export function decodeBody(
       break;
     case "send-message":
       if (!object(v.message)) return opaque("invalid_ui_entry_schema");
+      if (v.message.type === "attachment") {
+        if (
+          typeof v.message.url !== "string" ||
+          !optionalString(v.message.file_name)
+        )
+          return opaque("invalid_ui_entry_schema");
+        d.message_type = "attachment";
+        d.attachment = {
+          file_path: v.message.url,
+          ...(typeof v.message.file_name === "string"
+            ? { file_name: v.message.file_name }
+            : {}),
+        };
+        d.role = "assistant";
+        d.role_source = "ui-kind";
+        break;
+      }
       if (v.message.type !== "text")
         return opaque("unsupported_send_message_type");
       if (typeof v.message.content !== "string")

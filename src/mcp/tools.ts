@@ -16,7 +16,10 @@ export type ToolDef = {
   readOnly?: boolean;
   /** Local auth-state tool (changes only this tool's own credential files). */
   authTool?: boolean;
-  handler: (plane: ControlPlane, args: Record<string, unknown>) => Promise<ResultEnvelope>;
+  handler: (
+    plane: ControlPlane,
+    args: Record<string, unknown>,
+  ) => Promise<ResultEnvelope>;
 };
 
 const agentId = z.string().min(1);
@@ -25,8 +28,17 @@ const writeFlags = {
   allow_writes: z.boolean().optional(),
 };
 
-export type SyncToolConfig = { root: string; allowLocalWrites?: boolean; accountId?: string; teamId?: string; acknowledgeUnverifiedScope?: boolean };
-export function buildTools(opts?: { readOnly?: boolean; sync?: SyncToolConfig }): ToolDef[] {
+export type SyncToolConfig = {
+  root: string;
+  allowLocalWrites?: boolean;
+  accountId?: string;
+  teamId?: string;
+  acknowledgeUnverifiedScope?: boolean;
+};
+export function buildTools(opts?: {
+  readOnly?: boolean;
+  sync?: SyncToolConfig;
+}): ToolDef[] {
   const all: ToolDef[] = [
     {
       name: "list_bots",
@@ -90,7 +102,8 @@ export function buildTools(opts?: { readOnly?: boolean; sync?: SyncToolConfig })
     },
     {
       name: "delete_bot",
-      description: "Delete bot; requires confirm=agent_id. Sidebar cleanup unverified.",
+      description:
+        "Delete bot; requires confirm=agent_id. Sidebar cleanup unverified.",
       inputSchema: z.object({
         agent_id: agentId,
         confirm: z.string().min(1),
@@ -105,10 +118,11 @@ export function buildTools(opts?: { readOnly?: boolean; sync?: SyncToolConfig })
     },
     {
       name: "send_message",
-      description: "Send user message directly (SendGrokBotUserMessage). No task_id required. Delivery ≠ success.",
+      description:
+        "Send user message directly (SendGrokBotUserMessage). No task_id required. Delivery ≠ success.",
       inputSchema: z.object({
         agent_id: agentId,
-        session_id: z.string().min(1),
+        session_id: z.string().optional(),
         text: z.string().min(1),
         message_id: z.string().optional(),
         ...writeFlags,
@@ -116,7 +130,7 @@ export function buildTools(opts?: { readOnly?: boolean; sync?: SyncToolConfig })
       handler: (p, a) =>
         p.message.send({
           agentId: String(a.agent_id),
-          sessionId: String(a.session_id),
+          sessionId: (a.session_id as string | undefined) ?? "",
           text: String(a.text),
           messageId: a.message_id as string | undefined,
           dryRun: Boolean(a.dry_run),
@@ -129,13 +143,13 @@ export function buildTools(opts?: { readOnly?: boolean; sync?: SyncToolConfig })
       readOnly: true,
       inputSchema: z.object({
         agent_id: agentId,
-        session_id: z.string().min(1),
+        session_id: z.string().optional(),
         message_id: z.string().min(1),
       }),
       handler: (p, a) =>
         p.message.status({
           agentId: String(a.agent_id),
-          sessionId: String(a.session_id),
+          sessionId: (a.session_id as string | undefined) ?? "",
           messageId: String(a.message_id),
         }),
     },
@@ -144,7 +158,11 @@ export function buildTools(opts?: { readOnly?: boolean; sync?: SyncToolConfig })
       description: "List transcript entries; ciphertext not decrypted",
       readOnly: true,
       inputSchema: z.object({ agent_id: agentId, limit: limitSchema }),
-      handler: (p, a) => p.message.history({ agentId: String(a.agent_id), limit: a.limit as number | undefined }),
+      handler: (p, a) =>
+        p.message.history({
+          agentId: String(a.agent_id),
+          limit: a.limit as number | undefined,
+        }),
     },
     {
       name: "list_sessions",
@@ -183,7 +201,8 @@ export function buildTools(opts?: { readOnly?: boolean; sync?: SyncToolConfig })
     },
     {
       name: "interrupt_run",
-      description: "InterruptGrokBotAgentRun. MCP request cancel does NOT call this.",
+      description:
+        "InterruptGrokBotAgentRun. MCP request cancel does NOT call this.",
       inputSchema: z.object({
         agent_id: agentId,
         confirm: z.string().min(1),
@@ -219,7 +238,11 @@ export function buildTools(opts?: { readOnly?: boolean; sync?: SyncToolConfig })
     },
     {
       name: "rename_sidebar_section",
-      inputSchema: z.object({ section_id: z.string().min(1), name: z.string().min(1), ...writeFlags }),
+      inputSchema: z.object({
+        section_id: z.string().min(1),
+        name: z.string().min(1),
+        ...writeFlags,
+      }),
       description: "Rename sidebar section",
       handler: (p, a) =>
         p.sidebar.renameSection(String(a.section_id), String(a.name), {
@@ -278,8 +301,11 @@ export function buildTools(opts?: { readOnly?: boolean; sync?: SyncToolConfig })
         "Poll the pending login until signed in or timeout (default 60s, max 120s). Returns auth_pending (retryable) if not yet signed in.",
       readOnly: true,
       authTool: true,
-      inputSchema: z.object({ timeout_seconds: z.number().int().min(1).max(120).optional() }),
-      handler: (p, a) => p.authOps.complete((a.timeout_seconds as number | undefined) ?? 60),
+      inputSchema: z.object({
+        timeout_seconds: z.number().int().min(1).max(120).optional(),
+      }),
+      handler: (p, a) =>
+        p.authOps.complete((a.timeout_seconds as number | undefined) ?? 60),
     },
     {
       name: "auth_login_cancel",
@@ -291,7 +317,8 @@ export function buildTools(opts?: { readOnly?: boolean; sync?: SyncToolConfig })
     },
     {
       name: "auth_logout",
-      description: "Remove this tool's own local credential (does not revoke server session or touch the App)",
+      description:
+        "Remove this tool's own local credential (does not revoke server session or touch the App)",
       readOnly: true,
       authTool: true,
       inputSchema: z.object({}),
@@ -300,20 +327,114 @@ export function buildTools(opts?: { readOnly?: boolean; sync?: SyncToolConfig })
   ];
   if (opts?.sync) {
     const c = { ...opts.sync }; // startup-only copy: callers cannot choose paths or account scope
-    if (!path.isAbsolute(c.root)) throw new GbcError("invalid_argument", "MCP sync root must be absolute");
-    const selectors = { agent_id: agentId.optional(), session_id: agentId.optional() };
-    all.push({ name: "sync_status", description: "Read bounded local archive status; no login/RPC", readOnly: true,
-      inputSchema: z.object(selectors).strict(), handler: (p,a) => p.sync.status({ dir: c.root, agentId: a.agent_id as string | undefined, sessionId: a.session_id as string | undefined }) });
+    if (!path.isAbsolute(c.root))
+      throw new GbcError("invalid_argument", "MCP sync root must be absolute");
+    const selectors = {
+      agent_id: agentId.optional(),
+      session_id: agentId.optional(),
+    };
+    all.push({
+      name: "sync_status",
+      description: "Read bounded local archive status; no login/RPC",
+      readOnly: true,
+      inputSchema: z.object(selectors).strict(),
+      handler: (p, a) =>
+        p.sync.status({
+          dir: c.root,
+          agentId: a.agent_id as string | undefined,
+          sessionId: a.session_id as string | undefined,
+        }),
+    });
     if (c.allowLocalWrites && !opts.readOnly) {
-      all.push({ name: "sync_pull", description: "Write a bounded local snapshot to the configured private root. Only remote read RPCs; known JSON entry kinds decoded, unknown bodies opaque, completeness unknown.",
-        inputSchema: z.object({ agent_id: agentId, session_id: agentId.optional(), dry_run: z.boolean().optional(), max_pages: z.number().int().min(1).max(1000).optional(), max_bytes: z.number().int().min(1).max(256*1024*1024).optional(), timeout_ms: z.number().int().min(1).max(300000).optional() }).strict(),
-        handler: (p,a) => p.sync.pull({ dir: c.root, agentId: String(a.agent_id), sessionId: a.session_id as string | undefined, accountId: c.accountId ?? "", teamId: c.teamId ?? "", acknowledgeUnverifiedScope: c.acknowledgeUnverifiedScope === true, dryRun: a.dry_run as boolean | undefined, maxPages: a.max_pages as number | undefined, maxBytes: a.max_bytes as number | undefined, timeoutMs: a.timeout_ms as number | undefined }) });
-      all.push({ name: "sync_render", description: "Rebuild readable Markdown for verified JSON message/tool-summary shapes locally; unknown bodies opaque, no decryption or RPC",
-        inputSchema: z.object({ ...selectors, dry_run: z.boolean().optional() }).strict(),
-        handler: (p,a) => p.sync.render({ dir: c.root, agentId: a.agent_id as string | undefined, sessionId: a.session_id as string | undefined, dryRun: a.dry_run as boolean | undefined }) });
-      all.push({ name: "sync_attachments", description: "On-demand download of synced user-attachment file_path via ResolveGrokBotAttachmentReads + HTTPS GET into the configured private root. Not live verified; signed URLs never stored; not blob_hash hydration.",
-        inputSchema: z.object({ ...selectors, path: z.string().min(1).max(1024).optional(), dry_run: z.boolean().optional(), max_bytes: z.number().int().min(1).max(256*1024*1024).optional(), max_file_bytes: z.number().int().min(1).max(128*1024*1024).optional(), timeout_ms: z.number().int().min(1).max(300000).optional() }).strict(),
-        handler: (p,a) => p.sync.attachments({ dir: c.root, agentId: a.agent_id as string | undefined, sessionId: a.session_id as string | undefined, path: a.path as string | undefined, dryRun: a.dry_run as boolean | undefined, maxBytes: a.max_bytes as number | undefined, maxFileBytes: a.max_file_bytes as number | undefined, timeoutMs: a.timeout_ms as number | undefined }) });
+      all.push({
+        name: "sync_pull",
+        description:
+          "Write a bounded local snapshot to the configured private root. Only remote read RPCs; known JSON entry kinds decoded, unknown bodies opaque, completeness unknown.",
+        inputSchema: z
+          .object({
+            agent_id: agentId,
+            session_id: agentId.optional(),
+            dry_run: z.boolean().optional(),
+            page_size: z.number().int().min(1).max(500).optional(),
+            max_pages: z.number().int().min(1).max(1000).optional(),
+            max_bytes: z
+              .number()
+              .int()
+              .min(1)
+              .max(256 * 1024 * 1024)
+              .optional(),
+            timeout_ms: z.number().int().min(1).max(300000).optional(),
+          })
+          .strict(),
+        handler: (p, a) =>
+          p.sync.pull({
+            dir: c.root,
+            agentId: String(a.agent_id),
+            sessionId: a.session_id as string | undefined,
+            accountId: c.accountId ?? "",
+            teamId: c.teamId ?? "",
+            acknowledgeUnverifiedScope: c.acknowledgeUnverifiedScope === true,
+            dryRun: a.dry_run as boolean | undefined,
+            pageSize: a.page_size as number | undefined,
+            maxPages: a.max_pages as number | undefined,
+            maxBytes: a.max_bytes as number | undefined,
+            timeoutMs: a.timeout_ms as number | undefined,
+          }),
+      });
+      all.push({
+        name: "sync_render",
+        description:
+          "Rebuild readable Markdown for verified JSON message/tool-summary shapes locally; unknown bodies opaque, no decryption or RPC",
+        inputSchema: z
+          .object({ ...selectors, dry_run: z.boolean().optional() })
+          .strict(),
+        handler: (p, a) =>
+          p.sync.render({
+            dir: c.root,
+            agentId: a.agent_id as string | undefined,
+            sessionId: a.session_id as string | undefined,
+            dryRun: a.dry_run as boolean | undefined,
+          }),
+      });
+      all.push({
+        name: "sync_attachments",
+        description:
+          "On-demand download of synced user-attachment file_path via ResolveGrokBotAttachmentReads + HTTPS GET into the configured private root. Not live verified; signed URLs never stored; not blob_hash hydration.",
+        inputSchema: z
+          .object({
+            ...selectors,
+            path: z.string().min(1).max(4096).optional(),
+            dry_run: z.boolean().optional(),
+            max_bytes: z
+              .number()
+              .int()
+              .min(1)
+              .max(256 * 1024 * 1024)
+              .optional(),
+            max_file_bytes: z
+              .number()
+              .int()
+              .min(1)
+              .max(128 * 1024 * 1024)
+              .optional(),
+            timeout_ms: z.number().int().min(1).max(300000).optional(),
+          })
+          .strict(),
+        handler: (p, a) =>
+          p.sync.attachments({
+            dir: c.root,
+            agentId: a.agent_id as string | undefined,
+            sessionId: a.session_id as string | undefined,
+            path: a.path as string | undefined,
+            accountId: c.accountId ?? "",
+            teamId: c.teamId ?? "",
+            acknowledgeUnverifiedScope: c.acknowledgeUnverifiedScope === true,
+            dryRun: a.dry_run as boolean | undefined,
+            maxBytes: a.max_bytes as number | undefined,
+            maxFileBytes: a.max_file_bytes as number | undefined,
+            timeoutMs: a.timeout_ms as number | undefined,
+          }),
+      });
     }
   }
   if (opts?.readOnly) return all.filter((t) => t.readOnly);

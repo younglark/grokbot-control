@@ -52,7 +52,7 @@ message 的 role 按源数据保留；send-message 的 assistant 和 attachment 
 工具 arguments/result/output 的完整结构没有在这条 UI entry 路径得到确认，**只显示名称/状态/summary，不声称是完整工具结果**。
 未知工具名可以按数据显示，绝不会执行工具。附件路径只是文本引用，不打开/下载/拼成归档写路径。
 
-未支持：非 text send-message（widget/secret-request/email-draft/approval 等）、mcp-app、event、voice-call、
+未支持：非 text/attachment send-message（widget/secret-request/email-draft/approval 等）、mcp-app、event、voice-call、
 feedback、labeler-question、未来种类、结构不符/不合法 UTF-8/非 JSON/超解码上限、body 省略/缺失。
 这些都保留原 bytes/raw/wire，Markdown 明确占位。inline JSON 成功仅记 plaintext_json（包裹层可读），
 其他情况记 encryption unknown；不会因解析失败而宣称是密文。协议其他文本字段的 FieldState.ENCRYPTED 不能套用到这里。
@@ -78,3 +78,9 @@ SearchGrokBotTranscripts 的 snippet 是搜索摘要，不是逐 seq 的全历�
 负例用真实 agent.v1.UserMessage 编码证明“另一个 genuine protobuf 类型”不能被错误当作本路径正文。
 大工具 summary、未知类型、乱码、omitted、scope/seq 不信 body、cached decode 不可信、Markdown/HTML/terminal 转义均有回归。
 正文可读能力是静态协议证据 + synthetic genuine-envelope 验证；真实服务分页/正文覆盖比例/字段变种仍待 live 验证。
+
+## 后续附件分支补充
+renderer `rQ`/`jbt`静态确认send-message.message.type=attachment，path=message.url，name=message.file_name。
+当前decoder支持该结构，下载只接受已证实canonical store alias，外部URL保持unsupported。
+本次隔离live得到file:// alias、中文显示名、36字节文本，条件GET返回not_modified；
+不将一次成功扩大为通用卡片、任意附件或blob正文支持。详见attachment-pagination-0.79.3.md与implementation-status.md。

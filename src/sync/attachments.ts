@@ -5,7 +5,8 @@ import { createHash } from "node:crypto";
 import { GbcError } from "../errors.js";
 import { component } from "./fs.js";
 
-export const ATTACHMENT_DOWNLOADER = "resolve-attachment-reads/0.79.3-ondemand-v1";
+export const ATTACHMENT_DOWNLOADER =
+  "resolve-attachment-reads/0.79.3-ondemand-v1";
 export const DEFAULT_ATTACH = {
   maxFileBytes: 32 * 1024 * 1024,
   maxBytes: 64 * 1024 * 1024,
@@ -17,15 +18,11 @@ export const HARD_ATTACH = {
   maxBytes: 256 * 1024 * 1024,
   timeoutMs: 300000,
   resolveBatch: 32,
-  pathBytes: 1024,
+  pathBytes: 4096,
 } as const;
 
 export type AttachmentLocalStatus =
-  | "ok"
-  | "not_in_store"
-  | "no_storage"
-  | "error"
-  | "skipped";
+  "ok" | "not_in_store" | "no_storage" | "error" | "skipped";
 
 export type AttachmentLocal = {
   remote_path: string;
@@ -40,34 +37,81 @@ export type AttachmentLocal = {
   live_verified: false;
 };
 
-export function assertRemotePath(path: string): string {
-  if (typeof path !== "string" || !path)
-    throw new GbcError("invalid_argument", "attachment path required");
-  if (Buffer.byteLength(path) > HARD_ATTACH.pathBytes || /[\x00-\x1f]/.test(path))
+// App main-core: /home/box/agent-data (model alias), /home/box/sand-data.
+// These strings are REMOTE references, never paths read from this computer.
+export function assertRemotePath(value: string): string {
+  if (
+    typeof value !== "string" ||
+    !value ||
+    Buffer.byteLength(value) > 4096 ||
+    /[\x00-\x1f\x7f\\]/.test(value)
+  )
     throw new GbcError(
       "invalid_argument",
-      "attachment path must be <=1024 bytes without control characters",
+      "invalid remote attachment reference",
     );
-  // Never treat remote path as a local filesystem path.
-  if (path.startsWith("/") || path.includes("\\") || path.split("/").some((p) => p === "." || p === ".."))
-    throw new GbcError("invalid_argument", "unsafe attachment path encoding");
-  return path;
+  let p = value;
+  if (p.startsWith("file:")) {
+    let u: URL;
+    try {
+      u = new URL(p);
+    } catch {
+      throw new GbcError("invalid_argument", "invalid remote file URL");
+    }
+    if (
+      u.host ||
+      u.search ||
+      u.hash ||
+      p !== `file://${u.pathname}` ||
+      /%2f|%5c/i.test(u.pathname)
+    )
+      throw new GbcError("invalid_argument", "invalid remote file URL");
+    try {
+      p = decodeURIComponent(u.pathname);
+    } catch {
+      throw new GbcError(
+        "invalid_argument",
+        "invalid remote file URL encoding",
+      );
+    }
+  }
+  if (
+    /[\x00-\x1f\x7f\\]/.test(p) ||
+    p.split("/").some((x) => x === "." || x === "..")
+  )
+    throw new GbcError(
+      "invalid_argument",
+      "unsafe remote attachment reference",
+    );
+  const m =
+    /^\/home\/box\/(?:agent-data|sand-data)\/agents\/([A-Za-z0-9._-]{1,128})\/(attachments|assets)\/([0-9a-f]{64}\.[0-9a-z]{1,16})$/.exec(
+      p,
+    );
+  if (!m || m[1] === "." || m[1] === "..")
+    throw new GbcError(
+      "unsupported",
+      "not a supported App store attachment alias",
+    );
+  return `/home/box/agent-data/agents/${m[1]}/${m[2]}/${m[3]}`;
 }
-
 export function pathKey(remotePath: string): string {
-  return component(assertRemotePath(remotePath));
+  return createHash("sha256")
+    .update(assertRemotePath(remotePath))
+    .digest("hex");
 }
-
 export function objectRel(agentId: string, sha256: string): string {
   if (!/^[0-9a-f]{64}$/.test(sha256))
     throw new GbcError("invalid_argument", "invalid content hash");
   return `bots/${component(agentId)}/attachments/objects/sha256-${sha256}`;
 }
-
-export function refRel(agentId: string, remotePath: string): string {
-  return `bots/${component(agentId)}/attachments/refs/${pathKey(remotePath)}.json`;
+export function refRel(
+  agentId: string,
+  remotePath: string,
+  sessionId = "",
+): string {
+  const sk = createHash("sha256").update(sessionId).digest("hex");
+  return `bots/${component(agentId)}/attachments/refs-v2/${sk}/${pathKey(remotePath)}.json`;
 }
-
 export function mapOutcome(outcome: unknown): AttachmentLocalStatus | "store" {
   const n =
     typeof outcome === "number"
@@ -132,7 +176,7 @@ export function acceptStoreRead(
 ):
   | { ok: true; store: ResolvedStore }
   | { ok: false; status: AttachmentLocalStatus; reason: string } {
-  const path = String(read?.path ?? remotePath);
+  const path = String(read?.path ?? "");
   if (path !== remotePath)
     return {
       ok: false,
@@ -144,8 +188,7 @@ export function acceptStoreRead(
     return {
       ok: false,
       status: mapped === "error" ? "error" : mapped,
-      reason:
-        mapped === "error" ? "resolve_outcome_unusable" : mapped,
+      reason: mapped === "error" ? "resolve_outcome_unusable" : mapped,
     };
   const url = read?.url;
   if (typeof url !== "string" || !url)
@@ -156,10 +199,16 @@ export function acceptStoreRead(
   } catch {
     return { ok: false, status: "error", reason: "store_url_unusable" };
   }
-  if (parsed.protocol !== "https:")
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.username ||
+    parsed.password ||
+    parsed.hash ||
+    (parsed.port && parsed.port !== "443")
+  )
     return { ok: false, status: "error", reason: "store_url_not_https" };
   const expires = int64Ms(read?.expiresAtMs ?? read?.expires_at_ms);
-  if (expires !== undefined && expires <= nowMs)
+  if (expires === undefined || expires <= nowMs + 1000)
     return { ok: false, status: "error", reason: "store_url_expired" };
   const size = int64Size(read?.sizeBytes ?? read?.size_bytes);
   const contentType =
@@ -169,6 +218,18 @@ export function acceptStoreRead(
         ? read.content_type
         : undefined;
   const etag = typeof read?.etag === "string" ? read.etag : undefined;
+  if (
+    size === undefined ||
+    !etag ||
+    etag.length > 512 ||
+    /[\x00-\x20\x7f]/.test(etag)
+  )
+    return { ok: false, status: "error", reason: "invalid_store_metadata" };
+  if (
+    contentType &&
+    (contentType.length > 256 || /[\x00-\x1f\x7f]/.test(contentType))
+  )
+    return { ok: false, status: "error", reason: "invalid_store_metadata" };
   return {
     ok: true,
     store: {
@@ -182,84 +243,120 @@ export function acceptStoreRead(
   };
 }
 
-export type FetchFn = (
-  input: string,
-  init?: RequestInit,
-) => Promise<Response>;
+export type FetchFn = (input: string, init?: RequestInit) => Promise<Response>;
 
-export async function downloadHttpsBytes(
+export type TransferBudget = {
+  bytes: number;
+  maxBytes: number;
+  deadline: number;
+};
+/** Stream directly into a private staging sink. Failed network bytes count too. */
+export async function downloadToStage(
   url: string,
   opts: {
     maxBytes: number;
-    expectedSize?: number;
-    timeoutMs: number;
+    expectedSize: number;
+    budget: TransferBudget;
     fetchImpl: FetchFn;
-    signal?: AbortSignal;
+    etag?: string;
+    sink: { write(bytes: Uint8Array): void; discard(): void };
   },
-): Promise<{ bytes: Uint8Array; content_type?: string }> {
-  if (opts.expectedSize !== undefined && opts.expectedSize > opts.maxBytes)
+): Promise<{ status: number; digest?: string; size?: number }> {
+  const remain = opts.budget.deadline - Date.now();
+  if (remain <= 0)
+    throw new GbcError("deadline_exceeded", "attachment command deadline");
+  if (
+    opts.expectedSize > opts.maxBytes ||
+    opts.expectedSize > opts.budget.maxBytes - opts.budget.bytes
+  )
     throw new GbcError(
       "resource_exhausted",
-      "attachment declared size exceeds file bound",
+      "attachment size exceeds remaining budget",
     );
-  const ac = new AbortController();
-  const onAbort = () => ac.abort();
-  opts.signal?.addEventListener("abort", onAbort, { once: true });
-  const timer = setTimeout(() => ac.abort(), opts.timeoutMs);
+  const ac = new AbortController(),
+    timer = setTimeout(() => ac.abort(), remain);
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  let response: Response | undefined;
+  const aborted = new Promise<never>((_, reject) =>
+    ac.signal.addEventListener(
+      "abort",
+      () => reject(new GbcError("deadline_exceeded", "attachment deadline")),
+      { once: true },
+    ),
+  );
   try {
-    const res = await opts.fetchImpl(url, {
-      method: "GET",
-      redirect: "error",
-      signal: ac.signal,
-    });
-    if (!res.ok)
-      throw new GbcError(
-        "unavailable",
-        `attachment HTTP status ${res.status}`,
-      );
-    const declared = res.headers.get("content-length");
-    if (declared !== null) {
-      if (!/^\d+$/.test(declared))
-        throw new GbcError("failed_precondition", "invalid content-length");
-      const n = Number(declared);
-      if (!Number.isSafeInteger(n) || n > opts.maxBytes)
-        throw new GbcError(
-          "resource_exhausted",
-          "attachment content-length exceeds file bound",
-        );
-      if (opts.expectedSize !== undefined && n !== opts.expectedSize)
-        throw new GbcError(
-          "failed_precondition",
-          "attachment content-length mismatches resolve size",
-        );
+    const headers: Record<string, string> = {};
+    if (opts.etag)
+      headers["if-none-match"] =
+        opts.etag.startsWith('"') || opts.etag.startsWith("W/")
+          ? opts.etag
+          : `"${opts.etag}"`;
+    const res = await Promise.race([
+      opts.fetchImpl(url, {
+        method: "GET",
+        headers,
+        redirect: "error",
+        signal: ac.signal,
+      }),
+      aborted,
+    ]);
+    response = res;
+    if (res.status === 403 || (res.status === 304 && opts.etag)) {
+      await res.body?.cancel();
+      return { status: res.status };
     }
-    const buf = new Uint8Array(await res.arrayBuffer());
-    if (buf.byteLength > opts.maxBytes)
-      throw new GbcError(
-        "resource_exhausted",
-        "attachment body exceeds file bound",
-      );
+    if (res.status !== 200)
+      throw new GbcError("unavailable", "attachment HTTP response rejected");
+    const len = res.headers.get("content-length");
     if (
-      opts.expectedSize !== undefined &&
-      buf.byteLength !== opts.expectedSize
+      len !== null &&
+      (!/^\d+$/.test(len) || Number(len) !== opts.expectedSize)
     )
       throw new GbcError(
         "failed_precondition",
-        "attachment body size mismatches resolve size",
+        "attachment size header mismatch",
       );
-    const ct = res.headers.get("content-type") ?? undefined;
-    return { bytes: buf, content_type: ct ?? undefined };
+    const h = createHash("sha256");
+    let size = 0;
+    reader = res.body?.getReader();
+    if (!reader && opts.expectedSize !== 0)
+      throw new GbcError("failed_precondition", "attachment body missing");
+    while (reader) {
+      if (Date.now() >= opts.budget.deadline)
+        throw new GbcError("deadline_exceeded", "attachment command deadline");
+      const { value, done } = await Promise.race([reader.read(), aborted]);
+      if (done) break;
+      size += value.byteLength;
+      opts.budget.bytes += value.byteLength;
+      if (
+        size > opts.maxBytes ||
+        size > opts.expectedSize ||
+        opts.budget.bytes > opts.budget.maxBytes
+      )
+        throw new GbcError(
+          "resource_exhausted",
+          "attachment streaming budget exceeded",
+        );
+      h.update(value);
+      opts.sink.write(value);
+    }
+    if (size !== opts.expectedSize)
+      throw new GbcError("failed_precondition", "attachment size mismatch");
+    return { status: 200, digest: h.digest("hex"), size };
   } catch (e) {
     if (e instanceof GbcError) throw e;
-    if ((e as Error)?.name === "AbortError")
-      throw new GbcError("deadline_exceeded", "attachment download timed out");
     throw new GbcError(
-      "unavailable",
-      "attachment download failed; URL suppressed",
+      ac.signal.aborted ? "deadline_exceeded" : "unavailable",
+      "attachment transfer failed (URL suppressed)",
     );
   } finally {
     clearTimeout(timer);
-    opts.signal?.removeEventListener("abort", onAbort);
+    if (reader) {
+      void reader.cancel().catch(() => {});
+    } else if (response?.body) {
+      void response.body.cancel().catch(() => {});
+    }
+    // Do not reject the already-finished abort promise in finally.
   }
 }
 

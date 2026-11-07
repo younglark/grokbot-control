@@ -1,7 +1,13 @@
 #!/usr/bin/env node
 import { syncCommand } from "./sync.js";
 import { HELP } from "./help.js";
-import { buildPlane, flag, hasFlag, parseGlobals, persistMockState } from "./config.js";
+import {
+  buildPlane,
+  flag,
+  hasFlag,
+  parseGlobals,
+  persistMockState,
+} from "./config.js";
 import { catchToExit, emitResult, usageExit } from "./io.js";
 import { failResult, okResult } from "../dto/result.js";
 import { parseCliLimit } from "../ops/limits.js";
@@ -19,7 +25,8 @@ async function main(): Promise<number> {
   if (!noun || !verb) usageExit("missing <noun> <verb>", "gbc --help");
 
   try {
-    if (noun === "sync") return emitResult(await syncCommand(globals, rest), asJson);
+    if (noun === "sync")
+      return emitResult(await syncCommand(globals, rest), asJson);
     const plane = buildPlane(globals);
     const write = {
       dryRun: globals.dryRun,
@@ -37,7 +44,11 @@ async function main(): Promise<number> {
         code = emitResult(await ops.poll(), asJson);
       } else if (verb === "complete" || verb === "login") {
         const timeout = flag(rest, "--timeout");
-        if (timeout !== undefined && !/^\d+$/.test(timeout)) usageExit("--timeout must be an integer number of seconds", "--timeout=300");
+        if (timeout !== undefined && !/^\d+$/.test(timeout))
+          usageExit(
+            "--timeout must be an integer number of seconds",
+            "--timeout=300",
+          );
         if (verb === "login") {
           const begin = await ops.begin();
           if (!begin.ok) {
@@ -47,7 +58,11 @@ async function main(): Promise<number> {
           }
           // Human-facing URL goes to stderr; stdout carries only the final result.
           process.stderr.write(
-            JSON.stringify({ event: "open_browser", authorization_url: (begin.data as { authorization_url: string }).authorization_url }) + "\n",
+            JSON.stringify({
+              event: "open_browser",
+              authorization_url: (begin.data as { authorization_url: string })
+                .authorization_url,
+            }) + "\n",
           );
         }
         const ac = new AbortController();
@@ -55,7 +70,13 @@ async function main(): Promise<number> {
         process.once("SIGINT", onSig);
         process.once("SIGTERM", onSig);
         try {
-          code = emitResult(await ops.complete(timeout === undefined ? undefined : Number(timeout), ac.signal), asJson);
+          code = emitResult(
+            await ops.complete(
+              timeout === undefined ? undefined : Number(timeout),
+              ac.signal,
+            ),
+            asJson,
+          );
         } finally {
           process.off("SIGINT", onSig);
           process.off("SIGTERM", onSig);
@@ -67,10 +88,16 @@ async function main(): Promise<number> {
       } else if (verb === "logout") {
         code = emitResult(await ops.logout(), asJson);
       } else {
-        usageExit(`unknown command: auth ${verb}`, "gbc auth whoami|login|login-begin|complete|poll|cancel|refresh|logout");
+        usageExit(
+          `unknown command: auth ${verb}`,
+          "gbc auth whoami|login|login-begin|complete|poll|cancel|refresh|logout",
+        );
       }
     } else if (noun === "bot" && verb === "list") {
-      code = emitResult(await plane.bot.list({ limit: parseCliLimit(flag(rest, "--limit")) }), asJson);
+      code = emitResult(
+        await plane.bot.list({ limit: parseCliLimit(flag(rest, "--limit")) }),
+        asJson,
+      );
     } else if (noun === "bot" && verb === "get") {
       const id = flag(rest, "--agent-id");
       if (!id) usageExit("bot get requires --agent-id");
@@ -98,7 +125,11 @@ async function main(): Promise<number> {
       code = emitResult(
         await plane.bot.update(
           id,
-          { name: flag(rest, "--name"), description: flag(rest, "--description"), title: flag(rest, "--title") },
+          {
+            name: flag(rest, "--name"),
+            description: flag(rest, "--description"),
+            title: flag(rest, "--title"),
+          },
           write,
         ),
         asJson,
@@ -106,7 +137,13 @@ async function main(): Promise<number> {
     } else if (noun === "bot" && verb === "delete") {
       const id = flag(rest, "--agent-id");
       if (!id) usageExit("bot delete requires --agent-id");
-      code = emitResult(await plane.bot.delete(id, { ...write, confirm: flag(rest, "--confirm") }), asJson);
+      code = emitResult(
+        await plane.bot.delete(id, {
+          ...write,
+          confirm: flag(rest, "--confirm"),
+        }),
+        asJson,
+      );
     } else if (noun === "bot" && verb === "status") {
       const id = flag(rest, "--agent-id");
       if (!id) usageExit("bot status requires --agent-id");
@@ -142,7 +179,11 @@ async function main(): Promise<number> {
       if (hasFlag(rest, "--text-file")) {
         const fs = await import("node:fs");
         const file = flag(rest, "--text-file");
-        if (!file) usageExit("--text-file requires a path", "gbc message send ... --text-file ./msg.txt");
+        if (!file)
+          usageExit(
+            "--text-file requires a path",
+            "gbc message send ... --text-file ./msg.txt",
+          );
         try {
           text = fs.readFileSync(file, "utf8");
         } catch (err) {
@@ -150,13 +191,15 @@ async function main(): Promise<number> {
         }
       }
       if (hasFlag(rest, "--text-stdin")) text = await readStdin();
-      if (!agentId || !sessionId || text == null) {
-        usageExit("message send requires --agent-id --session-id and --text|--text-file|--text-stdin");
+      if (!agentId || text == null) {
+        usageExit(
+          "message send requires --agent-id and --text|--text-file|--text-stdin; omitted --session-id uses default",
+        );
       }
       code = emitResult(
         await plane.message.send({
           agentId,
-          sessionId,
+          sessionId: sessionId ?? "",
           text,
           messageId: flag(rest, "--message-id"),
           dryRun: write.dryRun,
@@ -168,12 +211,28 @@ async function main(): Promise<number> {
       const agentId = flag(rest, "--agent-id");
       const sessionId = flag(rest, "--session-id");
       const messageId = flag(rest, "--message-id");
-      if (!agentId || !sessionId || !messageId) usageExit("message status requires --agent-id --session-id --message-id");
-      code = emitResult(await plane.message.status({ agentId, sessionId, messageId }), asJson);
+      if (!agentId || !messageId)
+        usageExit(
+          "message status requires --agent-id --message-id; optional --session-id",
+        );
+      code = emitResult(
+        await plane.message.status({
+          agentId,
+          sessionId: sessionId ?? "",
+          messageId,
+        }),
+        asJson,
+      );
     } else if (noun === "message" && verb === "history") {
       const agentId = flag(rest, "--agent-id");
       if (!agentId) usageExit("--agent-id required");
-      code = emitResult(await plane.message.history({ agentId, limit: parseCliLimit(flag(rest, "--limit")) }), asJson);
+      code = emitResult(
+        await plane.message.history({
+          agentId,
+          limit: parseCliLimit(flag(rest, "--limit")),
+        }),
+        asJson,
+      );
     } else if (noun === "session" && verb === "list") {
       const agentId = flag(rest, "--agent-id");
       if (!agentId) usageExit("--agent-id required");
@@ -187,25 +246,40 @@ async function main(): Promise<number> {
     } else if (noun === "sidebar" && verb === "rename") {
       const id = flag(rest, "--section-id");
       const name = flag(rest, "--name");
-      if (!id || !name) usageExit("sidebar rename requires --section-id --name");
-      code = emitResult(await plane.sidebar.renameSection(id, name, write), asJson);
+      if (!id || !name)
+        usageExit("sidebar rename requires --section-id --name");
+      code = emitResult(
+        await plane.sidebar.renameSection(id, name, write),
+        asJson,
+      );
     } else if (noun === "sidebar" && verb === "delete") {
       const id = flag(rest, "--section-id");
       if (!id) usageExit("--section-id required");
       code = emitResult(
-        await plane.sidebar.deleteSection(id, { ...write, confirm: flag(rest, "--confirm") }),
+        await plane.sidebar.deleteSection(id, {
+          ...write,
+          confirm: flag(rest, "--confirm"),
+        }),
         asJson,
       );
     } else if (noun === "sidebar" && verb === "move") {
       const agentId = flag(rest, "--agent-id");
       const sectionId = flag(rest, "--section-id");
-      if (!agentId || !sectionId) usageExit("sidebar move requires --agent-id --section-id");
-      code = emitResult(await plane.sidebar.moveBot(agentId, sectionId, write), asJson);
+      if (!agentId || !sectionId)
+        usageExit("sidebar move requires --agent-id --section-id");
+      code = emitResult(
+        await plane.sidebar.moveBot(agentId, sectionId, write),
+        asJson,
+      );
     } else if (noun === "room") {
       code = emitResult(
-        failResult("unsupported", "Room RPCs are intentionally not mixed into sidebar; not implemented in this cut", {
-          hint: "Use sidebar for App sidebar grouping.",
-        }),
+        failResult(
+          "unsupported",
+          "Room RPCs are intentionally not mixed into sidebar; not implemented in this cut",
+          {
+            hint: "Use sidebar for App sidebar grouping.",
+          },
+        ),
         asJson,
       );
     } else {
@@ -227,7 +301,9 @@ function readStdin(): Promise<string> {
     }
     const chunks: Buffer[] = [];
     process.stdin.on("data", (c) => chunks.push(Buffer.from(c)));
-    process.stdin.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+    process.stdin.on("end", () =>
+      resolve(Buffer.concat(chunks).toString("utf8")),
+    );
     process.stdin.on("error", reject);
   });
 }
