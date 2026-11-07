@@ -99,6 +99,11 @@ export const UC_BACKLOG_CLOSED_BEFORE_START =
   "The user's computer stopped serving requests before this one started. Retry it once the computer is back.";
 /** Official keepAliveTick interval c9r (L177956 / L177848 area). */
 export const UC_KEEPALIVE_INTERVAL_MS = 500;
+/** Official rgt / _9r (daemon.formatted.cjs L177859–177860). */
+export const UC_INFLIGHT_MAX = 8;
+export const UC_BACKLOG_MAX = 64;
+export const UC_BUSY_TEXT =
+  "The user's computer is busy with other requests right now; try again shortly.";
 
 export class UserComputerProvider implements UserComputerTransport {
   private closed = false;
@@ -256,11 +261,11 @@ export class UserComputerProvider implements UserComputerTransport {
         this.announcedStanding = liveStanding;
         this.abort.abort(); this.abort = new AbortController();
       }
-      const slots = Math.max(0, 8 + 64 - this.active.size - this.backlog.length);
+      const slots = Math.max(0, UC_INFLIGHT_MAX + UC_BACKLOG_MAX - this.active.size - this.backlog.length);
       // Continue polling at capacity: cancel controls must remain reachable.
       const res = await this.client.pollGrokBotUserComputerRequests({
         machineId: ch.machineId, credential: ch.credential, ackIds: acks,
-        limit: Math.min(this.opts.pollLimit ?? 64, Math.max(1, slots)),
+        limit: Math.min(this.opts.pollLimit ?? UC_BACKLOG_MAX, Math.max(1, slots)),
       }, {timeoutMs: 2000});
       const queued = res.requests.map(parseQueued).filter(q => q.id);
       // Only forget queue ids after the peer confirms receipt of prior acks.
@@ -270,16 +275,17 @@ export class UserComputerProvider implements UserComputerTransport {
         // Capacity is checked before ack/admission. Cancel controls bypass backlog.
         this.seen.add(q.id); this.pendingAcks.push(q.id);
         if (q.parseError) { await this.emit({ kind: "control", requestId: q.requestId, message: { throw: { error: q.parseError } } }); continue; }
-        if (q.kind !== requestKinds.cancel && this.active.size >= 8 && this.backlog.length >= 64) {
-          const error = "The user's computer is busy with other requests right now; try again shortly.";
-          if ([requestKinds.upload,requestKinds.download,requestKinds.discoverAiTool].includes(q.kind)) this.emit({ kind: "file-error", requestId: q.requestId, error });
-          else if (q.kind === requestKinds.messagesOp) this.emit({ kind: "messages-error", requestId: q.requestId, error });
-          else this.emit({ kind: "control", requestId: q.requestId, message: { throw: { id: 0, error } } });
-          continue;
-        }
         if (q.kind === requestKinds.cancel) {
           this.backlog = this.backlog.filter(x => x.requestId !== q.requestId);
           cancelRequest(q.requestId); continue;
+        }
+        // Official (D:L178548–178552): when inflight>=8 and backlog>=64 → busy.
+        // Lab runBacklog still gates on replies.available, so active can fall <8
+        // while backlog stays full; hard-cap backlog at 64 so that state cannot
+        // push past the official ceiling (equivalent total-capacity hard top).
+        if (this.backlog.length >= UC_BACKLOG_MAX) {
+          this.emitBusy(q);
+          continue;
         }
         // Official startRequest suppresses an already-inflight requestId with
         // no additional result; queue-id ack remains separate. Pending backlog
@@ -327,8 +333,19 @@ export class UserComputerProvider implements UserComputerTransport {
     }
   }
 
+  private emitBusy(q: Queued): void {
+    const error = UC_BUSY_TEXT;
+    if ([requestKinds.upload, requestKinds.download, requestKinds.discoverAiTool].includes(q.kind)) {
+      void this.emit({ kind: "file-error", requestId: q.requestId, error });
+    } else if (q.kind === requestKinds.messagesOp) {
+      void this.emit({ kind: "messages-error", requestId: q.requestId, error });
+    } else {
+      void this.emit({ kind: "control", requestId: q.requestId, message: { throw: { id: 0, error } } });
+    }
+  }
+
   private runBacklog(): void {
-    while (!this.closed && !this.admissionClosed && this.active.size < 8 && this.backlog.length && this.replies?.available) {
+    while (!this.closed && !this.admissionClosed && this.active.size < UC_INFLIGHT_MAX && this.backlog.length && this.replies?.available) {
       const q = this.backlog.shift()!;
       if (this.active.has(q.requestId)) continue;
       this.active.add(q.requestId); this.bump(1);

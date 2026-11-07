@@ -402,6 +402,73 @@ describe('ownership PID superseded + UC admission gate + superviseBacklog', () =
     }
   });
 
+  it('UC admit hard-caps backlog at 64 when active<8 and replies unavailable', { timeout: 5000 }, async () => {
+    // Lab-only state: replies.available false blocks runBacklog, so active can drop
+    // while backlog stays full. Official finally always pulls backlog (D:L178576–178583);
+    // hard-cap must still refuse admit so backlog never exceeds 64.
+    const http = require('node:http');
+    const wire = require('./helpers/wire-oracle.cjs');
+    const { UserComputerProvider, UC_BACKLOG_MAX, UC_BUSY_TEXT } = require('../dist/uc/provider');
+    const frame = Buffer.concat([
+      wire.encStr(1, 'overflow-while-draining'),
+      wire.encMsg(2, wire.encStr(1, '{"id":1,"readArgs":{"path":"probe.txt"}}')),
+    ]);
+    const queued = wire.encMsg(
+      1,
+      Buffer.concat([wire.encStr(1, 'queue-overflow-drain'), wire.encMsg(2, frame)]),
+    );
+    const server = http.createServer((req, res) => {
+      req.resume();
+      req.on('end', () => {
+        res.writeHead(200, { 'content-type': 'application/proto' });
+        res.end(queued);
+      });
+    });
+    await new Promise((r) => server.listen(0, '127.0.0.1', r));
+    const port = server.address().port;
+    const p = new UserComputerProvider({
+      backendUrl: `http://127.0.0.1:${port}`,
+      machineId: 'synthetic',
+      credential: 'synthetic',
+      root: '/tmp',
+      permission: 'ask',
+      hello: {
+        label: 'lab',
+        localRoot: '/tmp',
+        terminalsFolder: '/tmp',
+        standing: 'ask',
+        variant: 'lab',
+        serverAuthoritative: false,
+      },
+    });
+    const got = [];
+    p.channel = { backendUrl: `http://127.0.0.1:${port}`, machineId: 'synthetic', credential: 'synthetic' };
+    p.replies = { available: false };
+    p.emit = (f) => got.push(f);
+    p.active = new Set(['only-three']); // <8
+    p.backlog = Array.from({ length: UC_BACKLOG_MAX }, (_, i) => ({
+      id: `full-${i}`,
+      requestId: `full-${i}`,
+      kind: 2,
+      serverMessage: {},
+    }));
+    try {
+      await p.pollOnce();
+      assert.equal(p.backlog.length, UC_BACKLOG_MAX, 'must not push past 64');
+      assert.equal(p.active.size, 1, 'replies unavailable must not promote backlog');
+      assert.ok(
+        got.some(
+          (f) =>
+            f.requestId === 'overflow-while-draining' &&
+            (f.message?.throw?.error === UC_BUSY_TEXT || f.error === UC_BUSY_TEXT),
+        ),
+        JSON.stringify(got),
+      );
+    } finally {
+      await new Promise((r) => server.close(r));
+    }
+  });
+
   it('superviseBacklog drains stale backlog after 15s and nudges poll after 5s', async () => {
     const http = require('node:http');
     const {

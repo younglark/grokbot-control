@@ -111,7 +111,7 @@ Preserved: inner-id reallocation, cancel-by-requestId, accepted_count=0, Watch r
 | PID superseded | `Jae`+`hce` (D:**L79879–79880**, **L81004–81009**); ownership tick sets `supersededForMs` then `FDe` (D:**L179498–179515**, **L79882–79896**) | Implemented: discovery other live pid → `supersededForMs`; exit reason `superseded`. Regression forks daemon and rewrites discovery to parent pid. |
 | Generation | Env `SAND_LOCAL_EXEC_GENERATION` (D:**L78804**, **L187205**) published into discovery (D:**L179215**). No daemon-side generation compare in FDe. | Publish only; **not a pending feature** (official also does not compare). |
 | Busy 8+64 | `rgt=8`, `_9r=64` (D:**L177859–177860**); when inflight≥8 and backlog≥64 → `F5e` busy string (D:**L135896–135897**, **L178548–178552**) | Already in `pollOnce`; new regression saturates active+backlog and asserts busy text + no admit. |
-| superviseBacklog 15s discard / 5s nudge | D:**L178589–178599** | Still a residual gap (not this commit). |
+| superviseBacklog 15s discard / 5s nudge | D:**L178589–178599** | **Implemented** (post-ab9fed0 / 25abe34); `sendKeepAlives` / `keepAliveDueAt` remain residual. |
 
 ## superviseBacklog 15s/5s (post-ab9fed0)
 
@@ -122,4 +122,10 @@ Preserved: inner-id reallocation, cancel-by-requestId, accepted_count=0, Watch r
 | Compat | Implemented on UC provider (`superviseBacklog`, `lastPolledAt`); regressions with injectable now. Full `sendKeepAlives` / `keepAliveDueAt` still residual. |
 
 Also: superseded process regression asserts stdout `received superseded, shutting down`. UC busy test fills via poll path (hanging handleQueued) and is named admission-gate (not e2e load).
+
+## UC backlog hard-cap when replies saturated (post-25abe34)
+
+Lab `runBacklog` still waits on `replies.available`, so `active` can fall below 8 while `backlog` stays at 64. Official `startRequest.finally` always promotes backlog while `inflight < 8` (D:**L178576–178583**), so that overflow window barely exists upstream.
+
+Compat admit now **hard-caps** `backlog.length >= 64` → busy (`F5e`) regardless of `active.size` (ceiling equivalent to D:**L178548–178552**). Regression: active<8 + backlog full + replies unavailable must not grow backlog.
 
