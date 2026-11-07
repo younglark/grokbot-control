@@ -12,6 +12,7 @@ import * as path from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
 import { assertRealpathUnderRoot, assertUnderRoot, PathGuardError } from "./path";
 import type { PermissionMode } from "../settings";
+import { commitShell, prepareShell, type PreparedShell } from "./shell-session";
 
 export type ExecFrameOut =
   | { kind: "client"; requestId: string; message: Record<string, unknown> }
@@ -168,18 +169,40 @@ export async function handleShellStream(args: {
 }): Promise<void> {
   const { root, requestId, msgId, command, emit } = args;
   let cwd: string;
+  let prepared: PreparedShell;
+  let notice: string | undefined;
   try {
-    cwd = assertRealpathUnderRoot(root, args.workingDirectory || root);
-    if (!(await fs.promises.stat(cwd)).isDirectory()) throw new Error("cwd is not a directory");
+    const realRoot = fs.realpathSync(root);
+    const wanted = args.workingDirectory || root;
+    // Official (oracle sh-badcwd): a missing working directory is not an error;
+    // stderr notice first, then run in the root. Escapes stay refused here
+    // (official escape behavior for cwd is unverified).
+    assertUnderRoot(realRoot, path.resolve(realRoot, wanted));
+    if (!fs.existsSync(path.resolve(realRoot, wanted))) {
+      notice = `working directory ${path.resolve(realRoot, wanted)} does not exist on this machine; running in ${realRoot} instead\n`;
+      cwd = realRoot;
+    } else {
+      cwd = assertRealpathUnderRoot(root, wanted);
+      if (!(await fs.promises.stat(cwd)).isDirectory()) throw new Error("cwd is not a directory");
+    }
+    prepared = await prepareShell(command, realRoot);
   } catch (e) { await requestError(requestId, msgId, e, emit); return; }
+  if (notice) await emit({ kind: "client", requestId, message: { id: msgId, shellStream: { stderr: { data: notice } }, localExecutionTimeMs: 0 } });
   const startedAt = Date.now();
   let abortJob: (reason: ShellAbortReason) => void = () => undefined;
   const done = new Promise<void>((resolve) => {
-    const child = spawn("/bin/bash", ["-lc", command], {
+    const child = spawn(prepared.bash, prepared.args, {
       cwd, detached: true,
-      env: { ...process.env, PATH: process.env.PATH || "/usr/bin:/bin" },
-      stdio: ["ignore", "pipe", "pipe"],
+      env: prepared.env,
+      stdio: ["ignore", "pipe", "pipe", "pipe", "pipe"],
     });
+    const stateIn = child.stdio?.[3] as NodeJS.WritableStream | null;
+    const stateOut = child.stdio?.[4] as NodeJS.ReadableStream | null;
+    let dumped = "";
+    stateIn?.on("error", () => undefined);
+    stateIn?.end(prepared.snapshotIn);
+    stateOut?.on("data", (b: Buffer) => { if (dumped.length < 4 * 1024 * 1024) dumped += b.toString("utf8"); });
+    stateOut?.on("error", () => undefined);
     let finished = false;
     let reason: ShellAbortReason | undefined;
     let escalation: NodeJS.Timeout | undefined;
@@ -197,12 +220,13 @@ export async function handleShellStream(args: {
       if (reason) groupKill("SIGKILL");
       child.stdout?.destroy(); child.stderr?.destroy();
       shells.delete(requestId);
+      const finalCwd = commitShell(dumped, Boolean(reason) || Boolean(error)) ?? cwd;
       try {
       if (error) await requestError(requestId, msgId, error, emit);
       else {
         const elapsed = Date.now() - startedAt;
         await emit({ kind: "client", requestId, message: { id: msgId,
-          shellStream: { exit: { code: reason ? 4294967295 : (code ?? 4294967295), cwd,
+          shellStream: { exit: { code: reason ? 4294967295 : (code ?? 4294967295), cwd: finalCwd,
             ...(reason ? { aborted: true, abortReason: proto3.getEnumType(ShellAbortReason).findNumber(reason)!.name } : {}), localExecutionTimeMs: elapsed } },
           localExecutionTimeMs: elapsed } });
         await emit({ kind: "control", requestId, message: { streamClose: { id: msgId } } });

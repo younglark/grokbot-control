@@ -33,11 +33,11 @@ test('shell TERM/KILL kills group containing sleep grandchild with bounded close
  assert.ok(['Z','gone'].includes(state),state);
  }finally{await shutdownShells();fs.rmSync(root,{recursive:true,force:true})}
 });
-test('invalid cwd responds with throw+close and next request works; timeout distinct',async()=>{
+test('missing cwd follows official oracle (stderr notice, runs in root) and next request works; timeout distinct',async()=>{
  const root=workspace(); const got=[];const emit=f=>got.push(f);
  try{
  await dispatchExec({root,requestId:'bad',serverMessage:{id:1,shellStreamArgs:{command:'true',workingDirectory:path.join(root,'missing')}},permission:'always',emit});
- assert.ok(got.some(f=>f.requestId==='bad'&&f.message?.throw));assert.ok(got.some(f=>f.requestId==='bad'&&f.message?.streamClose));
+ assert.ok(got.some(f=>f.requestId==='bad'&&/does not exist on this machine; running in/.test(f.message?.shellStream?.stderr?.data||'')));assert.ok(got.some(f=>f.requestId==='bad'&&f.message?.shellStream?.exit));assert.ok(got.some(f=>f.requestId==='bad'&&f.message?.streamClose));
  await handleShellStream({root,requestId:'ok',msgId:2,command:'printf ok',emit});
  assert.ok(got.some(f=>f.requestId==='ok'&&f.message?.shellStream?.exit?.code===0));
  await handleShellStream({root,requestId:'timeout',msgId:3,command:'sleep 30',timeout:50,emit});
