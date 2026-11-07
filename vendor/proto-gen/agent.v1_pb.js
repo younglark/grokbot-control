@@ -192,6 +192,19 @@ export const DiagnosticSeverity = /*@__PURE__*/ proto3.makeEnum(
 );
 
 /**
+ * @generated from enum agent.v1.ExecuteOutcome
+ */
+export const ExecuteOutcome = /*@__PURE__*/ proto3.makeEnum(
+  "agent.v1.ExecuteOutcome",
+  [
+    {no: 0, name: "EXECUTE_OUTCOME_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "EXECUTE_OUTCOME_COMPLETED", localName: "COMPLETED"},
+    {no: 2, name: "EXECUTE_OUTCOME_FAILED", localName: "FAILED"},
+    {no: 3, name: "EXECUTE_OUTCOME_CANCELLED", localName: "CANCELLED"},
+  ],
+);
+
+/**
  * @generated from enum agent.v1.GoalStatus
  */
 export const GoalStatus = /*@__PURE__*/ proto3.makeEnum(
@@ -2738,6 +2751,27 @@ export const EditWritePermissionDenied = /*@__PURE__*/ proto3.makeMessageType(
 );
 
 /**
+ * @generated from message agent.v1.ExecuteArgs
+ */
+export const ExecuteArgs = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ExecuteArgs",
+  () => [
+    { no: 1, name: "code", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "tool_call_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ExecuteError
+ */
+export const ExecuteError = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ExecuteError",
+  () => [
+    { no: 1, name: "error", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
  * @generated from message agent.v1.ExecutePlanAction
  */
 export const ExecutePlanAction = /*@__PURE__*/ proto3.makeMessageType(
@@ -2764,6 +2798,50 @@ export const ExecutePlanInfo = /*@__PURE__*/ proto3.makeMessageType(
   () => [
     { no: 1, name: "plan_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 2, name: "plan_title", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ExecuteRejected
+ */
+export const ExecuteRejected = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ExecuteRejected",
+  () => [
+    { no: 1, name: "reason", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ExecuteResult
+ */
+export const ExecuteResult = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ExecuteResult",
+  () => [
+    { no: 1, name: "success", kind: "message", T: ExecuteSuccess, oneof: "result" },
+    { no: 2, name: "error", kind: "message", T: ExecuteError, oneof: "result" },
+    { no: 3, name: "rejected", kind: "message", T: ExecuteRejected, oneof: "result" },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ExecuteSuccess
+ */
+export const ExecuteSuccess = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ExecuteSuccess",
+  () => [
+    { no: 1, name: "output", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "outcome", kind: "enum", T: proto3.getEnumType(ExecuteOutcome) },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ExecuteToolCall
+ */
+export const ExecuteToolCall = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ExecuteToolCall",
+  () => [
+    { no: 1, name: "args", kind: "message", T: ExecuteArgs },
+    { no: 2, name: "result", kind: "message", T: ExecuteResult },
   ],
 );
 
@@ -4028,6 +4106,87 @@ export const LsToolCall = /*@__PURE__*/ proto3.makeMessageType(
 );
 
 /**
+ * @generated from message agent.v1.ManageAccessArgs
+ */
+export const ManageAccessArgs = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ManageAccessArgs",
+  () => [
+    { no: 1, name: "tool_call_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "action", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "target", kind: "message", T: ManageAccessTarget, opt: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ManageAccessError
+ */
+export const ManageAccessError = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ManageAccessError",
+  () => [
+    { no: 1, name: "error", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ManageAccessGrant
+ */
+export const ManageAccessGrant = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ManageAccessGrant",
+  () => [
+    { no: 1, name: "target", kind: "message", T: ManageAccessTarget },
+    { no: 2, name: "name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "granted_by", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "granted_at_ms", kind: "scalar", T: 4 /* ScalarType.UINT64 */ },
+    { no: 5, name: "scope", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ManageAccessResult
+ */
+export const ManageAccessResult = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ManageAccessResult",
+  () => [
+    { no: 1, name: "success", kind: "message", T: ManageAccessSuccess, oneof: "result" },
+    { no: 2, name: "error", kind: "message", T: ManageAccessError, oneof: "result" },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ManageAccessSuccess
+ */
+export const ManageAccessSuccess = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ManageAccessSuccess",
+  () => [
+    { no: 1, name: "decision", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "grants", kind: "message", T: ManageAccessGrant, repeated: true },
+    { no: 3, name: "message", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ManageAccessTarget
+ */
+export const ManageAccessTarget = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ManageAccessTarget",
+  () => [
+    { no: 1, name: "kind", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.ManageAccessToolCall
+ */
+export const ManageAccessToolCall = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.ManageAccessToolCall",
+  () => [
+    { no: 1, name: "args", kind: "message", T: ManageAccessArgs },
+    { no: 2, name: "result", kind: "message", T: ManageAccessResult },
+  ],
+);
+
+/**
  * @generated from message agent.v1.MatchedInstalledPlugin
  */
 export const MatchedInstalledPlugin = /*@__PURE__*/ proto3.makeMessageType(
@@ -4042,6 +4201,19 @@ export const MatchedInstalledPlugin = /*@__PURE__*/ proto3.makeMessageType(
     { no: 7, name: "rules", kind: "message", T: RecentlyAddedPlugin_CapabilityDescriptor, repeated: true },
     { no: 8, name: "commands", kind: "message", T: RecentlyAddedPlugin_CapabilityDescriptor, repeated: true },
     { no: 9, name: "mcp_servers", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+  ],
+);
+
+/**
+ * @generated from message agent.v1.McpAppDocument
+ */
+export const McpAppDocument = /*@__PURE__*/ proto3.makeMessageType(
+  "agent.v1.McpAppDocument",
+  () => [
+    { no: 1, name: "uri", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "mime_type", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "text", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "meta_json", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
   ],
 );
 
@@ -4335,6 +4507,7 @@ export const McpSuccess = /*@__PURE__*/ proto3.makeMessageType(
     { no: 3, name: "structured_content", kind: "message", T: Struct },
     { no: 4, name: "system_reminders", kind: "message", T: SystemReminder, repeated: true },
     { no: 5, name: "result_meta", kind: "message", T: Struct },
+    { no: 6, name: "mcp_app_document", kind: "message", T: McpAppDocument },
   ],
 );
 
@@ -4598,6 +4771,8 @@ export const NewCloudVmTarget = /*@__PURE__*/ proto3.makeMessageType(
   () => [
     { no: 1, name: "environment_build_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 2, name: "base_branch", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 4, name: "environment_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 5, name: "repo_url", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
   ],
 );
 
@@ -7042,6 +7217,7 @@ export const ShellArgs = /*@__PURE__*/ proto3.makeMessageType(
     { no: 22, name: "admin_command_denylist", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
     { no: 23, name: "request_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 24, name: "secret_scope_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 25, name: "smart_mode_classifier_allowed", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ],
 );
 
@@ -8161,6 +8337,8 @@ export const ToolCall = /*@__PURE__*/ proto3.makeMessageType(
     { no: 91, name: "update_tracked_task_tags_tool_call", kind: "message", T: UpdateTrackedTaskTagsToolCall, oneof: "tool" },
     { no: 93, name: "stop_project_updates_tool_call", kind: "message", T: StopProjectUpdatesToolCall, oneof: "tool" },
     { no: 94, name: "start_project_updates_tool_call", kind: "message", T: StartProjectUpdatesToolCall, oneof: "tool" },
+    { no: 95, name: "manage_access_tool_call", kind: "message", T: ManageAccessToolCall, oneof: "tool" },
+    { no: 1000, name: "execute_tool_call", kind: "message", T: ExecuteToolCall, oneof: "tool" },
     { no: 54, name: "hook_additional_contexts", kind: "message", T: HookAdditionalContext, repeated: true },
     { no: 57, name: "tool_call_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 59, name: "started_at_ms", kind: "scalar", T: 4 /* ScalarType.UINT64 */, opt: true },
@@ -9175,6 +9353,7 @@ export const WriteCanvasSuccess = /*@__PURE__*/ proto3.makeMessageType(
     { no: 2, name: "title", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 3, name: "url", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 4, name: "page_url", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 5, name: "audience_notice", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
   ],
 );
 

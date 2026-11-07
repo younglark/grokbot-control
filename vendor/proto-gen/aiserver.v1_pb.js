@@ -374,6 +374,7 @@ export const BackgroundComposerSource = /*@__PURE__*/ proto3.makeEnum(
     {no: 35, name: "BACKGROUND_COMPOSER_SOURCE_CHANGE_MONITOR_ONBOARDING_WEB", localName: "CHANGE_MONITOR_ONBOARDING_WEB"},
     {no: 36, name: "BACKGROUND_COMPOSER_SOURCE_MAIN_BOT", localName: "MAIN_BOT"},
     {no: 37, name: "BACKGROUND_COMPOSER_SOURCE_ROLLOUTS_AUTOPILOT", localName: "ROLLOUTS_AUTOPILOT"},
+    {no: 38, name: "BACKGROUND_COMPOSER_SOURCE_EMAIL", localName: "EMAIL"},
   ],
 );
 
@@ -413,6 +414,7 @@ export const BackgroundComposerUpdateKind = /*@__PURE__*/ proto3.makeEnum(
     {no: 13, name: "BACKGROUND_COMPOSER_UPDATE_KIND_UNREAD_CHANGED", localName: "UNREAD_CHANGED"},
     {no: 14, name: "BACKGROUND_COMPOSER_UPDATE_KIND_TRACKED_TASKS_CHANGED", localName: "TRACKED_TASKS_CHANGED"},
     {no: 15, name: "BACKGROUND_COMPOSER_UPDATE_KIND_PROJECT_MEMBERS_CHANGED", localName: "PROJECT_MEMBERS_CHANGED"},
+    {no: 16, name: "BACKGROUND_COMPOSER_UPDATE_KIND_PROJECT_APPS_CHANGED", localName: "PROJECT_APPS_CHANGED"},
   ],
 );
 
@@ -686,6 +688,62 @@ export const CloudSubagentParentSpawnKind = /*@__PURE__*/ proto3.makeEnum(
 );
 
 /**
+ * @generated from enum aiserver.v1.ConnectorSuiteCoverage
+ */
+export const ConnectorSuiteCoverage = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.ConnectorSuiteCoverage",
+  [
+    {no: 0, name: "CONNECTOR_SUITE_COVERAGE_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "CONNECTOR_SUITE_COVERAGE_FULL", localName: "FULL"},
+    {no: 2, name: "CONNECTOR_SUITE_COVERAGE_PARTIAL", localName: "PARTIAL"},
+    {no: 3, name: "CONNECTOR_SUITE_COVERAGE_NONE", localName: "NONE"},
+  ],
+);
+
+/**
+ * @generated from enum aiserver.v1.ConnectorSuiteExposure
+ */
+export const ConnectorSuiteExposure = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.ConnectorSuiteExposure",
+  [
+    {no: 0, name: "CONNECTOR_SUITE_EXPOSURE_NONE", localName: "NONE"},
+    {no: 1, name: "CONNECTOR_SUITE_EXPOSURE_PASS", localName: "PASS"},
+    {no: 2, name: "CONNECTOR_SUITE_EXPOSURE_FAIL", localName: "FAIL"},
+  ],
+);
+
+/**
+ * @generated from enum aiserver.v1.ConnectorSuiteId
+ */
+export const ConnectorSuiteId = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.ConnectorSuiteId",
+  [
+    {no: 0, name: "CONNECTOR_SUITE_ID_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "CONNECTOR_SUITE_ID_GOOGLE_WORKSPACE", localName: "GOOGLE_WORKSPACE"},
+    {no: 2, name: "CONNECTOR_SUITE_ID_MICROSOFT_365", localName: "MICROSOFT_365"},
+  ],
+);
+
+/**
+ * @generated from enum aiserver.v1.ConnectorSuiteMemberOutcome
+ */
+export const ConnectorSuiteMemberOutcome = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.ConnectorSuiteMemberOutcome",
+  [
+    {no: 0, name: "CONNECTOR_SUITE_MEMBER_OUTCOME_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "CONNECTOR_SUITE_MEMBER_OUTCOME_CONNECTED", localName: "CONNECTED"},
+    {no: 2, name: "CONNECTOR_SUITE_MEMBER_OUTCOME_NOT_GRANTED", localName: "NOT_GRANTED"},
+    {no: 3, name: "CONNECTOR_SUITE_MEMBER_OUTCOME_INSTALL_REFUSED", localName: "INSTALL_REFUSED"},
+    {no: 4, name: "CONNECTOR_SUITE_MEMBER_OUTCOME_CLIENT_PLACED", localName: "CLIENT_PLACED"},
+    {no: 5, name: "CONNECTOR_SUITE_MEMBER_OUTCOME_INSTALL_FAILED", localName: "INSTALL_FAILED"},
+    {no: 6, name: "CONNECTOR_SUITE_MEMBER_OUTCOME_ALREADY_CONNECTED", localName: "ALREADY_CONNECTED"},
+    {no: 7, name: "CONNECTOR_SUITE_MEMBER_OUTCOME_NOT_CONNECTED", localName: "NOT_CONNECTED"},
+    {no: 8, name: "CONNECTOR_SUITE_MEMBER_OUTCOME_DISABLED", localName: "DISABLED"},
+    {no: 9, name: "CONNECTOR_SUITE_MEMBER_OUTCOME_STORE_FAILED", localName: "STORE_FAILED"},
+  ],
+);
+
+/**
  * @generated from enum aiserver.v1.CredentialExpirationMode
  */
 export const CredentialExpirationMode = /*@__PURE__*/ proto3.makeEnum(
@@ -722,6 +780,18 @@ export const CredentialTargetRuleKind = /*@__PURE__*/ proto3.makeEnum(
     {no: 0, name: "CREDENTIAL_TARGET_RULE_KIND_UNSPECIFIED", localName: "UNSPECIFIED"},
     {no: 1, name: "CREDENTIAL_TARGET_RULE_KIND_EXACT_HOST_PORT", localName: "EXACT_HOST_PORT"},
     {no: 2, name: "CREDENTIAL_TARGET_RULE_KIND_REGISTRABLE_DOMAIN", localName: "REGISTRABLE_DOMAIN"},
+  ],
+);
+
+/**
+ * @generated from enum aiserver.v1.DailySpendRankingMetric
+ */
+export const DailySpendRankingMetric = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.DailySpendRankingMetric",
+  [
+    {no: 0, name: "DAILY_SPEND_RANKING_METRIC_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "DAILY_SPEND_RANKING_METRIC_SPEND", localName: "SPEND"},
+    {no: 2, name: "DAILY_SPEND_RANKING_METRIC_TOKENS", localName: "TOKENS"},
   ],
 );
 
@@ -837,6 +907,23 @@ export const GrokBotAccessRole = /*@__PURE__*/ proto3.makeEnum(
     {no: 0, name: "GROK_BOT_ACCESS_ROLE_UNSPECIFIED", localName: "UNSPECIFIED"},
     {no: 1, name: "GROK_BOT_ACCESS_ROLE_USER", localName: "USER"},
     {no: 2, name: "GROK_BOT_ACCESS_ROLE_MANAGER", localName: "MANAGER"},
+  ],
+);
+
+/**
+ * @generated from enum aiserver.v1.GrokBotAccountMigrationState
+ */
+export const GrokBotAccountMigrationState = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.GrokBotAccountMigrationState",
+  [
+    {no: 0, name: "GROK_BOT_ACCOUNT_MIGRATION_STATE_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "GROK_BOT_ACCOUNT_MIGRATION_STATE_COMPUTING", localName: "COMPUTING"},
+    {no: 2, name: "GROK_BOT_ACCOUNT_MIGRATION_STATE_COMPUTE_FAILED", localName: "COMPUTE_FAILED"},
+    {no: 3, name: "GROK_BOT_ACCOUNT_MIGRATION_STATE_REVIEWING", localName: "REVIEWING"},
+    {no: 4, name: "GROK_BOT_ACCOUNT_MIGRATION_STATE_MIGRATING", localName: "MIGRATING"},
+    {no: 5, name: "GROK_BOT_ACCOUNT_MIGRATION_STATE_DONE", localName: "DONE"},
+    {no: 6, name: "GROK_BOT_ACCOUNT_MIGRATION_STATE_PARTIALLY_DONE", localName: "PARTIALLY_DONE"},
+    {no: 7, name: "GROK_BOT_ACCOUNT_MIGRATION_STATE_CANCELLED", localName: "CANCELLED"},
   ],
 );
 
@@ -1340,6 +1427,64 @@ export const GrokBotBoxIntentAction = /*@__PURE__*/ proto3.makeEnum(
 );
 
 /**
+ * @generated from enum aiserver.v1.GrokBotCalendarJoinPromptWithdrawnReason
+ */
+export const GrokBotCalendarJoinPromptWithdrawnReason = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.GrokBotCalendarJoinPromptWithdrawnReason",
+  [
+    {no: 0, name: "GROK_BOT_CALENDAR_JOIN_PROMPT_WITHDRAWN_REASON_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "GROK_BOT_CALENDAR_JOIN_PROMPT_WITHDRAWN_REASON_MOVED", localName: "MOVED"},
+    {no: 2, name: "GROK_BOT_CALENDAR_JOIN_PROMPT_WITHDRAWN_REASON_CANCELLED", localName: "CANCELLED"},
+    {no: 3, name: "GROK_BOT_CALENDAR_JOIN_PROMPT_WITHDRAWN_REASON_DISMISSED", localName: "DISMISSED"},
+    {no: 4, name: "GROK_BOT_CALENDAR_JOIN_PROMPT_WITHDRAWN_REASON_JOINED", localName: "JOINED"},
+    {no: 5, name: "GROK_BOT_CALENDAR_JOIN_PROMPT_WITHDRAWN_REASON_ENDED", localName: "ENDED"},
+  ],
+);
+
+/**
+ * @generated from enum aiserver.v1.GrokBotCalendarMeetingChange
+ */
+export const GrokBotCalendarMeetingChange = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.GrokBotCalendarMeetingChange",
+  [
+    {no: 0, name: "GROK_BOT_CALENDAR_MEETING_CHANGE_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "GROK_BOT_CALENDAR_MEETING_CHANGE_ADDED", localName: "ADDED"},
+    {no: 2, name: "GROK_BOT_CALENDAR_MEETING_CHANGE_MOVED", localName: "MOVED"},
+    {no: 3, name: "GROK_BOT_CALENDAR_MEETING_CHANGE_CANCELLED", localName: "CANCELLED"},
+    {no: 4, name: "GROK_BOT_CALENDAR_MEETING_CHANGE_LINK_CHANGED", localName: "LINK_CHANGED"},
+  ],
+);
+
+/**
+ * @generated from enum aiserver.v1.GrokBotCalendarMeetingProvider
+ */
+export const GrokBotCalendarMeetingProvider = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.GrokBotCalendarMeetingProvider",
+  [
+    {no: 0, name: "GROK_BOT_CALENDAR_MEETING_PROVIDER_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "GROK_BOT_CALENDAR_MEETING_PROVIDER_GOOGLE_MEET", localName: "GOOGLE_MEET"},
+    {no: 2, name: "GROK_BOT_CALENDAR_MEETING_PROVIDER_ZOOM", localName: "ZOOM"},
+    {no: 3, name: "GROK_BOT_CALENDAR_MEETING_PROVIDER_MICROSOFT_TEAMS", localName: "MICROSOFT_TEAMS"},
+    {no: 4, name: "GROK_BOT_CALENDAR_MEETING_PROVIDER_WEBEX", localName: "WEBEX"},
+    {no: 5, name: "GROK_BOT_CALENDAR_MEETING_PROVIDER_OTHER", localName: "OTHER"},
+  ],
+);
+
+/**
+ * @generated from enum aiserver.v1.GrokBotCalendarRsvp
+ */
+export const GrokBotCalendarRsvp = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.GrokBotCalendarRsvp",
+  [
+    {no: 0, name: "GROK_BOT_CALENDAR_RSVP_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "GROK_BOT_CALENDAR_RSVP_ACCEPTED", localName: "ACCEPTED"},
+    {no: 2, name: "GROK_BOT_CALENDAR_RSVP_TENTATIVE", localName: "TENTATIVE"},
+    {no: 3, name: "GROK_BOT_CALENDAR_RSVP_DECLINED", localName: "DECLINED"},
+    {no: 4, name: "GROK_BOT_CALENDAR_RSVP_NEEDS_ACTION", localName: "NEEDS_ACTION"},
+  ],
+);
+
+/**
  * @generated from enum aiserver.v1.GrokBotCardPhotoOutcome
  */
 export const GrokBotCardPhotoOutcome = /*@__PURE__*/ proto3.makeEnum(
@@ -1582,6 +1727,23 @@ export const GrokBotFirstPartyTemplate = /*@__PURE__*/ proto3.makeEnum(
 );
 
 /**
+ * @generated from enum aiserver.v1.GrokBotFlightBookingLinkOutcome
+ */
+export const GrokBotFlightBookingLinkOutcome = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.GrokBotFlightBookingLinkOutcome",
+  [
+    {no: 0, name: "GROK_BOT_FLIGHT_BOOKING_LINK_OUTCOME_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "GROK_BOT_FLIGHT_BOOKING_LINK_OUTCOME_RESOLVED", localName: "RESOLVED"},
+    {no: 2, name: "GROK_BOT_FLIGHT_BOOKING_LINK_OUTCOME_UNAVAILABLE", localName: "UNAVAILABLE"},
+    {no: 3, name: "GROK_BOT_FLIGHT_BOOKING_LINK_OUTCOME_RATE_LIMITED", localName: "RATE_LIMITED"},
+    {no: 4, name: "GROK_BOT_FLIGHT_BOOKING_LINK_OUTCOME_NOT_RESOLVABLE", localName: "NOT_RESOLVABLE"},
+    {no: 5, name: "GROK_BOT_FLIGHT_BOOKING_LINK_OUTCOME_SEPARATE_TICKETS", localName: "SEPARATE_TICKETS"},
+    {no: 6, name: "GROK_BOT_FLIGHT_BOOKING_LINK_OUTCOME_NO_MATCH", localName: "NO_MATCH"},
+    {no: 7, name: "GROK_BOT_FLIGHT_BOOKING_LINK_OUTCOME_FAILED", localName: "FAILED"},
+  ],
+);
+
+/**
  * @generated from enum aiserver.v1.GrokBotImagePrecaptionOutcome
  */
 export const GrokBotImagePrecaptionOutcome = /*@__PURE__*/ proto3.makeEnum(
@@ -1594,6 +1756,21 @@ export const GrokBotImagePrecaptionOutcome = /*@__PURE__*/ proto3.makeEnum(
     {no: 4, name: "GROK_BOT_IMAGE_PRECAPTION_OUTCOME_SKIPPED", localName: "SKIPPED"},
     {no: 5, name: "GROK_BOT_IMAGE_PRECAPTION_OUTCOME_FAILED", localName: "FAILED"},
     {no: 6, name: "GROK_BOT_IMAGE_PRECAPTION_OUTCOME_SKIPPED_FOR_AGENT", localName: "SKIPPED_FOR_AGENT"},
+  ],
+);
+
+/**
+ * @generated from enum aiserver.v1.GrokBotLabelerQuestionAction
+ */
+export const GrokBotLabelerQuestionAction = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.GrokBotLabelerQuestionAction",
+  [
+    {no: 0, name: "GROK_BOT_LABELER_QUESTION_ACTION_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "GROK_BOT_LABELER_QUESTION_ACTION_ANSWER", localName: "ANSWER"},
+    {no: 3, name: "GROK_BOT_LABELER_QUESTION_ACTION_DISMISS", localName: "DISMISS"},
+    {no: 4, name: "GROK_BOT_LABELER_QUESTION_ACTION_STOP_ASKING", localName: "STOP_ASKING"},
+    {no: 5, name: "GROK_BOT_LABELER_QUESTION_ACTION_COMMENT", localName: "COMMENT"},
+    {no: 6, name: "GROK_BOT_LABELER_QUESTION_ACTION_UNDO", localName: "UNDO"},
   ],
 );
 
@@ -1651,6 +1828,34 @@ export const GrokBotMarketplaceListingStatus = /*@__PURE__*/ proto3.makeEnum(
 );
 
 /**
+ * @generated from enum aiserver.v1.GrokBotMeetingPromptAction
+ */
+export const GrokBotMeetingPromptAction = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.GrokBotMeetingPromptAction",
+  [
+    {no: 0, name: "GROK_BOT_MEETING_PROMPT_ACTION_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "GROK_BOT_MEETING_PROMPT_ACTION_JOIN_NOW", localName: "JOIN_NOW"},
+    {no: 2, name: "GROK_BOT_MEETING_PROMPT_ACTION_DISMISS", localName: "DISMISS"},
+    {no: 3, name: "GROK_BOT_MEETING_PROMPT_ACTION_ALWAYS_JOIN_SERIES", localName: "ALWAYS_JOIN_SERIES"},
+  ],
+);
+
+/**
+ * @generated from enum aiserver.v1.GrokBotMeetingPromptRefusal
+ */
+export const GrokBotMeetingPromptRefusal = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.GrokBotMeetingPromptRefusal",
+  [
+    {no: 0, name: "GROK_BOT_MEETING_PROMPT_REFUSAL_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "GROK_BOT_MEETING_PROMPT_REFUSAL_CONSENT_REQUIRED", localName: "CONSENT_REQUIRED"},
+    {no: 2, name: "GROK_BOT_MEETING_PROMPT_REFUSAL_TOO_MANY_MEETINGS", localName: "TOO_MANY_MEETINGS"},
+    {no: 3, name: "GROK_BOT_MEETING_PROMPT_REFUSAL_NOT_RECURRING", localName: "NOT_RECURRING"},
+    {no: 4, name: "GROK_BOT_MEETING_PROMPT_REFUSAL_NO_JOIN_LINK", localName: "NO_JOIN_LINK"},
+    {no: 5, name: "GROK_BOT_MEETING_PROMPT_REFUSAL_FAILED", localName: "FAILED"},
+  ],
+);
+
+/**
  * @generated from enum aiserver.v1.GrokBotMeetingsVisibility
  */
 export const GrokBotMeetingsVisibility = /*@__PURE__*/ proto3.makeEnum(
@@ -1659,6 +1864,121 @@ export const GrokBotMeetingsVisibility = /*@__PURE__*/ proto3.makeEnum(
     {no: 0, name: "GROK_BOT_MEETINGS_VISIBILITY_UNSPECIFIED", localName: "UNSPECIFIED"},
     {no: 1, name: "GROK_BOT_MEETINGS_VISIBILITY_MANAGERS", localName: "MANAGERS"},
     {no: 2, name: "GROK_BOT_MEETINGS_VISIBILITY_EVERYONE", localName: "EVERYONE"},
+  ],
+);
+
+/**
+ * @generated from enum aiserver.v1.GrokBotMessagingCapabilityClient
+ */
+export const GrokBotMessagingCapabilityClient = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.GrokBotMessagingCapabilityClient",
+  [
+    {no: 0, name: "GROK_BOT_MESSAGING_CAPABILITY_CLIENT_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "GROK_BOT_MESSAGING_CAPABILITY_CLIENT_MAIN_APP", localName: "MAIN_APP"},
+    {no: 2, name: "GROK_BOT_MESSAGING_CAPABILITY_CLIENT_IMESSAGE_APP", localName: "IMESSAGE_APP"},
+  ],
+);
+
+/**
+ * @generated from enum aiserver.v1.GrokBotMessagingCardAnswerKind
+ */
+export const GrokBotMessagingCardAnswerKind = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.GrokBotMessagingCardAnswerKind",
+  [
+    {no: 0, name: "GROK_BOT_MESSAGING_CARD_ANSWER_KIND_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "GROK_BOT_MESSAGING_CARD_ANSWER_KIND_APPROVE", localName: "APPROVE"},
+    {no: 2, name: "GROK_BOT_MESSAGING_CARD_ANSWER_KIND_DENY", localName: "DENY"},
+    {no: 3, name: "GROK_BOT_MESSAGING_CARD_ANSWER_KIND_CHOOSE", localName: "CHOOSE"},
+    {no: 4, name: "GROK_BOT_MESSAGING_CARD_ANSWER_KIND_SUBMIT", localName: "SUBMIT"},
+    {no: 5, name: "GROK_BOT_MESSAGING_CARD_ANSWER_KIND_ALWAYS", localName: "ALWAYS"},
+    {no: 8, name: "GROK_BOT_MESSAGING_CARD_ANSWER_KIND_ESCALATE", localName: "ESCALATE"},
+  ],
+);
+
+/**
+ * @generated from enum aiserver.v1.GrokBotMessagingCardAnswerStatus
+ */
+export const GrokBotMessagingCardAnswerStatus = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.GrokBotMessagingCardAnswerStatus",
+  [
+    {no: 0, name: "GROK_BOT_MESSAGING_CARD_ANSWER_STATUS_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "GROK_BOT_MESSAGING_CARD_ANSWER_STATUS_ACCEPTED", localName: "ACCEPTED"},
+    {no: 2, name: "GROK_BOT_MESSAGING_CARD_ANSWER_STATUS_STALE_VERSION", localName: "STALE_VERSION"},
+    {no: 3, name: "GROK_BOT_MESSAGING_CARD_ANSWER_STATUS_ALREADY_SETTLED", localName: "ALREADY_SETTLED"},
+    {no: 4, name: "GROK_BOT_MESSAGING_CARD_ANSWER_STATUS_EXPIRED", localName: "EXPIRED"},
+    {no: 5, name: "GROK_BOT_MESSAGING_CARD_ANSWER_STATUS_SUPERSEDED", localName: "SUPERSEDED"},
+    {no: 6, name: "GROK_BOT_MESSAGING_CARD_ANSWER_STATUS_NOT_SUPPORTED", localName: "NOT_SUPPORTED"},
+    {no: 7, name: "GROK_BOT_MESSAGING_CARD_ANSWER_STATUS_IN_PROGRESS", localName: "IN_PROGRESS"},
+    {no: 8, name: "GROK_BOT_MESSAGING_CARD_ANSWER_STATUS_REFUSED", localName: "REFUSED"},
+  ],
+);
+
+/**
+ * @generated from enum aiserver.v1.GrokBotMessagingCardKind
+ */
+export const GrokBotMessagingCardKind = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.GrokBotMessagingCardKind",
+  [
+    {no: 0, name: "GROK_BOT_MESSAGING_CARD_KIND_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "GROK_BOT_MESSAGING_CARD_KIND_APPROVAL", localName: "APPROVAL"},
+    {no: 2, name: "GROK_BOT_MESSAGING_CARD_KIND_CHOICE", localName: "CHOICE"},
+    {no: 3, name: "GROK_BOT_MESSAGING_CARD_KIND_FORM", localName: "FORM"},
+    {no: 4, name: "GROK_BOT_MESSAGING_CARD_KIND_PAGE", localName: "PAGE"},
+    {no: 5, name: "GROK_BOT_MESSAGING_CARD_KIND_PAYMENT", localName: "PAYMENT"},
+  ],
+);
+
+/**
+ * @generated from enum aiserver.v1.GrokBotMessagingCardSettledBy
+ */
+export const GrokBotMessagingCardSettledBy = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.GrokBotMessagingCardSettledBy",
+  [
+    {no: 0, name: "GROK_BOT_MESSAGING_CARD_SETTLED_BY_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "GROK_BOT_MESSAGING_CARD_SETTLED_BY_CARD", localName: "CARD"},
+    {no: 2, name: "GROK_BOT_MESSAGING_CARD_SETTLED_BY_TEXT_REPLY", localName: "TEXT_REPLY"},
+    {no: 3, name: "GROK_BOT_MESSAGING_CARD_SETTLED_BY_APP", localName: "APP"},
+    {no: 4, name: "GROK_BOT_MESSAGING_CARD_SETTLED_BY_EXPIRY", localName: "EXPIRY"},
+    {no: 5, name: "GROK_BOT_MESSAGING_CARD_SETTLED_BY_NEWER_CARD", localName: "NEWER_CARD"},
+    {no: 6, name: "GROK_BOT_MESSAGING_CARD_SETTLED_BY_ASK", localName: "ASK"},
+  ],
+);
+
+/**
+ * @generated from enum aiserver.v1.GrokBotMessagingCardState
+ */
+export const GrokBotMessagingCardState = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.GrokBotMessagingCardState",
+  [
+    {no: 0, name: "GROK_BOT_MESSAGING_CARD_STATE_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "GROK_BOT_MESSAGING_CARD_STATE_PENDING", localName: "PENDING"},
+    {no: 2, name: "GROK_BOT_MESSAGING_CARD_STATE_APPROVED", localName: "APPROVED"},
+    {no: 3, name: "GROK_BOT_MESSAGING_CARD_STATE_DENIED", localName: "DENIED"},
+    {no: 4, name: "GROK_BOT_MESSAGING_CARD_STATE_ANSWERED", localName: "ANSWERED"},
+    {no: 5, name: "GROK_BOT_MESSAGING_CARD_STATE_EXPIRED", localName: "EXPIRED"},
+    {no: 6, name: "GROK_BOT_MESSAGING_CARD_STATE_SUPERSEDED", localName: "SUPERSEDED"},
+    {no: 7, name: "GROK_BOT_MESSAGING_CARD_STATE_ALWAYS", localName: "ALWAYS"},
+    {no: 8, name: "GROK_BOT_MESSAGING_CARD_STATE_NEVER", localName: "NEVER"},
+    {no: 9, name: "GROK_BOT_MESSAGING_CARD_STATE_FAILED", localName: "FAILED"},
+    {no: 12, name: "GROK_BOT_MESSAGING_CARD_STATE_ESCALATED", localName: "ESCALATED"},
+  ],
+);
+
+/**
+ * @generated from enum aiserver.v1.GrokBotMessagingCardSubtype
+ */
+export const GrokBotMessagingCardSubtype = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.GrokBotMessagingCardSubtype",
+  [
+    {no: 0, name: "GROK_BOT_MESSAGING_CARD_SUBTYPE_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "GROK_BOT_MESSAGING_CARD_SUBTYPE_AUTO_REVIEW", localName: "AUTO_REVIEW"},
+    {no: 2, name: "GROK_BOT_MESSAGING_CARD_SUBTYPE_MEETING_JOIN_CONSENT", localName: "MEETING_JOIN_CONSENT"},
+    {no: 3, name: "GROK_BOT_MESSAGING_CARD_SUBTYPE_LOCAL_TOOL_PERMISSION", localName: "LOCAL_TOOL_PERMISSION"},
+    {no: 4, name: "GROK_BOT_MESSAGING_CARD_SUBTYPE_CREDENTIAL_REQUEST", localName: "CREDENTIAL_REQUEST"},
+    {no: 5, name: "GROK_BOT_MESSAGING_CARD_SUBTYPE_DRAFT", localName: "DRAFT"},
+    {no: 6, name: "GROK_BOT_MESSAGING_CARD_SUBTYPE_QUESTION", localName: "QUESTION"},
+    {no: 7, name: "GROK_BOT_MESSAGING_CARD_SUBTYPE_USER_FORM", localName: "USER_FORM"},
+    {no: 8, name: "GROK_BOT_MESSAGING_CARD_SUBTYPE_SECRET_REQUEST", localName: "SECRET_REQUEST"},
   ],
 );
 
@@ -1692,6 +2012,30 @@ export const GrokBotNotificationPlatform = /*@__PURE__*/ proto3.makeEnum(
 );
 
 /**
+ * @generated from enum aiserver.v1.GrokBotOnboardingDripManualSendOutcome
+ */
+export const GrokBotOnboardingDripManualSendOutcome = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.GrokBotOnboardingDripManualSendOutcome",
+  [
+    {no: 0, name: "GROK_BOT_ONBOARDING_DRIP_MANUAL_SEND_OUTCOME_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "GROK_BOT_ONBOARDING_DRIP_MANUAL_SEND_OUTCOME_FIRED", localName: "FIRED"},
+    {no: 2, name: "GROK_BOT_ONBOARDING_DRIP_MANUAL_SEND_OUTCOME_REFUSED", localName: "REFUSED"},
+  ],
+);
+
+/**
+ * @generated from enum aiserver.v1.GrokBotOnboardingDripRouterStatus
+ */
+export const GrokBotOnboardingDripRouterStatus = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.GrokBotOnboardingDripRouterStatus",
+  [
+    {no: 0, name: "GROK_BOT_ONBOARDING_DRIP_ROUTER_STATUS_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "GROK_BOT_ONBOARDING_DRIP_ROUTER_STATUS_UNPUBLISHED", localName: "UNPUBLISHED"},
+    {no: 2, name: "GROK_BOT_ONBOARDING_DRIP_ROUTER_STATUS_PUBLISHED", localName: "PUBLISHED"},
+  ],
+);
+
+/**
  * @generated from enum aiserver.v1.GrokBotOnboardingDripStatus
  */
 export const GrokBotOnboardingDripStatus = /*@__PURE__*/ proto3.makeEnum(
@@ -1715,6 +2059,21 @@ export const GrokBotPaymentWallet = /*@__PURE__*/ proto3.makeEnum(
     {no: 1, name: "GROK_BOT_PAYMENT_WALLET_X_MONEY", localName: "X_MONEY"},
     {no: 2, name: "GROK_BOT_PAYMENT_WALLET_STRIPE_LINK", localName: "STRIPE_LINK"},
     {no: 3, name: "GROK_BOT_PAYMENT_WALLET_SHOP_PAY", localName: "SHOP_PAY"},
+  ],
+);
+
+/**
+ * @generated from enum aiserver.v1.GrokBotPlaceDetailsOutcome
+ */
+export const GrokBotPlaceDetailsOutcome = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.GrokBotPlaceDetailsOutcome",
+  [
+    {no: 0, name: "GROK_BOT_PLACE_DETAILS_OUTCOME_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "GROK_BOT_PLACE_DETAILS_OUTCOME_FOUND", localName: "FOUND"},
+    {no: 2, name: "GROK_BOT_PLACE_DETAILS_OUTCOME_UNAVAILABLE", localName: "UNAVAILABLE"},
+    {no: 3, name: "GROK_BOT_PLACE_DETAILS_OUTCOME_FAILED", localName: "FAILED"},
+    {no: 4, name: "GROK_BOT_PLACE_DETAILS_OUTCOME_RATE_LIMITED", localName: "RATE_LIMITED"},
+    {no: 5, name: "GROK_BOT_PLACE_DETAILS_OUTCOME_NOT_ON_CARD", localName: "NOT_ON_CARD"},
   ],
 );
 
@@ -1895,6 +2254,37 @@ export const GrokBotSessionBoxPodState = /*@__PURE__*/ proto3.makeEnum(
     {no: 3, name: "GROK_BOT_SESSION_BOX_POD_STATE_HIBERNATED", localName: "HIBERNATED"},
     {no: 4, name: "GROK_BOT_SESSION_BOX_POD_STATE_STARTING", localName: "STARTING"},
     {no: 5, name: "GROK_BOT_SESSION_BOX_POD_STATE_UNKNOWN", localName: "UNKNOWN"},
+  ],
+);
+
+/**
+ * @generated from enum aiserver.v1.GrokBotShoppingProductLookupOutcome
+ */
+export const GrokBotShoppingProductLookupOutcome = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.GrokBotShoppingProductLookupOutcome",
+  [
+    {no: 0, name: "GROK_BOT_SHOPPING_PRODUCT_LOOKUP_OUTCOME_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "GROK_BOT_SHOPPING_PRODUCT_LOOKUP_OUTCOME_FOUND", localName: "FOUND"},
+    {no: 2, name: "GROK_BOT_SHOPPING_PRODUCT_LOOKUP_OUTCOME_NOT_FOUND", localName: "NOT_FOUND"},
+    {no: 3, name: "GROK_BOT_SHOPPING_PRODUCT_LOOKUP_OUTCOME_UNAVAILABLE", localName: "UNAVAILABLE"},
+    {no: 4, name: "GROK_BOT_SHOPPING_PRODUCT_LOOKUP_OUTCOME_FAILED", localName: "FAILED"},
+    {no: 5, name: "GROK_BOT_SHOPPING_PRODUCT_LOOKUP_OUTCOME_RATE_LIMITED", localName: "RATE_LIMITED"},
+  ],
+);
+
+/**
+ * @generated from enum aiserver.v1.GrokBotSimilarProductsSearchOutcome
+ */
+export const GrokBotSimilarProductsSearchOutcome = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.GrokBotSimilarProductsSearchOutcome",
+  [
+    {no: 0, name: "GROK_BOT_SIMILAR_PRODUCTS_SEARCH_OUTCOME_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "GROK_BOT_SIMILAR_PRODUCTS_SEARCH_OUTCOME_FOUND", localName: "FOUND"},
+    {no: 2, name: "GROK_BOT_SIMILAR_PRODUCTS_SEARCH_OUTCOME_EMPTY", localName: "EMPTY"},
+    {no: 3, name: "GROK_BOT_SIMILAR_PRODUCTS_SEARCH_OUTCOME_UNAVAILABLE", localName: "UNAVAILABLE"},
+    {no: 4, name: "GROK_BOT_SIMILAR_PRODUCTS_SEARCH_OUTCOME_FAILED", localName: "FAILED"},
+    {no: 5, name: "GROK_BOT_SIMILAR_PRODUCTS_SEARCH_OUTCOME_RATE_LIMITED", localName: "RATE_LIMITED"},
+    {no: 6, name: "GROK_BOT_SIMILAR_PRODUCTS_SEARCH_OUTCOME_NOT_SEARCHABLE", localName: "NOT_SEARCHABLE"},
   ],
 );
 
@@ -2271,6 +2661,18 @@ export const GrokBotTranscriptFieldState = /*@__PURE__*/ proto3.makeEnum(
 );
 
 /**
+ * @generated from enum aiserver.v1.GrokBotTranscriptSearchTarget
+ */
+export const GrokBotTranscriptSearchTarget = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.GrokBotTranscriptSearchTarget",
+  [
+    {no: 0, name: "GROK_BOT_TRANSCRIPT_SEARCH_TARGET_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "GROK_BOT_TRANSCRIPT_SEARCH_TARGET_MESSAGES", localName: "MESSAGES"},
+    {no: 2, name: "GROK_BOT_TRANSCRIPT_SEARCH_TARGET_FILES", localName: "FILES"},
+  ],
+);
+
+/**
  * @generated from enum aiserver.v1.GrokBotTransferActorRole
  */
 export const GrokBotTransferActorRole = /*@__PURE__*/ proto3.makeEnum(
@@ -2371,6 +2773,23 @@ export const GrokBotTransferWarningKind = /*@__PURE__*/ proto3.makeEnum(
 );
 
 /**
+ * @generated from enum aiserver.v1.GrokBotTryOnImageOutcome
+ */
+export const GrokBotTryOnImageOutcome = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.GrokBotTryOnImageOutcome",
+  [
+    {no: 0, name: "GROK_BOT_TRY_ON_IMAGE_OUTCOME_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "GROK_BOT_TRY_ON_IMAGE_OUTCOME_GENERATED", localName: "GENERATED"},
+    {no: 2, name: "GROK_BOT_TRY_ON_IMAGE_OUTCOME_NOT_FOUND", localName: "NOT_FOUND"},
+    {no: 3, name: "GROK_BOT_TRY_ON_IMAGE_OUTCOME_NO_SELFIE", localName: "NO_SELFIE"},
+    {no: 4, name: "GROK_BOT_TRY_ON_IMAGE_OUTCOME_UNAVAILABLE", localName: "UNAVAILABLE"},
+    {no: 5, name: "GROK_BOT_TRY_ON_IMAGE_OUTCOME_RATE_LIMITED", localName: "RATE_LIMITED"},
+    {no: 6, name: "GROK_BOT_TRY_ON_IMAGE_OUTCOME_CONTENT_BLOCKED", localName: "CONTENT_BLOCKED"},
+    {no: 7, name: "GROK_BOT_TRY_ON_IMAGE_OUTCOME_FAILED", localName: "FAILED"},
+  ],
+);
+
+/**
  * @generated from enum aiserver.v1.GrokBotTurnFailureAccount
  */
 export const GrokBotTurnFailureAccount = /*@__PURE__*/ proto3.makeEnum(
@@ -2398,6 +2817,21 @@ export const GrokBotTurnFailureCode = /*@__PURE__*/ proto3.makeEnum(
     {no: 6, name: "GROK_BOT_TURN_FAILURE_CODE_UNPAID_INVOICE", localName: "UNPAID_INVOICE"},
     {no: 7, name: "GROK_BOT_TURN_FAILURE_CODE_PROVIDER_CONTENT_BLOCKED", localName: "PROVIDER_CONTENT_BLOCKED"},
     {no: 8, name: "GROK_BOT_TURN_FAILURE_CODE_BOX_UPDATING", localName: "BOX_UPDATING"},
+  ],
+);
+
+/**
+ * @generated from enum aiserver.v1.GrokBotUsageSource
+ */
+export const GrokBotUsageSource = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.GrokBotUsageSource",
+  [
+    {no: 0, name: "GROK_BOT_USAGE_SOURCE_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "GROK_BOT_USAGE_SOURCE_USER", localName: "USER"},
+    {no: 2, name: "GROK_BOT_USAGE_SOURCE_AUTOMATION", localName: "AUTOMATION"},
+    {no: 3, name: "GROK_BOT_USAGE_SOURCE_AGENT", localName: "AGENT"},
+    {no: 4, name: "GROK_BOT_USAGE_SOURCE_GROUP", localName: "GROUP"},
+    {no: 5, name: "GROK_BOT_USAGE_SOURCE_OTHER", localName: "OTHER"},
   ],
 );
 
@@ -2482,6 +2916,17 @@ export const GrokBotUserMessageInitiator = /*@__PURE__*/ proto3.makeEnum(
 );
 
 /**
+ * @generated from enum aiserver.v1.GrokBotUserProfilePhotoKind
+ */
+export const GrokBotUserProfilePhotoKind = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.GrokBotUserProfilePhotoKind",
+  [
+    {no: 0, name: "GROK_BOT_USER_PROFILE_PHOTO_KIND_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "GROK_BOT_USER_PROFILE_PHOTO_KIND_SELFIE", localName: "SELFIE"},
+  ],
+);
+
+/**
  * @generated from enum aiserver.v1.GrokBotUserSettingsField
  */
 export const GrokBotUserSettingsField = /*@__PURE__*/ proto3.makeEnum(
@@ -2498,6 +2943,7 @@ export const GrokBotUserSettingsField = /*@__PURE__*/ proto3.makeEnum(
     {no: 8, name: "GROK_BOT_USER_SETTINGS_FIELD_X_TOOL_ACCESS", localName: "X_TOOL_ACCESS"},
     {no: 9, name: "GROK_BOT_USER_SETTINGS_FIELD_JOB_ROLE", localName: "JOB_ROLE"},
     {no: 10, name: "GROK_BOT_USER_SETTINGS_FIELD_LIBRARY_PINS", localName: "LIBRARY_PINS"},
+    {no: 11, name: "GROK_BOT_USER_SETTINGS_FIELD_CART", localName: "CART"},
   ],
 );
 
@@ -2533,6 +2979,18 @@ export const GrokBotVaultItemManager = /*@__PURE__*/ proto3.makeEnum(
   [
     {no: 0, name: "GROK_BOT_VAULT_ITEM_MANAGER_UNSPECIFIED", localName: "UNSPECIFIED"},
     {no: 1, name: "GROK_BOT_VAULT_ITEM_MANAGER_GROK_BOT_EMAIL", localName: "GROK_BOT_EMAIL"},
+  ],
+);
+
+/**
+ * @generated from enum aiserver.v1.GrokBotVirtualCardAnswerable
+ */
+export const GrokBotVirtualCardAnswerable = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.GrokBotVirtualCardAnswerable",
+  [
+    {no: 0, name: "GROK_BOT_VIRTUAL_CARD_ANSWERABLE_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "GROK_BOT_VIRTUAL_CARD_ANSWERABLE_APPROVE_OR_DENY", localName: "APPROVE_OR_DENY"},
+    {no: 2, name: "GROK_BOT_VIRTUAL_CARD_ANSWERABLE_DENY_ONLY", localName: "DENY_ONLY"},
   ],
 );
 
@@ -2677,6 +3135,18 @@ export const LlmGatewayRoutingMode = /*@__PURE__*/ proto3.makeEnum(
 );
 
 /**
+ * @generated from enum aiserver.v1.LocalToolOtherCommandsPolicy
+ */
+export const LocalToolOtherCommandsPolicy = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.LocalToolOtherCommandsPolicy",
+  [
+    {no: 0, name: "LOCAL_TOOL_OTHER_COMMANDS_POLICY_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "LOCAL_TOOL_OTHER_COMMANDS_POLICY_ASK", localName: "ASK"},
+    {no: 2, name: "LOCAL_TOOL_OTHER_COMMANDS_POLICY_BLOCK", localName: "BLOCK"},
+  ],
+);
+
+/**
  * @generated from enum aiserver.v1.LocalToolPermissionCeiling
  */
 export const LocalToolPermissionCeiling = /*@__PURE__*/ proto3.makeEnum(
@@ -2726,6 +3196,22 @@ export const MarketplaceAccessPrincipalKind = /*@__PURE__*/ proto3.makeEnum(
     {no: 2, name: "MARKETPLACE_ACCESS_PRINCIPAL_KIND_TEAM_MEMBER_GROUP", localName: "TEAM_MEMBER_GROUP"},
     {no: 3, name: "MARKETPLACE_ACCESS_PRINCIPAL_KIND_TEAM_ADMIN_GROUP", localName: "TEAM_ADMIN_GROUP"},
     {no: 4, name: "MARKETPLACE_ACCESS_PRINCIPAL_KIND_GROUP", localName: "GROUP"},
+  ],
+);
+
+/**
+ * @generated from enum aiserver.v1.McpCloudVerdict
+ */
+export const McpCloudVerdict = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.McpCloudVerdict",
+  [
+    {no: 0, name: "MCP_CLOUD_VERDICT_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "MCP_CLOUD_VERDICT_USABLE", localName: "USABLE"},
+    {no: 2, name: "MCP_CLOUD_VERDICT_SIGN_IN", localName: "SIGN_IN"},
+    {no: 3, name: "MCP_CLOUD_VERDICT_MOVE_TO_CLOUD", localName: "MOVE_TO_CLOUD"},
+    {no: 4, name: "MCP_CLOUD_VERDICT_LOCAL_ONLY", localName: "LOCAL_ONLY"},
+    {no: 5, name: "MCP_CLOUD_VERDICT_NEEDS_SETUP", localName: "NEEDS_SETUP"},
+    {no: 6, name: "MCP_CLOUD_VERDICT_RETRY", localName: "RETRY"},
   ],
 );
 
@@ -3169,6 +3655,18 @@ export const SandBoxRunState = /*@__PURE__*/ proto3.makeEnum(
 );
 
 /**
+ * @generated from enum aiserver.v1.SandBoxStoreFlushSource
+ */
+export const SandBoxStoreFlushSource = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.SandBoxStoreFlushSource",
+  [
+    {no: 0, name: "SAND_BOX_STORE_FLUSH_SOURCE_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "SAND_BOX_STORE_FLUSH_SOURCE_HIBERNATE_HOOK", localName: "HIBERNATE_HOOK"},
+    {no: 2, name: "SAND_BOX_STORE_FLUSH_SOURCE_PERIODIC_CLEAN_PASS", localName: "PERIODIC_CLEAN_PASS"},
+  ],
+);
+
+/**
  * @generated from enum aiserver.v1.SandBoxStoreManifestCommitStatus
  */
 export const SandBoxStoreManifestCommitStatus = /*@__PURE__*/ proto3.makeEnum(
@@ -3388,6 +3886,10 @@ export const SlackConnectSource = /*@__PURE__*/ proto3.makeEnum(
     {no: 20, name: "SLACK_CONNECT_SOURCE_PUBLIC_INSTALL_USER_SCOPES", localName: "PUBLIC_INSTALL_USER_SCOPES"},
     {no: 21, name: "SLACK_CONNECT_SOURCE_SLACK_AUTH_PROMPT", localName: "SLACK_AUTH_PROMPT"},
     {no: 22, name: "SLACK_CONNECT_SOURCE_SLACK_LINK_UNFURL", localName: "SLACK_LINK_UNFURL"},
+    {no: 23, name: "SLACK_CONNECT_SOURCE_GLASS_UNATTRIBUTED", localName: "GLASS_UNATTRIBUTED"},
+    {no: 24, name: "SLACK_CONNECT_SOURCE_IDE_UNATTRIBUTED", localName: "IDE_UNATTRIBUTED"},
+    {no: 25, name: "SLACK_CONNECT_SOURCE_WEB_UNATTRIBUTED", localName: "WEB_UNATTRIBUTED"},
+    {no: 26, name: "SLACK_CONNECT_SOURCE_GROK_BOT_UNATTRIBUTED", localName: "GROK_BOT_UNATTRIBUTED"},
   ],
 );
 
@@ -3400,6 +3902,19 @@ export const SlackInboundInstallMode = /*@__PURE__*/ proto3.makeEnum(
     {no: 0, name: "SLACK_INBOUND_INSTALL_MODE_UNSPECIFIED", localName: "UNSPECIFIED"},
     {no: 1, name: "SLACK_INBOUND_INSTALL_MODE_OPEN", localName: "OPEN"},
     {no: 2, name: "SLACK_INBOUND_INSTALL_MODE_LOCKED", localName: "LOCKED"},
+  ],
+);
+
+/**
+ * @generated from enum aiserver.v1.SlackLinkedWorkspaceStatus
+ */
+export const SlackLinkedWorkspaceStatus = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.SlackLinkedWorkspaceStatus",
+  [
+    {no: 0, name: "SLACK_LINKED_WORKSPACE_STATUS_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "SLACK_LINKED_WORKSPACE_STATUS_CONNECTED", localName: "CONNECTED"},
+    {no: 2, name: "SLACK_LINKED_WORKSPACE_STATUS_NEEDS_RECONNECT", localName: "NEEDS_RECONNECT"},
+    {no: 3, name: "SLACK_LINKED_WORKSPACE_STATUS_RESTRICTED", localName: "RESTRICTED"},
   ],
 );
 
@@ -3427,6 +3942,7 @@ export const SpendGroupByCategory = /*@__PURE__*/ proto3.makeEnum(
     {no: 3, name: "SPEND_GROUP_BY_CATEGORY_ORIGINATING_FLOW", localName: "ORIGINATING_FLOW"},
     {no: 4, name: "SPEND_GROUP_BY_CATEGORY_GROK_BOT", localName: "GROK_BOT"},
     {no: 5, name: "SPEND_GROUP_BY_CATEGORY_PRODUCT", localName: "PRODUCT"},
+    {no: 6, name: "SPEND_GROUP_BY_CATEGORY_USER", localName: "USER"},
   ],
 );
 
@@ -3723,6 +4239,30 @@ export const AcquireAgentStoreFileLockResponse = /*@__PURE__*/ proto3.makeMessag
 );
 
 /**
+ * @generated from message aiserver.v1.ActOnGrokBotMeetingPromptRequest
+ */
+export const ActOnGrokBotMeetingPromptRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.ActOnGrokBotMeetingPromptRequest",
+  () => [
+    { no: 1, name: "event_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "action", kind: "enum", T: proto3.getEnumType(GrokBotMeetingPromptAction) },
+    { no: 3, name: "agent_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.ActOnGrokBotMeetingPromptResponse
+ */
+export const ActOnGrokBotMeetingPromptResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.ActOnGrokBotMeetingPromptResponse",
+  () => [
+    { no: 1, name: "refusal", kind: "enum", T: proto3.getEnumType(GrokBotMeetingPromptRefusal) },
+    { no: 2, name: "meeting_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "schedule_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
  * @generated from message aiserver.v1.ActivateGrokBotTemplateVersionRequest
  */
 export const ActivateGrokBotTemplateVersionRequest = /*@__PURE__*/ proto3.makeMessageType(
@@ -3914,6 +4454,35 @@ export const AdminAddGrokBotEmailSuppressionResponse = /*@__PURE__*/ proto3.make
 );
 
 /**
+ * @generated from message aiserver.v1.AdminApplyGrokBotAccountMigrationRequest
+ */
+export const AdminApplyGrokBotAccountMigrationRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.AdminApplyGrokBotAccountMigrationRequest",
+  () => [
+    { no: 1, name: "entry_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "expected_source_user_id", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 3, name: "expected_target_user_id", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 4, name: "expected_source_team_id", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 5, name: "expected_target_team_id", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 6, name: "manifest_sha256", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 7, name: "typed_target_email", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 8, name: "operator_email", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 9, name: "target_user_id", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.AdminApplyGrokBotAccountMigrationResponse
+ */
+export const AdminApplyGrokBotAccountMigrationResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.AdminApplyGrokBotAccountMigrationResponse",
+  () => [
+    { no: 1, name: "applied", kind: "message", T: GrokBotAccountMigrationEntry, oneof: "outcome" },
+    { no: 2, name: "refused", kind: "message", T: GrokBotAccountMigrationRefused, oneof: "outcome" },
+  ],
+);
+
+/**
  * @generated from message aiserver.v1.AdminBreakGlassDeleteSandBoxPodRequest
  */
 export const AdminBreakGlassDeleteSandBoxPodRequest = /*@__PURE__*/ proto3.makeMessageType(
@@ -3924,6 +4493,7 @@ export const AdminBreakGlassDeleteSandBoxPodRequest = /*@__PURE__*/ proto3.makeM
     { no: 3, name: "pod_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 4, name: "cluster", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 5, name: "actor_email", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 6, name: "tenant_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ],
 );
 
@@ -3938,6 +4508,54 @@ export const AdminBreakGlassDeleteSandBoxPodResponse = /*@__PURE__*/ proto3.make
     { no: 3, name: "started", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 4, name: "recreate_reason", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 5, name: "operation_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 6, name: "recreated_tenant_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.AdminCancelGrokBotAccountMigrationsRequest
+ */
+export const AdminCancelGrokBotAccountMigrationsRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.AdminCancelGrokBotAccountMigrationsRequest",
+  () => [
+    { no: 1, name: "entry_ids", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 2, name: "batch_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "operator_email", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "target_user_ids", kind: "map", K: 9 /* ScalarType.STRING */, V: {kind: "scalar", T: 5 /* ScalarType.INT32 */} },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.AdminCancelGrokBotAccountMigrationsResponse
+ */
+export const AdminCancelGrokBotAccountMigrationsResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.AdminCancelGrokBotAccountMigrationsResponse",
+  () => [
+    { no: 1, name: "results", kind: "message", T: GrokBotAccountMigrationCancelResult, repeated: true },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.AdminCleanGrokBotAccountMigrationRequest
+ */
+export const AdminCleanGrokBotAccountMigrationRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.AdminCleanGrokBotAccountMigrationRequest",
+  () => [
+    { no: 1, name: "entry_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "target_user_id", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 3, name: "operator_email", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "follow", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.AdminCleanGrokBotAccountMigrationResponse
+ */
+export const AdminCleanGrokBotAccountMigrationResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.AdminCleanGrokBotAccountMigrationResponse",
+  () => [
+    { no: 1, name: "clean", kind: "message", T: GrokBotAccountMigrationClean, oneof: "outcome" },
+    { no: 2, name: "refused", kind: "message", T: GrokBotAccountMigrationRefused, oneof: "outcome" },
   ],
 );
 
@@ -4003,6 +4621,30 @@ export const AdminEnqueueGrokBotServiceAccountMessageResponse = /*@__PURE__*/ pr
 );
 
 /**
+ * @generated from message aiserver.v1.AdminFailGrokBotAccountMigrationExportStartRequest
+ */
+export const AdminFailGrokBotAccountMigrationExportStartRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.AdminFailGrokBotAccountMigrationExportStartRequest",
+  () => [
+    { no: 1, name: "entry_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "export_workflow_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "operator_email", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "target_user_id", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.AdminFailGrokBotAccountMigrationExportStartResponse
+ */
+export const AdminFailGrokBotAccountMigrationExportStartResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.AdminFailGrokBotAccountMigrationExportStartResponse",
+  () => [
+    { no: 1, name: "failed", kind: "message", T: GrokBotAccountMigrationEntry, oneof: "outcome" },
+    { no: 2, name: "refused", kind: "message", T: GrokBotAccountMigrationRefused, oneof: "outcome" },
+  ],
+);
+
+/**
  * @generated from message aiserver.v1.AdminForceDeleteGrokBotSessionBoxRequest
  */
 export const AdminForceDeleteGrokBotSessionBoxRequest = /*@__PURE__*/ proto3.makeMessageType(
@@ -4041,6 +4683,55 @@ export const AdminForceRecreateSandBoxRequest = /*@__PURE__*/ proto3.makeMessage
 );
 
 /**
+ * @generated from message aiserver.v1.AdminGetGrokBotAccountMigrationHeldSummaryRequest
+ */
+export const AdminGetGrokBotAccountMigrationHeldSummaryRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.AdminGetGrokBotAccountMigrationHeldSummaryRequest",
+  () => [
+    { no: 1, name: "entry_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "target_user_id", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 3, name: "item_key", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.AdminGetGrokBotAccountMigrationHeldSummaryResponse
+ */
+export const AdminGetGrokBotAccountMigrationHeldSummaryResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.AdminGetGrokBotAccountMigrationHeldSummaryResponse",
+  () => [
+    { no: 1, name: "summary", kind: "message", T: GrokBotAccountMigrationHeldSummary, oneof: "outcome" },
+    { no: 2, name: "refused", kind: "message", T: GrokBotAccountMigrationRefused, oneof: "outcome" },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.AdminGetGrokBotAccountMigrationRequest
+ */
+export const AdminGetGrokBotAccountMigrationRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.AdminGetGrokBotAccountMigrationRequest",
+  () => [
+    { no: 1, name: "entry_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "include_names", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 3, name: "target_user_id", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.AdminGetGrokBotAccountMigrationResponse
+ */
+export const AdminGetGrokBotAccountMigrationResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.AdminGetGrokBotAccountMigrationResponse",
+  () => [
+    { no: 1, name: "entry", kind: "message", T: GrokBotAccountMigrationEntry },
+    { no: 2, name: "ledger", kind: "message", T: GrokBotAccountMigrationLedgerItem, repeated: true },
+    { no: 3, name: "review", kind: "message", T: GrokBotAccountMigrationReview },
+    { no: 4, name: "review_error_class", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "warnings", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+  ],
+);
+
+/**
  * @generated from message aiserver.v1.AdminGetGrokBotAgentDefinitionRequest
  */
 export const AdminGetGrokBotAgentDefinitionRequest = /*@__PURE__*/ proto3.makeMessageType(
@@ -4060,6 +4751,37 @@ export const AdminGetGrokBotAgentDefinitionResponse = /*@__PURE__*/ proto3.makeM
     { no: 1, name: "identity", kind: "message", T: GrokBotAgentDefinitionIdentity },
     { no: 2, name: "definition", kind: "message", T: GrokBotAgentDefinition },
     { no: 3, name: "refusal", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.AdminGetGrokBotAgentResourcesRequest
+ */
+export const AdminGetGrokBotAgentResourcesRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.AdminGetGrokBotAgentResourcesRequest",
+  () => [
+    { no: 1, name: "agent_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.AdminGetGrokBotAgentResourcesResponse
+ */
+export const AdminGetGrokBotAgentResourcesResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.AdminGetGrokBotAgentResourcesResponse",
+  () => [
+    { no: 1, name: "identity", kind: "message", T: GrokBotAgentDefinitionIdentity },
+    { no: 2, name: "owner_email", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "last_activity_at_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */, opt: true },
+    { no: 4, name: "service_account_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 5, name: "skills", kind: "message", T: GrokBotAgentResourceList },
+    { no: 6, name: "files", kind: "message", T: GrokBotAgentResourceList },
+    { no: 7, name: "learnings", kind: "message", T: GrokBotAgentResourceList },
+    { no: 8, name: "connectors", kind: "message", T: GrokBotAgentResourceList },
+    { no: 9, name: "routines", kind: "message", T: GrokBotAgentResourceList },
+    { no: 10, name: "secrets", kind: "message", T: GrokBotAgentResourceList },
+    { no: 11, name: "vms", kind: "message", T: GrokBotAgentResourceList },
+    { no: 12, name: "slack", kind: "message", T: GrokBotAgentResourceList },
   ],
 );
 
@@ -4270,6 +4992,36 @@ export const AdminGetSandAgentTranscriptPageResponse = /*@__PURE__*/ proto3.make
     { no: 3, name: "reason", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 4, name: "next_before_seq", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
     { no: 5, name: "session_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.AdminGetSandBoxActiveVmRequest
+ */
+export const AdminGetSandBoxActiveVmRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.AdminGetSandBoxActiveVmRequest",
+  () => [
+    { no: 1, name: "tenant_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.AdminGetSandBoxActiveVmResponse
+ */
+export const AdminGetSandBoxActiveVmResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.AdminGetSandBoxActiveVmResponse",
+  () => [
+    { no: 1, name: "has_row", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 2, name: "epoch", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 3, name: "cluster", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "pod_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "promoted_at_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 6, name: "vacated_at_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 7, name: "reason", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 8, name: "last_persisted_at_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 9, name: "last_persisted_pod_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 10, name: "last_persisted_cluster", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 11, name: "last_persisted_size_bytes", kind: "scalar", T: 3 /* ScalarType.INT64 */, opt: true },
   ],
 );
 
@@ -4796,6 +5548,66 @@ export const AdminHibernateSandBoxResponse = /*@__PURE__*/ proto3.makeMessageTyp
   () => [
     { no: 1, name: "started", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 2, name: "reason", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.AdminListGrokBotAccountMigrationLedgerRequest
+ */
+export const AdminListGrokBotAccountMigrationLedgerRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.AdminListGrokBotAccountMigrationLedgerRequest",
+  () => [
+    { no: 1, name: "entry_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "target_user_id", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 3, name: "statuses", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 4, name: "modules", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 5, name: "error_class", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 6, name: "all_attempts", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 7, name: "page_size", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 8, name: "page_token", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.AdminListGrokBotAccountMigrationLedgerResponse
+ */
+export const AdminListGrokBotAccountMigrationLedgerResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.AdminListGrokBotAccountMigrationLedgerResponse",
+  () => [
+    { no: 1, name: "items", kind: "message", T: GrokBotAccountMigrationLedgerItem, repeated: true },
+    { no: 2, name: "next_page_token", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "modules", kind: "message", T: GrokBotAccountMigrationLedgerModuleCounts, repeated: true },
+    { no: 4, name: "error_class_counts", kind: "map", K: 9 /* ScalarType.STRING */, V: {kind: "scalar", T: 5 /* ScalarType.INT32 */} },
+    { no: 5, name: "total", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.AdminListGrokBotAccountMigrationsRequest
+ */
+export const AdminListGrokBotAccountMigrationsRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.AdminListGrokBotAccountMigrationsRequest",
+  () => [
+    { no: 1, name: "state", kind: "enum", T: proto3.getEnumType(GrokBotAccountMigrationState) },
+    { no: 2, name: "batch_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "submitted_by", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "email", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "created_after_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 6, name: "created_before_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 7, name: "page_size", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 8, name: "page_token", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 9, name: "entry_ids", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.AdminListGrokBotAccountMigrationsResponse
+ */
+export const AdminListGrokBotAccountMigrationsResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.AdminListGrokBotAccountMigrationsResponse",
+  () => [
+    { no: 1, name: "entries", kind: "message", T: GrokBotAccountMigrationEntry, repeated: true },
+    { no: 2, name: "next_page_token", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ],
 );
 
@@ -5368,6 +6180,34 @@ export const AdminMoveGrokBotEmailInboxesResponse = /*@__PURE__*/ proto3.makeMes
 );
 
 /**
+ * @generated from message aiserver.v1.AdminOverrideGrokBotAccountMigrationItemRequest
+ */
+export const AdminOverrideGrokBotAccountMigrationItemRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.AdminOverrideGrokBotAccountMigrationItemRequest",
+  () => [
+    { no: 1, name: "entry_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "target_user_id", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 3, name: "module", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "item_key", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "typed_target_email", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 6, name: "reason", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 7, name: "operator_email", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 8, name: "closed_apply_workflow_ids", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.AdminOverrideGrokBotAccountMigrationItemResponse
+ */
+export const AdminOverrideGrokBotAccountMigrationItemResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.AdminOverrideGrokBotAccountMigrationItemResponse",
+  () => [
+    { no: 1, name: "overridden", kind: "message", T: GrokBotAccountMigrationEntry, oneof: "outcome" },
+    { no: 2, name: "refused", kind: "message", T: GrokBotAccountMigrationRefused, oneof: "outcome" },
+  ],
+);
+
+/**
  * @generated from message aiserver.v1.AdminPreviewGrokBotAgentTransferRequest
  */
 export const AdminPreviewGrokBotAgentTransferRequest = /*@__PURE__*/ proto3.makeMessageType(
@@ -5387,6 +6227,38 @@ export const AdminPreviewGrokBotAgentTransferResponse = /*@__PURE__*/ proto3.mak
   "aiserver.v1.AdminPreviewGrokBotAgentTransferResponse",
   () => [
     { no: 1, name: "items", kind: "message", T: GrokBotTransferPreviewItem, repeated: true },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.AdminProposeGrokBotAccountMigrationPairsRequest
+ */
+export const AdminProposeGrokBotAccountMigrationPairsRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.AdminProposeGrokBotAccountMigrationPairsRequest",
+  () => [
+    { no: 1, name: "source_team_id", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 2, name: "target_team_id", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 3, name: "email_domain_from", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "email_domain_to", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "target_team_ids", kind: "scalar", T: 5 /* ScalarType.INT32 */, repeated: true },
+    { no: 6, name: "source_after_user_id", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.AdminProposeGrokBotAccountMigrationPairsResponse
+ */
+export const AdminProposeGrokBotAccountMigrationPairsResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.AdminProposeGrokBotAccountMigrationPairsResponse",
+  () => [
+    { no: 1, name: "proposals", kind: "message", T: GrokBotAccountMigrationProposal, repeated: true },
+    { no: 2, name: "source_member_count", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 3, name: "target_member_count", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 4, name: "source_truncated", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 5, name: "idp_available", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 6, name: "next_source_after_user_id", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 7, name: "source_named_count", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 8, name: "source_members_read", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
   ],
 );
 
@@ -5526,6 +6398,27 @@ export const AdminRemoveGrokBotEmailSuppressionsResponse = /*@__PURE__*/ proto3.
 );
 
 /**
+ * @generated from message aiserver.v1.AdminResolveGrokBotAccountMigrationPairsRequest
+ */
+export const AdminResolveGrokBotAccountMigrationPairsRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.AdminResolveGrokBotAccountMigrationPairsRequest",
+  () => [
+    { no: 1, name: "pairs", kind: "message", T: GrokBotAccountMigrationPairInput, repeated: true },
+    { no: 2, name: "allow_teamless_target", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.AdminResolveGrokBotAccountMigrationPairsResponse
+ */
+export const AdminResolveGrokBotAccountMigrationPairsResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.AdminResolveGrokBotAccountMigrationPairsResponse",
+  () => [
+    { no: 1, name: "pairs", kind: "message", T: GrokBotAccountMigrationPairResolution, repeated: true },
+  ],
+);
+
+/**
  * @generated from message aiserver.v1.AdminResolveGrokBotAttachmentReadsRequest
  */
 export const AdminResolveGrokBotAttachmentReadsRequest = /*@__PURE__*/ proto3.makeMessageType(
@@ -5584,6 +6477,29 @@ export const AdminResumeGrokBotAgentTransferResponse = /*@__PURE__*/ proto3.make
   "aiserver.v1.AdminResumeGrokBotAgentTransferResponse",
   () => [
     { no: 1, name: "transfer", kind: "message", T: GrokBotTransferStatus },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.AdminRetryGrokBotAccountMigrationsRequest
+ */
+export const AdminRetryGrokBotAccountMigrationsRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.AdminRetryGrokBotAccountMigrationsRequest",
+  () => [
+    { no: 1, name: "entry_ids", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 2, name: "closed_apply_workflow_ids", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 3, name: "operator_email", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "target_user_ids", kind: "map", K: 9 /* ScalarType.STRING */, V: {kind: "scalar", T: 5 /* ScalarType.INT32 */} },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.AdminRetryGrokBotAccountMigrationsResponse
+ */
+export const AdminRetryGrokBotAccountMigrationsResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.AdminRetryGrokBotAccountMigrationsResponse",
+  () => [
+    { no: 1, name: "results", kind: "message", T: GrokBotAccountMigrationRetryResult, repeated: true },
   ],
 );
 
@@ -5740,6 +6656,28 @@ export const AdminSnapshotSandBoxStoreResponse = /*@__PURE__*/ proto3.makeMessag
 );
 
 /**
+ * @generated from message aiserver.v1.AdminStartGrokBotDreamRequest
+ */
+export const AdminStartGrokBotDreamRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.AdminStartGrokBotDreamRequest",
+  () => [
+    { no: 1, name: "agent_ref", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "kind", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.AdminStartGrokBotDreamResponse
+ */
+export const AdminStartGrokBotDreamResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.AdminStartGrokBotDreamResponse",
+  () => [
+    { no: 1, name: "refusal", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "workflow_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
  * @generated from message aiserver.v1.AdminStatSandBoxStoreObjectExpectedKey
  */
 export const AdminStatSandBoxStoreObjectExpectedKey = /*@__PURE__*/ proto3.makeMessageType(
@@ -5795,6 +6733,31 @@ export const AdminStatSandBoxStoreObjectResponse = /*@__PURE__*/ proto3.makeMess
     { no: 13, name: "bucket_default_kms_key_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 14, name: "bucket_default_error", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 15, name: "expected_key", kind: "message", T: AdminStatSandBoxStoreObjectExpectedKey },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.AdminSubmitGrokBotAccountMigrationsRequest
+ */
+export const AdminSubmitGrokBotAccountMigrationsRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.AdminSubmitGrokBotAccountMigrationsRequest",
+  () => [
+    { no: 1, name: "pairs", kind: "message", T: GrokBotAccountMigrationPairSubmit, repeated: true },
+    { no: 2, name: "reason", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "operator_email", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "options", kind: "message", T: GrokBotAccountMigrationOptions },
+    { no: 5, name: "explanation_footer", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.AdminSubmitGrokBotAccountMigrationsResponse
+ */
+export const AdminSubmitGrokBotAccountMigrationsResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.AdminSubmitGrokBotAccountMigrationsResponse",
+  () => [
+    { no: 1, name: "batch_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "results", kind: "message", T: GrokBotAccountMigrationSubmitResult, repeated: true },
   ],
 );
 
@@ -6321,6 +7284,57 @@ export const AnalyticsEvent = /*@__PURE__*/ proto3.makeMessageType(
 );
 
 /**
+ * @generated from message aiserver.v1.AnswerGrokBotLabelerQuestionRequest
+ */
+export const AnswerGrokBotLabelerQuestionRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.AnswerGrokBotLabelerQuestionRequest",
+  () => [
+    { no: 1, name: "agent_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "entry_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "answer_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "session_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "comment", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 6, name: "action", kind: "enum", T: proto3.getEnumType(GrokBotLabelerQuestionAction) },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.AnswerGrokBotLabelerQuestionResponse
+ */
+export const AnswerGrokBotLabelerQuestionResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.AnswerGrokBotLabelerQuestionResponse",
+  () => [
+    { no: 1, name: "refusal", kind: "message", T: GrokBotHarnessRefusal, opt: true },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.AnswerGrokBotMessagingCardRequest
+ */
+export const AnswerGrokBotMessagingCardRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.AnswerGrokBotMessagingCardRequest",
+  () => [
+    { no: 1, name: "card_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "version", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 3, name: "answer", kind: "enum", T: proto3.getEnumType(GrokBotMessagingCardAnswerKind) },
+    { no: 4, name: "option_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "values", kind: "map", K: 9 /* ScalarType.STRING */, V: {kind: "scalar", T: 9 /* ScalarType.STRING */} },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.AnswerGrokBotMessagingCardResponse
+ */
+export const AnswerGrokBotMessagingCardResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.AnswerGrokBotMessagingCardResponse",
+  () => [
+    { no: 1, name: "status", kind: "enum", T: proto3.getEnumType(GrokBotMessagingCardAnswerStatus) },
+    { no: 2, name: "card", kind: "message", T: GrokBotMessagingCard },
+    { no: 3, name: "refusal", kind: "message", T: GrokBotHarnessRefusal, opt: true },
+  ],
+);
+
+/**
  * @generated from message aiserver.v1.ApplyAgentDiffParams
  */
 export const ApplyAgentDiffParams = /*@__PURE__*/ proto3.makeMessageType(
@@ -6369,6 +7383,7 @@ export const AppsSettings = /*@__PURE__*/ proto3.makeMessageType(
     { no: 1, name: "enabled", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
     { no: 2, name: "allow_public_apps", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
     { no: 3, name: "security", kind: "message", T: AppsSecuritySettings, opt: true },
+    { no: 4, name: "allow_api_key_access", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
   ],
 );
 
@@ -6679,6 +7694,7 @@ export const AvailableModelsResponse_AvailableModel = /*@__PURE__*/ proto3.makeM
     { no: 46, name: "requires_data_retention", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
     { no: 47, name: "reason_for_zdr_consent_block", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 48, name: "model_picker_badges", kind: "message", T: AvailableModelsResponse_ModelPickerBadge, repeated: true },
+    { no: 49, name: "gateway_published_model_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
   ],
   {localName: "AvailableModelsResponse_AvailableModel"},
 );
@@ -7777,6 +8793,16 @@ export const CanvasPayloadAssetUrl = /*@__PURE__*/ proto3.makeMessageType(
 );
 
 /**
+ * @generated from message aiserver.v1.CanvasProjectShare
+ */
+export const CanvasProjectShare = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.CanvasProjectShare",
+  () => [
+    { no: 1, name: "name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
  * @generated from message aiserver.v1.CanvasShareAccessState
  */
 export const CanvasShareAccessState = /*@__PURE__*/ proto3.makeMessageType(
@@ -7945,6 +8971,10 @@ export const CheckHttpMcpStatusRequest = /*@__PURE__*/ proto3.makeMessageType(
     { no: 16, name: "share_with_bot_agent_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 17, name: "share_with_bot_plugin_id", kind: "scalar", T: 3 /* ScalarType.INT64 */, opt: true },
     { no: 18, name: "share_acknowledged_warning_version", kind: "scalar", T: 5 /* ScalarType.INT32 */, opt: true },
+    { no: 19, name: "texted_sign_in", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+    { no: 20, name: "grok_bot_session_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 21, name: "connector_suite_capable", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+    { no: 22, name: "connector_suite", kind: "message", T: ConnectorSuiteSelection, opt: true },
   ],
 );
 
@@ -7975,6 +9005,9 @@ export const CheckHttpMcpStatusResponse_ServerStatus = /*@__PURE__*/ proto3.make
     { no: 9, name: "sign_out", kind: "message", T: McpSignOut, opt: true },
     { no: 10, name: "sign_in_refusal", kind: "message", T: McpSignInRefusal, opt: true },
     { no: 11, name: "signed_in", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 12, name: "cloud_verdict", kind: "enum", T: proto3.getEnumType(McpCloudVerdict) },
+    { no: 13, name: "connector_suite_offer", kind: "message", T: ConnectorSuiteOffer, opt: true },
+    { no: 14, name: "connector_suite_exposure", kind: "enum", T: proto3.getEnumType(ConnectorSuiteExposure) },
   ],
   {localName: "CheckHttpMcpStatusResponse_ServerStatus"},
 );
@@ -8453,6 +9486,7 @@ export const CloudCanvasMetadata = /*@__PURE__*/ proto3.makeMessageType(
     { no: 13, name: "public_share_withheld_for_enterprise", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
     { no: 14, name: "can_rename_page", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
     { no: 17, name: "grok_bot_contributor_agent_ids", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 18, name: "project_share", kind: "message", T: CanvasProjectShare, opt: true },
   ],
 );
 
@@ -8555,6 +9589,7 @@ export const CommandDescriptor = /*@__PURE__*/ proto3.makeMessageType(
     { no: 2, name: "description", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 3, name: "source_path", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 4, name: "source_url", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 5, name: "source_repo_url", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
   ],
 );
 
@@ -8688,6 +9723,7 @@ export const CompleteMcpOAuthResponse = /*@__PURE__*/ proto3.makeMessageType(
     { no: 2, name: "account_key", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 3, name: "tailnet_pending_reason", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 4, name: "tailnet_pending_detail", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 5, name: "connector_suite_result", kind: "message", T: ConnectorSuiteMemberResult, repeated: true },
   ],
 );
 
@@ -8714,6 +9750,7 @@ export const CompleteOnePasswordOAuthRequest = /*@__PURE__*/ proto3.makeMessageT
     { no: 1, name: "state", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 2, name: "code", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 3, name: "error", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "error_description", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ],
 );
 
@@ -9314,6 +10351,42 @@ export const ConnectScmResult = /*@__PURE__*/ proto3.makeMessageType(
   () => [
     { no: 1, name: "success", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 2, name: "message", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.ConnectorSuiteMemberResult
+ */
+export const ConnectorSuiteMemberResult = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.ConnectorSuiteMemberResult",
+  () => [
+    { no: 1, name: "plugin_id", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 2, name: "server_url", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "outcome", kind: "enum", T: proto3.getEnumType(ConnectorSuiteMemberOutcome) },
+    { no: 4, name: "coverage", kind: "enum", T: proto3.getEnumType(ConnectorSuiteCoverage) },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.ConnectorSuiteOffer
+ */
+export const ConnectorSuiteOffer = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.ConnectorSuiteOffer",
+  () => [
+    { no: 1, name: "suite_id", kind: "enum", T: proto3.getEnumType(ConnectorSuiteId) },
+    { no: 2, name: "member_plugin_ids", kind: "scalar", T: 3 /* ScalarType.INT64 */, repeated: true },
+    { no: 3, name: "drive_covers_editors", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.ConnectorSuiteSelection
+ */
+export const ConnectorSuiteSelection = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.ConnectorSuiteSelection",
+  () => [
+    { no: 1, name: "suite_id", kind: "enum", T: proto3.getEnumType(ConnectorSuiteId) },
+    { no: 2, name: "member_plugin_ids", kind: "scalar", T: 3 /* ScalarType.INT64 */, repeated: true },
   ],
 );
 
@@ -9978,6 +11051,7 @@ export const CreateGrokBotAgentFromTemplateRequest = /*@__PURE__*/ proto3.makeMe
     { no: 6, name: "setup_delegation_supported", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
     { no: 7, name: "language", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 8, name: "import_entry", kind: "enum", T: proto3.getEnumType(GrokBotTemplateImportEntry), opt: true },
+    { no: 9, name: "onboarding_connect_screen_shown", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
   ],
 );
 
@@ -10019,6 +11093,9 @@ export const CreateGrokBotAgentRequest = /*@__PURE__*/ proto3.makeMessageType(
     { no: 15, name: "create_intent", kind: "enum", T: proto3.getEnumType(GrokBotAgentCreateIntent) },
     { no: 16, name: "create_caller", kind: "enum", T: proto3.getEnumType(GrokBotAgentCreateCaller) },
     { no: 17, name: "created_automatically", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+    { no: 18, name: "visibility", kind: "enum", T: proto3.getEnumType(GrokBotAgentVisibility), opt: true },
+    { no: 19, name: "team_id", kind: "scalar", T: 5 /* ScalarType.INT32 */, opt: true },
+    { no: 20, name: "bot_builder_requested", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
   ],
 );
 
@@ -10119,6 +11196,20 @@ export const CreateGrokBotOnboardingDripInternalRequest = /*@__PURE__*/ proto3.m
   "aiserver.v1.CreateGrokBotOnboardingDripInternalRequest",
   () => [
     { no: 1, name: "slug", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.CreateGrokBotOnboardingDripRouteInternalRequest
+ */
+export const CreateGrokBotOnboardingDripRouteInternalRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.CreateGrokBotOnboardingDripRouteInternalRequest",
+  () => [
+    { no: 1, name: "drip_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "apps", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 3, name: "roles", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 4, name: "plans", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 5, name: "target_drip_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ],
 );
 
@@ -10751,6 +11842,26 @@ export const DeleteGrokBotUserFormVaultEntryResponse = /*@__PURE__*/ proto3.make
 );
 
 /**
+ * @generated from message aiserver.v1.DeleteGrokBotUserProfilePhotoRequest
+ */
+export const DeleteGrokBotUserProfilePhotoRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.DeleteGrokBotUserProfilePhotoRequest",
+  () => [
+    { no: 1, name: "kind", kind: "enum", T: proto3.getEnumType(GrokBotUserProfilePhotoKind) },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.DeleteGrokBotUserProfilePhotoResponse
+ */
+export const DeleteGrokBotUserProfilePhotoResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.DeleteGrokBotUserProfilePhotoResponse",
+  () => [
+    { no: 1, name: "profile", kind: "message", T: GrokBotUserProfile },
+  ],
+);
+
+/**
  * @generated from message aiserver.v1.DeleteGrokBotUserStoreFileRequest
  */
 export const DeleteGrokBotUserStoreFileRequest = /*@__PURE__*/ proto3.makeMessageType(
@@ -10797,6 +11908,9 @@ export const DeleteMcpOAuthAccountRequest = /*@__PURE__*/ proto3.makeMessageType
     { no: 1, name: "server_id", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
     { no: 2, name: "account_key", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 3, name: "server_url", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "grok_bot_plugin_scope", kind: "message", T: GrokBotPluginScope, opt: true },
+    { no: 5, name: "grok_bot_agent_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 6, name: "grok_bot_session_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
   ],
 );
 
@@ -11924,6 +13038,7 @@ export const ExecuteSandMcpToolRequest = /*@__PURE__*/ proto3.makeMessageType(
     { no: 9, name: "event_sequence", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
     { no: 10, name: "mcp_analytics_reported_by_caller", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 11, name: "model_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 12, name: "refuse_shared_payment_token_arguments", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ],
 );
 
@@ -12350,6 +13465,34 @@ export const ForceRecreateSandBoxRequest = /*@__PURE__*/ proto3.makeMessageType(
 );
 
 /**
+ * @generated from message aiserver.v1.GenerateGrokBotTryOnImageRequest
+ */
+export const GenerateGrokBotTryOnImageRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GenerateGrokBotTryOnImageRequest",
+  () => [
+    { no: 1, name: "agent_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "entry_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "card_index", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 4, name: "product_index", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 5, name: "session_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 6, name: "variant_options", kind: "map", K: 9 /* ScalarType.STRING */, V: {kind: "scalar", T: 9 /* ScalarType.STRING */} },
+    { no: 7, name: "from_try_on_image_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 8, name: "instruction", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GenerateGrokBotTryOnImageResponse
+ */
+export const GenerateGrokBotTryOnImageResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GenerateGrokBotTryOnImageResponse",
+  () => [
+    { no: 1, name: "outcome", kind: "enum", T: proto3.getEnumType(GrokBotTryOnImageOutcome) },
+    { no: 2, name: "image", kind: "message", T: GrokBotTryOnImage },
+  ],
+);
+
+/**
  * @generated from message aiserver.v1.GenerateImageReferenceImage
  */
 export const GenerateImageReferenceImage = /*@__PURE__*/ proto3.makeMessageType(
@@ -12442,6 +13585,8 @@ export const GetAvailableMcpServersRequest = /*@__PURE__*/ proto3.makeMessageTyp
     { no: 1, name: "grok_bot_plugin_scope", kind: "message", T: GrokBotPluginScope, opt: true },
     { no: 2, name: "grok_bot_agent_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 3, name: "team_tailnet_rows_per_team", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 4, name: "service_account_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 5, name: "grok_bot_session_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
   ],
 );
 
@@ -12521,6 +13666,7 @@ export const GetAvailableMcpServersResponse_McpServerInfo = /*@__PURE__*/ proto3
     { no: 29, name: "server_identifier_aliases", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
     { no: 30, name: "plugin_display_name", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 31, name: "plugin_team", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+    { no: 32, name: "disabled_by_cloud_agent_mcp_allowlist", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
   ],
   {localName: "GetAvailableMcpServersResponse_McpServerInfo"},
 );
@@ -12865,6 +14011,7 @@ export const GetDailySpendByCategoryRequest = /*@__PURE__*/ proto3.makeMessageTy
     { no: 11, name: "client_type", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 12, name: "products", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
     { no: 13, name: "include_credit_usage", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+    { no: 14, name: "ranking_metric", kind: "enum", T: proto3.getEnumType(DailySpendRankingMetric), opt: true },
   ],
 );
 
@@ -12932,6 +14079,9 @@ export const GetGrokBotAgentAccessRequest = /*@__PURE__*/ proto3.makeMessageType
   () => [
     { no: 1, name: "agent_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 2, name: "lists_cross_tier_principals", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 3, name: "query", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 4, name: "people_cursor", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "shows_bot_team_first", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ],
 );
 
@@ -12948,6 +14098,13 @@ export const GetGrokBotAgentAccessResponse = /*@__PURE__*/ proto3.makeMessageTyp
     { no: 5, name: "viewer_user_id", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
     { no: 6, name: "bot_team_directory", kind: "message", T: GrokBotAccessBotTeamDirectory },
     { no: 7, name: "personal_bot_people", kind: "message", T: GrokBotAccessPersonDirectoryEntry, repeated: true },
+    { no: 8, name: "listed_people", kind: "message", T: GrokBotAccessPersonDirectoryEntry, repeated: true },
+    { no: 9, name: "listed_groups", kind: "message", T: GrokBotAccessGroupDirectoryEntry, repeated: true },
+    { no: 10, name: "candidate_people", kind: "message", T: GrokBotAccessPersonDirectoryEntry, repeated: true },
+    { no: 11, name: "next_people_cursor", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 12, name: "candidate_groups", kind: "message", T: GrokBotAccessGroupDirectoryEntry, repeated: true },
+    { no: 13, name: "candidate_teams", kind: "message", T: GrokBotAccessTeamDirectoryEntry, repeated: true },
+    { no: 14, name: "candidates_bot_team_first", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ],
 );
 
@@ -13085,7 +14242,7 @@ export const GetGrokBotAgentPluginsResponse = /*@__PURE__*/ proto3.makeMessageTy
     { no: 4, name: "service_accounts_enabled", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
     { no: 5, name: "delegated_auth_available", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
     { no: 6, name: "shareable_plugin_ids", kind: "scalar", T: 3 /* ScalarType.INT64 */, repeated: true },
-    { no: 7, name: "custom_mcp_per_user", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+    { no: 8, name: "offered_service_account_plugin_ids", kind: "scalar", T: 3 /* ScalarType.INT64 */, repeated: true },
   ],
 );
 
@@ -13172,6 +14329,7 @@ export const GetGrokBotEgressPolicyResponse = /*@__PURE__*/ proto3.makeMessageTy
     { no: 1, name: "restricted", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 2, name: "allowed_domains", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
     { no: 3, name: "allowed_tcp_destinations", kind: "message", T: GrokBotAllowedTcpDestination, repeated: true },
+    { no: 4, name: "private_destination_rules", kind: "message", T: GrokBotPrivateDestinationRule, repeated: true },
   ],
 );
 
@@ -13219,6 +14377,38 @@ export const GetGrokBotIMessageDraftSenderResponse = /*@__PURE__*/ proto3.makeMe
     { no: 2, name: "machine_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 3, name: "machine_label", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 4, name: "reason", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GetGrokBotInviteByEmailAccessRequest
+ */
+export const GetGrokBotInviteByEmailAccessRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GetGrokBotInviteByEmailAccessRequest",
+  [],
+);
+
+/**
+ * @generated from message aiserver.v1.GetGrokBotInviteByEmailAccessResponse
+ */
+export const GetGrokBotInviteByEmailAccessResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GetGrokBotInviteByEmailAccessResponse",
+  () => [
+    { no: 1, name: "eligibility", kind: "enum", T: proto3.getEnumType(GetGrokBotInviteByEmailAccessResponse_Eligibility) },
+  ],
+);
+
+/**
+ * @generated from enum aiserver.v1.GetGrokBotInviteByEmailAccessResponse.Eligibility
+ */
+export const GetGrokBotInviteByEmailAccessResponse_Eligibility = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.GetGrokBotInviteByEmailAccessResponse.Eligibility",
+  [
+    {no: 0, name: "ELIGIBILITY_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "ELIGIBILITY_ELIGIBLE", localName: "ELIGIBLE"},
+    {no: 2, name: "ELIGIBILITY_NOT_INDIVIDUAL", localName: "NOT_INDIVIDUAL"},
+    {no: 3, name: "ELIGIBILITY_NO_GROK_BOT_ACCESS", localName: "NO_GROK_BOT_ACCESS"},
+    {no: 4, name: "ELIGIBILITY_UNKNOWN", localName: "UNKNOWN"},
   ],
 );
 
@@ -13348,6 +14538,26 @@ export const GetGrokBotMeetingRecordResponse = /*@__PURE__*/ proto3.makeMessageT
 );
 
 /**
+ * @generated from message aiserver.v1.GetGrokBotMessagingCardRequest
+ */
+export const GetGrokBotMessagingCardRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GetGrokBotMessagingCardRequest",
+  () => [
+    { no: 1, name: "card_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GetGrokBotMessagingCardResponse
+ */
+export const GetGrokBotMessagingCardResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GetGrokBotMessagingCardResponse",
+  () => [
+    { no: 1, name: "card", kind: "message", T: GrokBotMessagingCard },
+  ],
+);
+
+/**
  * @generated from message aiserver.v1.GetGrokBotMessagingLinkStatusRequest
  */
 export const GetGrokBotMessagingLinkStatusRequest = /*@__PURE__*/ proto3.makeMessageType(
@@ -13363,6 +14573,7 @@ export const GetGrokBotMessagingLinkStatusResponse = /*@__PURE__*/ proto3.makeMe
   () => [
     { no: 1, name: "line_number", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 2, name: "pending_code", kind: "message", T: IssueGrokBotMessagingLinkCodeResponse },
+    { no: 3, name: "disabled_by_team_admin", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ],
 );
 
@@ -13384,6 +14595,7 @@ export const GetGrokBotOnboardingDripInternalResponse = /*@__PURE__*/ proto3.mak
   () => [
     { no: 1, name: "drip", kind: "message", T: GrokBotOnboardingDrip },
     { no: 2, name: "steps", kind: "message", T: GrokBotOnboardingDripStep, repeated: true },
+    { no: 3, name: "router", kind: "message", T: GrokBotOnboardingDripRouter },
   ],
 );
 
@@ -13429,6 +14641,31 @@ export const GetGrokBotPhoneUiGatesResponse = /*@__PURE__*/ proto3.makeMessageTy
   () => [
     { no: 1, name: "gates", kind: "map", K: 9 /* ScalarType.STRING */, V: {kind: "scalar", T: 8 /* ScalarType.BOOL */} },
     { no: 2, name: "phone_client_version", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GetGrokBotPlaceDetailsRequest
+ */
+export const GetGrokBotPlaceDetailsRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GetGrokBotPlaceDetailsRequest",
+  () => [
+    { no: 1, name: "agent_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "entry_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "card_index", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 4, name: "place_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "session_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GetGrokBotPlaceDetailsResponse
+ */
+export const GetGrokBotPlaceDetailsResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GetGrokBotPlaceDetailsResponse",
+  () => [
+    { no: 1, name: "outcome", kind: "enum", T: proto3.getEnumType(GrokBotPlaceDetailsOutcome) },
+    { no: 2, name: "place_details_json", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ],
 );
 
@@ -13563,6 +14800,7 @@ export const GetGrokBotTeamsInstallStateRequest = /*@__PURE__*/ proto3.makeMessa
   () => [
     { no: 1, name: "agent_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 2, name: "consent_nonce", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 3, name: "check_now", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
   ],
 );
 
@@ -13590,10 +14828,15 @@ export const GetGrokBotTeamsInstallStateResponse = /*@__PURE__*/ proto3.makeMess
     { no: 16, name: "connected_account", kind: "message", T: GrokBotTeamsConnectedAccount, opt: true },
     { no: 20, name: "bot_status", kind: "message", T: GrokBotTeamsBotStatus, opt: true },
     { no: 21, name: "auto_team_install", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+    { no: 26, name: "check_outcome", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 27, name: "checked_at_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */, opt: true },
+    { no: 28, name: "check_again_after_ms", kind: "scalar", T: 13 /* ScalarType.UINT32 */, opt: true },
     { no: 22, name: "definition_update_needed", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
     { no: 23, name: "definition_update_in_review", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
     { no: 24, name: "definition_update_profile_changed", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
     { no: 25, name: "team_enablement", kind: "message", T: GrokBotTeamsTeamEnablement, opt: true },
+    { no: 29, name: "teams_admin_center_url", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 30, name: "teams_home_url", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
   ],
 );
 
@@ -13718,6 +14961,28 @@ export const GetGrokBotTermsSeenResponse = /*@__PURE__*/ proto3.makeMessageType(
 );
 
 /**
+ * @generated from message aiserver.v1.GetGrokBotUsageBreakdownRequest
+ */
+export const GetGrokBotUsageBreakdownRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GetGrokBotUsageBreakdownRequest",
+  () => [
+    { no: 1, name: "enterprise_team_id", kind: "scalar", T: 5 /* ScalarType.INT32 */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GetGrokBotUsageBreakdownResponse
+ */
+export const GetGrokBotUsageBreakdownResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GetGrokBotUsageBreakdownResponse",
+  () => [
+    { no: 1, name: "billed_cents", kind: "message", T: GrokBotUsageCentsSplits, oneof: "breakdown" },
+    { no: 2, name: "weekly_limit_ppm", kind: "message", T: GrokBotUsagePpmSplits, oneof: "breakdown" },
+    { no: 3, name: "billing_cycle_ppm", kind: "message", T: GrokBotUsagePpmSplits, oneof: "breakdown" },
+  ],
+);
+
+/**
  * @generated from message aiserver.v1.GetGrokBotUserMcpSettingsRequest
  */
 export const GetGrokBotUserMcpSettingsRequest = /*@__PURE__*/ proto3.makeMessageType(
@@ -13736,11 +15001,31 @@ export const GetGrokBotUserMcpSettingsResponse = /*@__PURE__*/ proto3.makeMessag
 );
 
 /**
+ * @generated from message aiserver.v1.GetGrokBotUserProfileRequest
+ */
+export const GetGrokBotUserProfileRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GetGrokBotUserProfileRequest",
+  [],
+);
+
+/**
+ * @generated from message aiserver.v1.GetGrokBotUserProfileResponse
+ */
+export const GetGrokBotUserProfileResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GetGrokBotUserProfileResponse",
+  () => [
+    { no: 1, name: "profile", kind: "message", T: GrokBotUserProfile },
+  ],
+);
+
+/**
  * @generated from message aiserver.v1.GetGrokBotUserRuntimeSettingsRequest
  */
 export const GetGrokBotUserRuntimeSettingsRequest = /*@__PURE__*/ proto3.makeMessageType(
   "aiserver.v1.GetGrokBotUserRuntimeSettingsRequest",
-  [],
+  () => [
+    { no: 1, name: "after_main_agent_change", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ],
 );
 
 /**
@@ -13972,6 +15257,8 @@ export const GetMeResponse = /*@__PURE__*/ proto3.makeMessageType(
     { no: 19, name: "public_user_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 20, name: "scm_only_restricted", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
     { no: 21, name: "email_is_synthetic", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+    { no: 22, name: "signup_source", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 23, name: "admin_session_management_enabled", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ],
 );
 
@@ -14247,6 +15534,7 @@ export const GetSandAccessStatusResponse = /*@__PURE__*/ proto3.makeMessageType(
     { no: 17, name: "super_grok_heavy_ultra_ended_notice", kind: "message", T: SuperGrokHeavyUltraEndedNotice },
     { no: 18, name: "speech_ui_hidden", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 19, name: "post_sign_in_step", kind: "message", T: SandPostSignInStep },
+    { no: 20, name: "grok_connectors_only", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ],
 );
 
@@ -14331,6 +15619,30 @@ export const GetSandBoxUpgradeScheduleResponse = /*@__PURE__*/ proto3.makeMessag
   "aiserver.v1.GetSandBoxUpgradeScheduleResponse",
   () => [
     { no: 1, name: "schedule", kind: "message", T: SandBoxUpgradeSchedule },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GetSandEnterpriseSpendLimitRequest
+ */
+export const GetSandEnterpriseSpendLimitRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GetSandEnterpriseSpendLimitRequest",
+  () => [
+    { no: 1, name: "team_id", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GetSandEnterpriseSpendLimitResponse
+ */
+export const GetSandEnterpriseSpendLimitResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GetSandEnterpriseSpendLimitResponse",
+  () => [
+    { no: 1, name: "period_start_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 2, name: "period_end_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 3, name: "spent_cents", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 4, name: "limit_cents", kind: "scalar", T: 3 /* ScalarType.INT64 */, opt: true },
+    { no: 5, name: "on_demand_only", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ],
 );
 
@@ -14427,6 +15739,7 @@ export const GetSandUsageStatusResponse = /*@__PURE__*/ proto3.makeMessageType(
     { no: 24, name: "account_merge_pausing_bots", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 25, name: "unify_pending_merge_unread", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 26, name: "next_banked_reset_redeem_at", kind: "message", T: Timestamp, opt: true },
+    { no: 27, name: "upgrade_option", kind: "message", T: SandUpgradeOption, opt: true },
   ],
 );
 
@@ -14442,6 +15755,7 @@ export const GetSlackInstallUrlRequest = /*@__PURE__*/ proto3.makeMessageType(
     { no: 4, name: "attempt_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 5, name: "grok_bot_callback_url", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 6, name: "site", kind: "enum", T: proto3.getEnumType(SlackConnectSite), opt: true },
+    { no: 7, name: "reconnect_slack_team_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
   ],
 );
 
@@ -14487,6 +15801,7 @@ export const GetSlackUserSettingsResponse = /*@__PURE__*/ proto3.makeMessageType
     { no: 12, name: "slack_effective_cursor_team_id", kind: "scalar", T: 5 /* ScalarType.INT32 */, opt: true },
     { no: 13, name: "slack_cursor_team_locked", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 14, name: "default_environment_public_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 15, name: "origin_link_unfurls_enabled", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
   ],
 );
 
@@ -14497,6 +15812,7 @@ export const GetTeamAdminSettingsRequest = /*@__PURE__*/ proto3.makeMessageType(
   "aiserver.v1.GetTeamAdminSettingsRequest",
   () => [
     { no: 1, name: "team_id", kind: "scalar", T: 5 /* ScalarType.INT32 */, opt: true },
+    { no: 2, name: "supports_host_mcp_bridge_exemption", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
   ],
 );
 
@@ -14601,6 +15917,10 @@ export const GetTeamAdminSettingsResponse = /*@__PURE__*/ proto3.makeMessageType
     { no: 96, name: "grok_bot_delegated_auth_controls", kind: "message", T: GrokBotDelegatedAuthControls, opt: true },
     { no: 97, name: "grok_bot_delegated_auth_controls_available", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
     { no: 98, name: "personal_api_key_creation_disabled", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+    { no: 99, name: "cloud_agent_mcp_allowlist_applied", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+    { no: 100, name: "grok_bot_texting_controls", kind: "message", T: GrokBotTextingControls, opt: true },
+    { no: 101, name: "grok_bot_wall_snapshot_controls", kind: "message", T: GrokBotWallSnapshotControls, opt: true },
+    { no: 102, name: "sand_box_sudo_not_applied_box_count", kind: "scalar", T: 13 /* ScalarType.UINT32 */, opt: true },
   ],
 );
 
@@ -14790,6 +16110,7 @@ export const GetTeamTailnetResponse = /*@__PURE__*/ proto3.makeMessageType(
     { no: 15, name: "active", kind: "message", T: ActiveTailnet },
     { no: 16, name: "tailnet_names", kind: "map", K: 9 /* ScalarType.STRING */, V: {kind: "scalar", T: 9 /* ScalarType.STRING */} },
     { no: 17, name: "box_access", kind: "message", T: TeamTailnetBoxAccess },
+    { no: 18, name: "allow_unlabeled", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
   ],
 );
 
@@ -15120,6 +16441,7 @@ export const GrokBotAccessCrossTierDirectory = /*@__PURE__*/ proto3.makeMessageT
     { no: 1, name: "organization_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 2, name: "organization_icon_url", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 3, name: "teams", kind: "message", T: GrokBotAccessTeamDirectoryEntry, repeated: true },
+    { no: 4, name: "organization_team_count", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
   ],
 );
 
@@ -15153,6 +16475,7 @@ export const GrokBotAccessPersonDirectoryEntry = /*@__PURE__*/ proto3.makeMessag
     { no: 2, name: "name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 3, name: "avatar_url", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 4, name: "email", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 5, name: "in_bot_team", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ],
 );
 
@@ -15202,6 +16525,281 @@ export const GrokBotAccountAutomationGroup = /*@__PURE__*/ proto3.makeMessageTyp
     { no: 2, name: "automations", kind: "message", T: GrokBotAgentAutomation, repeated: true },
     { no: 3, name: "unavailable", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 4, name: "read_individually", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotAccountMigrationAccount
+ */
+export const GrokBotAccountMigrationAccount = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotAccountMigrationAccount",
+  () => [
+    { no: 1, name: "user_id", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 2, name: "auth_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "email", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "team_id", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 5, name: "org_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotAccountMigrationCancelResult
+ */
+export const GrokBotAccountMigrationCancelResult = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotAccountMigrationCancelResult",
+  () => [
+    { no: 2, name: "cancelled", kind: "message", T: GrokBotAccountMigrationEntry, oneof: "outcome" },
+    { no: 3, name: "refused", kind: "message", T: GrokBotAccountMigrationRefused, oneof: "outcome" },
+    { no: 1, name: "entry_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotAccountMigrationClean
+ */
+export const GrokBotAccountMigrationClean = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotAccountMigrationClean",
+  () => [
+    { no: 1, name: "workflow_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "status", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotAccountMigrationEntry
+ */
+export const GrokBotAccountMigrationEntry = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotAccountMigrationEntry",
+  () => [
+    { no: 1, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "state", kind: "enum", T: proto3.getEnumType(GrokBotAccountMigrationState) },
+    { no: 3, name: "batch_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "source", kind: "message", T: GrokBotAccountMigrationAccount },
+    { no: 5, name: "target", kind: "message", T: GrokBotAccountMigrationAccount },
+    { no: 6, name: "submitted_by", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 7, name: "reason", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 8, name: "created_at_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 9, name: "state_changed_at_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 10, name: "state_changed_by", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 11, name: "cancel_reason", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 12, name: "error_class", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 13, name: "applied_by", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 14, name: "applied_at_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 15, name: "export_workflow_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 16, name: "apply_workflow_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 17, name: "apply_attempt", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 18, name: "manifest_sha256", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 19, name: "counts", kind: "map", K: 9 /* ScalarType.STRING */, V: {kind: "scalar", T: 1 /* ScalarType.DOUBLE */} },
+    { no: 20, name: "ledger_status_counts", kind: "map", K: 9 /* ScalarType.STRING */, V: {kind: "scalar", T: 5 /* ScalarType.INT32 */} },
+    { no: 21, name: "content_stored", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 22, name: "options", kind: "message", T: GrokBotAccountMigrationOptions },
+    { no: 23, name: "no_primary_bot", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotAccountMigrationHeldSummary
+ */
+export const GrokBotAccountMigrationHeldSummary = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotAccountMigrationHeldSummary",
+  () => [
+    { no: 1, name: "summary", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "error_class", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "reason", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotAccountMigrationItemReview
+ */
+export const GrokBotAccountMigrationItemReview = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotAccountMigrationItemReview",
+  () => [
+    { no: 1, name: "module", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "item_key", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "title", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "counts", kind: "map", K: 9 /* ScalarType.STRING */, V: {kind: "scalar", T: 1 /* ScalarType.DOUBLE */} },
+    { no: 5, name: "notes", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 6, name: "error_class", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 7, name: "facts_json", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotAccountMigrationLedgerItem
+ */
+export const GrokBotAccountMigrationLedgerItem = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotAccountMigrationLedgerItem",
+  () => [
+    { no: 1, name: "module", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "item_key", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "status", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "attempt", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 5, name: "error_class", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 6, name: "skip_reason", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 7, name: "last_attempt_at_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 8, name: "result", kind: "map", K: 9 /* ScalarType.STRING */, V: {kind: "scalar", T: 9 /* ScalarType.STRING */} },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotAccountMigrationLedgerModuleCounts
+ */
+export const GrokBotAccountMigrationLedgerModuleCounts = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotAccountMigrationLedgerModuleCounts",
+  () => [
+    { no: 1, name: "module", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "status_counts", kind: "map", K: 9 /* ScalarType.STRING */, V: {kind: "scalar", T: 5 /* ScalarType.INT32 */} },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotAccountMigrationListedItem
+ */
+export const GrokBotAccountMigrationListedItem = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotAccountMigrationListedItem",
+  () => [
+    { no: 1, name: "own_key", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "verdict", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "facts_json", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotAccountMigrationListing
+ */
+export const GrokBotAccountMigrationListing = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotAccountMigrationListing",
+  () => [
+    { no: 1, name: "group_path", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "parent_key", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "items", kind: "message", T: GrokBotAccountMigrationListedItem, repeated: true },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotAccountMigrationOptions
+ */
+export const GrokBotAccountMigrationOptions = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotAccountMigrationOptions",
+  () => [
+    { no: 1, name: "carry_skills", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 2, name: "carry_conversation_state", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 3, name: "carry_pages", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 4, name: "skip_safety_check", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 5, name: "allow_teamless_target", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 6, name: "carry_pages_after_cutoff", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotAccountMigrationPairInput
+ */
+export const GrokBotAccountMigrationPairInput = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotAccountMigrationPairInput",
+  () => [
+    { no: 1, name: "source", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "target", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "source_team_id", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 4, name: "target_team_id", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotAccountMigrationPairResolution
+ */
+export const GrokBotAccountMigrationPairResolution = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotAccountMigrationPairResolution",
+  () => [
+    { no: 1, name: "input", kind: "message", T: GrokBotAccountMigrationPairInput },
+    { no: 2, name: "source", kind: "message", T: GrokBotAccountMigrationAccount },
+    { no: 3, name: "target", kind: "message", T: GrokBotAccountMigrationAccount },
+    { no: 4, name: "refusals", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 5, name: "warnings", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 6, name: "source_bot_count", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotAccountMigrationPairSubmit
+ */
+export const GrokBotAccountMigrationPairSubmit = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotAccountMigrationPairSubmit",
+  () => [
+    { no: 1, name: "input", kind: "message", T: GrokBotAccountMigrationPairInput },
+    { no: 2, name: "expected_source_user_id", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 3, name: "expected_target_user_id", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 4, name: "expected_source_team_id", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 5, name: "expected_target_team_id", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotAccountMigrationProposal
+ */
+export const GrokBotAccountMigrationProposal = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotAccountMigrationProposal",
+  () => [
+    { no: 1, name: "source", kind: "message", T: GrokBotAccountMigrationAccount },
+    { no: 2, name: "target", kind: "message", T: GrokBotAccountMigrationAccount },
+    { no: 3, name: "outcome", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "match_source", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "reason", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 6, name: "candidate_user_ids", kind: "scalar", T: 5 /* ScalarType.INT32 */, repeated: true },
+    { no: 7, name: "source_bot_count", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 8, name: "source_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 9, name: "target_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotAccountMigrationRefused
+ */
+export const GrokBotAccountMigrationRefused = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotAccountMigrationRefused",
+  () => [
+    { no: 1, name: "refusals", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotAccountMigrationRetryResult
+ */
+export const GrokBotAccountMigrationRetryResult = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotAccountMigrationRetryResult",
+  () => [
+    { no: 2, name: "apply_restarted", kind: "message", T: GrokBotAccountMigrationEntry, oneof: "outcome" },
+    { no: 3, name: "resubmitted", kind: "message", T: GrokBotAccountMigrationEntry, oneof: "outcome" },
+    { no: 4, name: "refused", kind: "message", T: GrokBotAccountMigrationRefused, oneof: "outcome" },
+    { no: 1, name: "entry_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotAccountMigrationReview
+ */
+export const GrokBotAccountMigrationReview = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotAccountMigrationReview",
+  () => [
+    { no: 1, name: "exported_at_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 2, name: "listings", kind: "message", T: GrokBotAccountMigrationListing, repeated: true },
+    { no: 3, name: "items", kind: "message", T: GrokBotAccountMigrationItemReview, repeated: true },
+    { no: 4, name: "counts", kind: "map", K: 9 /* ScalarType.STRING */, V: {kind: "scalar", T: 1 /* ScalarType.DOUBLE */} },
+    { no: 5, name: "options", kind: "message", T: GrokBotAccountMigrationOptions },
+    { no: 6, name: "safety_check", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotAccountMigrationSubmitResult
+ */
+export const GrokBotAccountMigrationSubmitResult = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotAccountMigrationSubmitResult",
+  () => [
+    { no: 1, name: "created", kind: "message", T: GrokBotAccountMigrationEntry, oneof: "outcome" },
+    { no: 2, name: "refused", kind: "message", T: GrokBotAccountMigrationRefused, oneof: "outcome" },
+    { no: 3, name: "superseded_entry_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ],
 );
 
@@ -15274,6 +16872,7 @@ export const GrokBotAgent = /*@__PURE__*/ proto3.makeMessageType(
     { no: 33, name: "viewer_allowed_actions", kind: "enum", T: proto3.getEnumType(GrokBotAgentViewerAction), repeated: true },
     { no: 34, name: "suggestions", kind: "message", T: GrokBotAgentSuggestion, repeated: true },
     { no: 35, name: "access_owner_only", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+    { no: 36, name: "shared_with_others", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
   ],
 );
 
@@ -15574,6 +17173,7 @@ export const GrokBotAgentDefinition = /*@__PURE__*/ proto3.makeMessageType(
     { no: 8, name: "mcp_settings", kind: "message", T: GrokBotUserMcpSettings },
     { no: 9, name: "mcp_servers", kind: "message", T: GrokBotAgentDefinitionMcpServer, repeated: true },
     { no: 10, name: "memory_folders", kind: "message", T: GrokBotAgentDefinitionMemoryFolder, repeated: true },
+    { no: 11, name: "untrusted_team_memory", kind: "message", T: GrokBotAgentDefinitionUntrustedTeamMemory, opt: true },
   ],
 );
 
@@ -15719,6 +17319,43 @@ export const GrokBotAgentDefinitionTemplateImport = /*@__PURE__*/ proto3.makeMes
     { no: 5, name: "template_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 6, name: "template_version", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
     { no: 7, name: "share_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotAgentDefinitionUntrustedPendingItem
+ */
+export const GrokBotAgentDefinitionUntrustedPendingItem = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotAgentDefinitionUntrustedPendingItem",
+  () => [
+    { no: 1, name: "item_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "status", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "notes", kind: "message", T: GrokBotAgentDefinitionUntrustedTeamNote, repeated: true },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotAgentDefinitionUntrustedTeamMemory
+ */
+export const GrokBotAgentDefinitionUntrustedTeamMemory = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotAgentDefinitionUntrustedTeamMemory",
+  () => [
+    { no: 1, name: "raw_notes", kind: "message", T: GrokBotAgentDefinitionUntrustedTeamNote, repeated: true },
+    { no: 2, name: "raw_notes_truncated", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 3, name: "pending_items", kind: "message", T: GrokBotAgentDefinitionUntrustedPendingItem, repeated: true },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotAgentDefinitionUntrustedTeamNote
+ */
+export const GrokBotAgentDefinitionUntrustedTeamNote = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotAgentDefinitionUntrustedTeamNote",
+  () => [
+    { no: 1, name: "action", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "text", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "created_at_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 4, name: "author", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ],
 );
 
@@ -16003,6 +17640,69 @@ export const GrokBotAgentPluginSkill = /*@__PURE__*/ proto3.makeMessageType(
 );
 
 /**
+ * @generated from message aiserver.v1.GrokBotAgentResourceDetail
+ */
+export const GrokBotAgentResourceDetail = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotAgentResourceDetail",
+  () => [
+    { no: 1, name: "label", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "value", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotAgentResourceEntries
+ */
+export const GrokBotAgentResourceEntries = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotAgentResourceEntries",
+  () => [
+    { no: 1, name: "entries", kind: "message", T: GrokBotAgentResourceEntry, repeated: true },
+    { no: 2, name: "truncated", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 3, name: "count", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotAgentResourceEntry
+ */
+export const GrokBotAgentResourceEntry = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotAgentResourceEntry",
+  () => [
+    { no: 1, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "title", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "hint", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 4, name: "added_at_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */, opt: true },
+    { no: 5, name: "added_by", kind: "message", T: GrokBotAgentResourceUser },
+    { no: 6, name: "updated_at_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */, opt: true },
+    { no: 7, name: "badges", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 8, name: "details", kind: "message", T: GrokBotAgentResourceDetail, repeated: true },
+    { no: 9, name: "group", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotAgentResourceList
+ */
+export const GrokBotAgentResourceList = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotAgentResourceList",
+  () => [
+    { no: 1, name: "entries", kind: "message", T: GrokBotAgentResourceEntries, oneof: "result" },
+    { no: 2, name: "error", kind: "scalar", T: 9 /* ScalarType.STRING */, oneof: "result" },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotAgentResourceUser
+ */
+export const GrokBotAgentResourceUser = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotAgentResourceUser",
+  () => [
+    { no: 1, name: "auth_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "email", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
  * @generated from message aiserver.v1.GrokBotAgentRoutine
  */
 export const GrokBotAgentRoutine = /*@__PURE__*/ proto3.makeMessageType(
@@ -16022,6 +17722,8 @@ export const GrokBotAgentRoutine = /*@__PURE__*/ proto3.makeMessageType(
     { no: 12, name: "run_as_is_viewer", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 13, name: "record_json", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 14, name: "viewer_permissions", kind: "message", T: GrokBotAutomationViewerPermissions },
+    { no: 15, name: "is_team_routine", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 16, name: "viewer_can_set_for_team", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ],
 );
 
@@ -16176,6 +17878,10 @@ export const GrokBotAgentTask = /*@__PURE__*/ proto3.makeMessageType(
     { no: 9, name: "pinned_at_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */, opt: true },
     { no: 10, name: "subagent_ids", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
     { no: 11, name: "followed", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 12, name: "cloud_agent_bc_ids", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 13, name: "file_count", kind: "scalar", T: 5 /* ScalarType.INT32 */, opt: true },
+    { no: 14, name: "last_message_entry_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 15, name: "last_message_at_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */, opt: true },
   ],
 );
 
@@ -16323,6 +18029,78 @@ export const GrokBotBoxState = /*@__PURE__*/ proto3.makeMessageType(
 );
 
 /**
+ * @generated from message aiserver.v1.GrokBotCalendarEventFrame
+ */
+export const GrokBotCalendarEventFrame = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotCalendarEventFrame",
+  () => [
+    { no: 1, name: "upcoming_meetings", kind: "message", T: GrokBotUpcomingMeetings, oneof: "frame" },
+    { no: 2, name: "meeting_changed", kind: "message", T: GrokBotCalendarMeetingChanged, oneof: "frame" },
+    { no: 3, name: "join_prompt", kind: "message", T: GrokBotCalendarJoinPrompt, oneof: "frame" },
+    { no: 4, name: "join_prompt_withdrawn", kind: "message", T: GrokBotCalendarJoinPromptWithdrawn, oneof: "frame" },
+    { no: 5, name: "resync", kind: "message", T: GrokBotCalendarResync, oneof: "frame" },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotCalendarJoinPrompt
+ */
+export const GrokBotCalendarJoinPrompt = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotCalendarJoinPrompt",
+  () => [
+    { no: 1, name: "meeting", kind: "message", T: GrokBotCalendarMeeting },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotCalendarJoinPromptWithdrawn
+ */
+export const GrokBotCalendarJoinPromptWithdrawn = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotCalendarJoinPromptWithdrawn",
+  () => [
+    { no: 1, name: "event_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "reason", kind: "enum", T: proto3.getEnumType(GrokBotCalendarJoinPromptWithdrawnReason) },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotCalendarMeeting
+ */
+export const GrokBotCalendarMeeting = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotCalendarMeeting",
+  () => [
+    { no: 1, name: "event_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "series_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "title", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "start_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 5, name: "end_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 6, name: "join_url", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 7, name: "provider", kind: "enum", T: proto3.getEnumType(GrokBotCalendarMeetingProvider) },
+    { no: 8, name: "rsvp", kind: "enum", T: proto3.getEnumType(GrokBotCalendarRsvp) },
+    { no: 9, name: "bot_scheduled", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotCalendarMeetingChanged
+ */
+export const GrokBotCalendarMeetingChanged = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotCalendarMeetingChanged",
+  () => [
+    { no: 1, name: "change", kind: "enum", T: proto3.getEnumType(GrokBotCalendarMeetingChange) },
+    { no: 2, name: "meeting", kind: "message", T: GrokBotCalendarMeeting },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotCalendarResync
+ */
+export const GrokBotCalendarResync = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotCalendarResync",
+  [],
+);
+
+/**
  * @generated from message aiserver.v1.GrokBotCardPhoto
  */
 export const GrokBotCardPhoto = /*@__PURE__*/ proto3.makeMessageType(
@@ -16330,6 +18108,51 @@ export const GrokBotCardPhoto = /*@__PURE__*/ proto3.makeMessageType(
   () => [
     { no: 1, name: "image", kind: "scalar", T: 12 /* ScalarType.BYTES */ },
     { no: 2, name: "mime_type", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotCartItem
+ */
+export const GrokBotCartItem = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotCartItem",
+  () => [
+    { no: 1, name: "offer_url", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "options", kind: "message", T: GrokBotCartItemOption, repeated: true },
+    { no: 3, name: "title", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "image_url", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "variant_label", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 6, name: "product_url", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 7, name: "store", kind: "message", T: GrokBotCartStore },
+    { no: 8, name: "price_amount_cents", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 9, name: "price_currency", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 10, name: "quantity", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 11, name: "added_at_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 12, name: "list_price_amount_cents", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 13, name: "is_sold_out", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotCartItemOption
+ */
+export const GrokBotCartItemOption = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotCartItemOption",
+  () => [
+    { no: 1, name: "name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "value", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotCartStore
+ */
+export const GrokBotCartStore = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotCartStore",
+  () => [
+    { no: 1, name: "name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "logo_url", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "site_url", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ],
 );
 
@@ -17100,6 +18923,17 @@ export const GrokBotMeetingRequestLogStage = /*@__PURE__*/ proto3.makeMessageTyp
 );
 
 /**
+ * @generated from message aiserver.v1.GrokBotMeetingSettings
+ */
+export const GrokBotMeetingSettings = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotMeetingSettings",
+  () => [
+    { no: 1, name: "interactive", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+    { no: 2, name: "should_camera_on", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+  ],
+);
+
+/**
  * @generated from message aiserver.v1.GrokBotMeetingTranscriptLine
  */
 export const GrokBotMeetingTranscriptLine = /*@__PURE__*/ proto3.makeMessageType(
@@ -17155,6 +18989,114 @@ export const GrokBotMemoryFolder = /*@__PURE__*/ proto3.makeMessageType(
 );
 
 /**
+ * @generated from message aiserver.v1.GrokBotMessagingCard
+ */
+export const GrokBotMessagingCard = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotMessagingCard",
+  () => [
+    { no: 1, name: "card_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "kind", kind: "enum", T: proto3.getEnumType(GrokBotMessagingCardKind) },
+    { no: 3, name: "state", kind: "enum", T: proto3.getEnumType(GrokBotMessagingCardState) },
+    { no: 4, name: "version", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 5, name: "title", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 6, name: "subtitle", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 7, name: "photo_url", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 8, name: "payment", kind: "message", T: GrokBotMessagingCardPayment, opt: true },
+    { no: 9, name: "options", kind: "message", T: GrokBotMessagingCardChoiceOption, repeated: true },
+    { no: 10, name: "fields", kind: "message", T: GrokBotMessagingCardFormField, repeated: true },
+    { no: 11, name: "page_slug", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 12, name: "expires_at_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 13, name: "actions", kind: "message", T: GrokBotMessagingCardAction, repeated: true },
+    { no: 14, name: "subtype", kind: "enum", T: proto3.getEnumType(GrokBotMessagingCardSubtype) },
+    { no: 15, name: "detail", kind: "message", T: GrokBotMessagingCardDetail, opt: true },
+    { no: 16, name: "settled_by", kind: "enum", T: proto3.getEnumType(GrokBotMessagingCardSettledBy) },
+    { no: 17, name: "status_text", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 18, name: "answering", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 24, name: "page_apex", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotMessagingCardAction
+ */
+export const GrokBotMessagingCardAction = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotMessagingCardAction",
+  () => [
+    { no: 1, name: "answer", kind: "enum", T: proto3.getEnumType(GrokBotMessagingCardAnswerKind) },
+    { no: 2, name: "option_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "label", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotMessagingCardChoiceOption
+ */
+export const GrokBotMessagingCardChoiceOption = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotMessagingCardChoiceOption",
+  () => [
+    { no: 1, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "label", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "description", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotMessagingCardDetail
+ */
+export const GrokBotMessagingCardDetail = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotMessagingCardDetail",
+  () => [
+    { no: 1, name: "source", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "source_name", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 3, name: "request", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 4, name: "reason", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 5, name: "caution", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 6, name: "ask_kind", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 7, name: "always_rule", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotMessagingCardFormField
+ */
+export const GrokBotMessagingCardFormField = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotMessagingCardFormField",
+  () => [
+    { no: 1, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "label", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "type", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "required", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 5, name: "placeholder", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 6, name: "secret", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 7, name: "options", kind: "message", T: GrokBotMessagingCardFormFieldOption, repeated: true },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotMessagingCardFormFieldOption
+ */
+export const GrokBotMessagingCardFormFieldOption = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotMessagingCardFormFieldOption",
+  () => [
+    { no: 1, name: "label", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "value", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotMessagingCardPayment
+ */
+export const GrokBotMessagingCardPayment = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotMessagingCardPayment",
+  () => [
+    { no: 1, name: "amount_cents", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 2, name: "currency", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "merchant_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "merchant_url", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+  ],
+);
+
+/**
  * @generated from message aiserver.v1.GrokBotMessagingLinkedPhone
  */
 export const GrokBotMessagingLinkedPhone = /*@__PURE__*/ proto3.makeMessageType(
@@ -17180,6 +19122,38 @@ export const GrokBotOnboardingDrip = /*@__PURE__*/ proto3.makeMessageType(
     { no: 5, name: "updated_by_email", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 6, name: "created_at_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
     { no: 7, name: "updated_at_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotOnboardingDripRoute
+ */
+export const GrokBotOnboardingDripRoute = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotOnboardingDripRoute",
+  () => [
+    { no: 1, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "position", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 3, name: "apps", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 4, name: "roles", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 5, name: "plans", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 6, name: "target_drip_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 7, name: "target_slug", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 8, name: "target_status", kind: "enum", T: proto3.getEnumType(GrokBotOnboardingDripStatus) },
+    { no: 9, name: "conditions_unreadable", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotOnboardingDripRouter
+ */
+export const GrokBotOnboardingDripRouter = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotOnboardingDripRouter",
+  () => [
+    { no: 1, name: "drip_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "status", kind: "enum", T: proto3.getEnumType(GrokBotOnboardingDripRouterStatus) },
+    { no: 3, name: "routes", kind: "message", T: GrokBotOnboardingDripRoute, repeated: true },
+    { no: 4, name: "updated_by_email", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "updated_at_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
   ],
 );
 
@@ -17216,6 +19190,7 @@ export const GrokBotOperatorAgent = /*@__PURE__*/ proto3.makeMessageType(
     { no: 4, name: "kind", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 5, name: "visibility", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 6, name: "updated_at_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 7, name: "team_id", kind: "scalar", T: 5 /* ScalarType.INT32 */, opt: true },
   ],
 );
 
@@ -17297,6 +19272,17 @@ export const GrokBotPluginScope = /*@__PURE__*/ proto3.makeMessageType(
   () => [
     { no: 1, name: "agent_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 2, name: "session_kind", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotPrivateDestinationRule
+ */
+export const GrokBotPrivateDestinationRule = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotPrivateDestinationRule",
+  () => [
+    { no: 1, name: "hosts", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 2, name: "cidrs", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
   ],
 );
 
@@ -17480,6 +19466,7 @@ export const GrokBotServerMeeting = /*@__PURE__*/ proto3.makeMessageType(
     { no: 8, name: "title", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 9, name: "repeat", kind: "message", T: GrokBotMeetingRepeat, opt: true },
     { no: 10, name: "calendar_linked", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 11, name: "settings", kind: "message", T: GrokBotMeetingSettings },
   ],
 );
 
@@ -18153,6 +20140,16 @@ export const GrokBotTemplateOperatorView = /*@__PURE__*/ proto3.makeMessageType(
 );
 
 /**
+ * @generated from message aiserver.v1.GrokBotTextingControls
+ */
+export const GrokBotTextingControls = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotTextingControls",
+  () => [
+    { no: 1, name: "allowed", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+  ],
+);
+
+/**
  * @generated from message aiserver.v1.GrokBotToolPermissionPolicy
  */
 export const GrokBotToolPermissionPolicy = /*@__PURE__*/ proto3.makeMessageType(
@@ -18223,6 +20220,39 @@ export const GrokBotTranscriptEntryRejection = /*@__PURE__*/ proto3.makeMessageT
   () => [
     { no: 1, name: "seq", kind: "scalar", T: 4 /* ScalarType.UINT64 */ },
     { no: 2, name: "current_updated_seq", kind: "scalar", T: 4 /* ScalarType.UINT64 */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotTranscriptFileMatch
+ */
+export const GrokBotTranscriptFileMatch = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotTranscriptFileMatch",
+  () => [
+    { no: 1, name: "agent_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "entry_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "file_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "ext", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "mime", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 6, name: "kind", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 7, name: "timestamp_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 8, name: "width", kind: "scalar", T: 13 /* ScalarType.UINT32 */, opt: true },
+    { no: 9, name: "height", kind: "scalar", T: 13 /* ScalarType.UINT32 */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotTranscriptMessageMatch
+ */
+export const GrokBotTranscriptMessageMatch = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotTranscriptMessageMatch",
+  () => [
+    { no: 1, name: "agent_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "entry_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "seq", kind: "scalar", T: 4 /* ScalarType.UINT64 */ },
+    { no: 4, name: "role", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "timestamp_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 6, name: "snippet", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ],
 );
 
@@ -18391,6 +20421,8 @@ export const GrokBotTranscriptWatchPageTitleChanged = /*@__PURE__*/ proto3.makeM
     { no: 4, name: "title", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 5, name: "changed_at_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
     { no: 6, name: "content_changed", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 7, name: "data_changed_ids", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 8, name: "data_changed_run_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ],
 );
 
@@ -18685,6 +20717,20 @@ export const GrokBotTransferWarning = /*@__PURE__*/ proto3.makeMessageType(
 );
 
 /**
+ * @generated from message aiserver.v1.GrokBotTryOnImage
+ */
+export const GrokBotTryOnImage = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotTryOnImage",
+  () => [
+    { no: 1, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "product_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "variant_options", kind: "map", K: 9 /* ScalarType.STRING */, V: {kind: "scalar", T: 9 /* ScalarType.STRING */} },
+    { no: 4, name: "image_url", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "created_at_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+  ],
+);
+
+/**
  * @generated from message aiserver.v1.GrokBotTurnSettlement
  */
 export const GrokBotTurnSettlement = /*@__PURE__*/ proto3.makeMessageType(
@@ -18693,6 +20739,91 @@ export const GrokBotTurnSettlement = /*@__PURE__*/ proto3.makeMessageType(
     { no: 1, name: "turn_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 2, name: "outcome", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 3, name: "settled_at_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotUpcomingMeetings
+ */
+export const GrokBotUpcomingMeetings = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotUpcomingMeetings",
+  () => [
+    { no: 1, name: "meetings", kind: "message", T: GrokBotCalendarMeeting, repeated: true },
+    { no: 2, name: "until_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotUsageBotCents
+ */
+export const GrokBotUsageBotCents = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotUsageBotCents",
+  () => [
+    { no: 1, name: "day_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 2, name: "bot_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 3, name: "cents", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotUsageBotPpm
+ */
+export const GrokBotUsageBotPpm = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotUsageBotPpm",
+  () => [
+    { no: 1, name: "day_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 2, name: "bot_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 3, name: "ppm", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotUsageCentsSplits
+ */
+export const GrokBotUsageCentsSplits = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotUsageCentsSplits",
+  () => [
+    { no: 1, name: "period_start_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 2, name: "period_end_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 3, name: "by_source", kind: "message", T: GrokBotUsageSourceCents, repeated: true },
+    { no: 4, name: "by_bot", kind: "message", T: GrokBotUsageBotCents, repeated: true },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotUsagePpmSplits
+ */
+export const GrokBotUsagePpmSplits = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotUsagePpmSplits",
+  () => [
+    { no: 1, name: "period_start_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 2, name: "period_end_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 3, name: "by_source", kind: "message", T: GrokBotUsageSourcePpm, repeated: true },
+    { no: 4, name: "by_bot", kind: "message", T: GrokBotUsageBotPpm, repeated: true },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotUsageSourceCents
+ */
+export const GrokBotUsageSourceCents = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotUsageSourceCents",
+  () => [
+    { no: 1, name: "day_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 2, name: "source", kind: "enum", T: proto3.getEnumType(GrokBotUsageSource) },
+    { no: 3, name: "cents", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotUsageSourcePpm
+ */
+export const GrokBotUsageSourcePpm = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotUsageSourcePpm",
+  () => [
+    { no: 1, name: "day_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 2, name: "source", kind: "enum", T: proto3.getEnumType(GrokBotUsageSource) },
+    { no: 3, name: "ppm", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
   ],
 );
 
@@ -19158,6 +21289,27 @@ export const GrokBotUserMcpSettings = /*@__PURE__*/ proto3.makeMessageType(
 );
 
 /**
+ * @generated from message aiserver.v1.GrokBotUserProfile
+ */
+export const GrokBotUserProfile = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotUserProfile",
+  () => [
+    { no: 1, name: "selfie", kind: "message", T: GrokBotUserProfilePhoto },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotUserProfilePhoto
+ */
+export const GrokBotUserProfilePhoto = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotUserProfilePhoto",
+  () => [
+    { no: 1, name: "image_url", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "version", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
  * @generated from message aiserver.v1.GrokBotUserRuntimeSettings
  */
 export const GrokBotUserRuntimeSettings = /*@__PURE__*/ proto3.makeMessageType(
@@ -19174,6 +21326,8 @@ export const GrokBotUserRuntimeSettings = /*@__PURE__*/ proto3.makeMessageType(
     { no: 13, name: "x_tool_access", kind: "enum", T: proto3.getEnumType(GrokBotXToolAccess) },
     { no: 14, name: "tool_permissions", kind: "message", T: GrokBotToolPermissions, opt: true },
     { no: 15, name: "job_role", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 16, name: "user_time_zone_override", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 17, name: "main_agent_team_id", kind: "scalar", T: 5 /* ScalarType.INT32 */, opt: true },
   ],
 );
 
@@ -19291,6 +21445,16 @@ export const GrokBotVaultNewLogin = /*@__PURE__*/ proto3.makeMessageType(
     { no: 3, name: "notes", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 4, name: "sites", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
     { no: 5, name: "password", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.GrokBotWallSnapshotControls
+ */
+export const GrokBotWallSnapshotControls = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.GrokBotWallSnapshotControls",
+  () => [
+    { no: 1, name: "allowed", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
   ],
 );
 
@@ -20517,6 +22681,26 @@ export const ListGrokBotAgentsResponse = /*@__PURE__*/ proto3.makeMessageType(
 );
 
 /**
+ * @generated from message aiserver.v1.ListGrokBotCartItemsRequest
+ */
+export const ListGrokBotCartItemsRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.ListGrokBotCartItemsRequest",
+  () => [
+    { no: 1, name: "agent_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.ListGrokBotCartItemsResponse
+ */
+export const ListGrokBotCartItemsResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.ListGrokBotCartItemsResponse",
+  () => [
+    { no: 1, name: "items", kind: "message", T: GrokBotCartItem, repeated: true },
+  ],
+);
+
+/**
  * @generated from message aiserver.v1.ListGrokBotChangelogsInternalRequest
  */
 export const ListGrokBotChangelogsInternalRequest = /*@__PURE__*/ proto3.makeMessageType(
@@ -20964,6 +23148,26 @@ export const ListGrokBotTranscriptEntriesResponse = /*@__PURE__*/ proto3.makeMes
 );
 
 /**
+ * @generated from message aiserver.v1.ListGrokBotTryOnImagesRequest
+ */
+export const ListGrokBotTryOnImagesRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.ListGrokBotTryOnImagesRequest",
+  () => [
+    { no: 1, name: "product_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.ListGrokBotTryOnImagesResponse
+ */
+export const ListGrokBotTryOnImagesResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.ListGrokBotTryOnImagesResponse",
+  () => [
+    { no: 1, name: "images", kind: "message", T: GrokBotTryOnImage, repeated: true },
+  ],
+);
+
+/**
  * @generated from message aiserver.v1.ListGrokBotUserBotMemoriesRequest
  */
 export const ListGrokBotUserBotMemoriesRequest = /*@__PURE__*/ proto3.makeMessageType(
@@ -21379,6 +23583,25 @@ export const ListSharedAgentStoresResponse = /*@__PURE__*/ proto3.makeMessageTyp
 );
 
 /**
+ * @generated from message aiserver.v1.ListSlackLinkedWorkspacesRequest
+ */
+export const ListSlackLinkedWorkspacesRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.ListSlackLinkedWorkspacesRequest",
+  [],
+);
+
+/**
+ * @generated from message aiserver.v1.ListSlackLinkedWorkspacesResponse
+ */
+export const ListSlackLinkedWorkspacesResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.ListSlackLinkedWorkspacesResponse",
+  () => [
+    { no: 1, name: "workspaces", kind: "message", T: SlackLinkedWorkspace, repeated: true },
+    { no: 2, name: "can_link_another_workspace", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ],
+);
+
+/**
  * @generated from message aiserver.v1.ListTeamGroupSandSetupManifestsRequest
  */
 export const ListTeamGroupSandSetupManifestsRequest = /*@__PURE__*/ proto3.makeMessageType(
@@ -21397,6 +23620,7 @@ export const ListTeamGroupSandSetupManifestsResponse = /*@__PURE__*/ proto3.make
     { no: 1, name: "team_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 2, name: "can_manage", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 3, name: "manifests", kind: "message", T: SandTeamSetupManifest, repeated: true },
+    { no: 4, name: "guest_rootfs_setup_enabled", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ],
 );
 
@@ -21465,6 +23689,7 @@ export const ListTeamSandSetupManifestsResponse = /*@__PURE__*/ proto3.makeMessa
     { no: 1, name: "team_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 2, name: "can_manage", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 3, name: "manifests", kind: "message", T: SandTeamSetupManifest, repeated: true },
+    { no: 4, name: "guest_rootfs_setup_enabled", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ],
 );
 
@@ -21605,6 +23830,37 @@ export const LocalToolControls = /*@__PURE__*/ proto3.makeMessageType(
   "aiserver.v1.LocalToolControls",
   () => [
     { no: 1, name: "permission_ceiling", kind: "enum", T: proto3.getEnumType(LocalToolPermissionCeiling) },
+    { no: 2, name: "command_allowlist", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 3, name: "other_commands", kind: "enum", T: proto3.getEnumType(LocalToolOtherCommandsPolicy) },
+    { no: 4, name: "file_read_write_allowed", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+    { no: 5, name: "other_local_actions_allowed", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+    { no: 6, name: "command_blocklist", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.LookupGrokBotShoppingProductRequest
+ */
+export const LookupGrokBotShoppingProductRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.LookupGrokBotShoppingProductRequest",
+  () => [
+    { no: 1, name: "agent_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "entry_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "card_index", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 4, name: "product_index", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 5, name: "session_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.LookupGrokBotShoppingProductResponse
+ */
+export const LookupGrokBotShoppingProductResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.LookupGrokBotShoppingProductResponse",
+  () => [
+    { no: 1, name: "outcome", kind: "enum", T: proto3.getEnumType(GrokBotShoppingProductLookupOutcome) },
+    { no: 2, name: "shopping_product_json", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "truncated", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ],
 );
 
@@ -21666,6 +23922,48 @@ export const MCPResult = /*@__PURE__*/ proto3.makeMessageType(
   () => [
     { no: 1, name: "selected_tool", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 2, name: "result", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.MakeGrokBotAgentFilePrivateRequest
+ */
+export const MakeGrokBotAgentFilePrivateRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.MakeGrokBotAgentFilePrivateRequest",
+  () => [
+    { no: 1, name: "agent_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.MakeGrokBotAgentFilePrivateResponse
+ */
+export const MakeGrokBotAgentFilePrivateResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.MakeGrokBotAgentFilePrivateResponse",
+  () => [
+    { no: 1, name: "file", kind: "message", T: GrokBotUserStoreFile },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.MakeGrokBotAgentSkillPrivateRequest
+ */
+export const MakeGrokBotAgentSkillPrivateRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.MakeGrokBotAgentSkillPrivateRequest",
+  () => [
+    { no: 1, name: "agent_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.MakeGrokBotAgentSkillPrivateResponse
+ */
+export const MakeGrokBotAgentSkillPrivateResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.MakeGrokBotAgentSkillPrivateResponse",
+  () => [
+    { no: 1, name: "skill_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ],
 );
 
@@ -21918,6 +24216,7 @@ export const McpSignOut = /*@__PURE__*/ proto3.makeMessageType(
   () => [
     { no: 1, name: "reason", kind: "enum", T: proto3.getEnumType(McpSignOutReason) },
     { no: 2, name: "signed_out_at_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 3, name: "client_configured", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ],
 );
 
@@ -22417,6 +24716,7 @@ export const OnePasswordState = /*@__PURE__*/ proto3.makeMessageType(
     { no: 1, name: "connections", kind: "message", T: OnePasswordConnection, repeated: true },
     { no: 2, name: "items", kind: "message", T: OnePasswordCredentialItem, repeated: true },
     { no: 3, name: "previous_vaults", kind: "message", T: OnePasswordPreviousVault, repeated: true },
+    { no: 4, name: "uses_previous_integration", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ],
 );
 
@@ -22544,6 +24844,29 @@ export const PluginMinClientVersions = /*@__PURE__*/ proto3.makeMessageType(
     { no: 1, name: "cursor", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 2, name: "sand", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 3, name: "sand_mobile", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.PollGrokBotCalendarEventsRequest
+ */
+export const PollGrokBotCalendarEventsRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.PollGrokBotCalendarEventsRequest",
+  () => [
+    { no: 1, name: "machine_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "cursor", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.PollGrokBotCalendarEventsResponse
+ */
+export const PollGrokBotCalendarEventsResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.PollGrokBotCalendarEventsResponse",
+  () => [
+    { no: 1, name: "frames", kind: "message", T: GrokBotCalendarEventFrame, repeated: true },
+    { no: 2, name: "cursor", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "more", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ],
 );
 
@@ -22921,6 +25244,7 @@ export const ProjectMetadata = /*@__PURE__*/ proto3.makeMessageType(
     { no: 1, name: "appearance", kind: "message", T: ProjectAppearance, opt: true },
     { no: 2, name: "avatar_shape", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 3, name: "avatar_color", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 4, name: "worker_model_selection", kind: "message", T: CloudAgentModelSelection, opt: true },
   ],
 );
 
@@ -24062,6 +26386,38 @@ export const RemoveGrokBotAgentSkillResponse = /*@__PURE__*/ proto3.makeMessageT
 );
 
 /**
+ * @generated from message aiserver.v1.RemoveGrokBotCartItemsRequest
+ */
+export const RemoveGrokBotCartItemsRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.RemoveGrokBotCartItemsRequest",
+  () => [
+    { no: 1, name: "agent_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "items", kind: "message", T: GrokBotCartItem, repeated: true },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.RemoveGrokBotCartItemsResponse
+ */
+export const RemoveGrokBotCartItemsResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.RemoveGrokBotCartItemsResponse",
+  () => [
+    { no: 1, name: "items", kind: "message", T: GrokBotCartItem, repeated: true },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.RemoveGrokBotOnboardingDripRouteInternalRequest
+ */
+export const RemoveGrokBotOnboardingDripRouteInternalRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.RemoveGrokBotOnboardingDripRouteInternalRequest",
+  () => [
+    { no: 1, name: "drip_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "route_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
  * @generated from message aiserver.v1.RemoveGrokBotRoomPeopleRequest
  */
 export const RemoveGrokBotRoomPeopleRequest = /*@__PURE__*/ proto3.makeMessageType(
@@ -24131,6 +26487,9 @@ export const RenameMcpOAuthAccountRequest = /*@__PURE__*/ proto3.makeMessageType
     { no: 1, name: "server_id", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
     { no: 2, name: "account_key", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 3, name: "new_account_key", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "grok_bot_plugin_scope", kind: "message", T: GrokBotPluginScope, opt: true },
+    { no: 5, name: "grok_bot_agent_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 6, name: "grok_bot_session_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
   ],
 );
 
@@ -24162,6 +26521,17 @@ export const RenewAgentStoreFileLockResponse = /*@__PURE__*/ proto3.makeMessageT
   () => [
     { no: 1, name: "renewed", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 2, name: "expires_at_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.ReorderGrokBotOnboardingDripRoutesInternalRequest
+ */
+export const ReorderGrokBotOnboardingDripRoutesInternalRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.ReorderGrokBotOnboardingDripRoutesInternalRequest",
+  () => [
+    { no: 1, name: "drip_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "route_ids", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
   ],
 );
 
@@ -24308,6 +26678,32 @@ export const ReportGrokBotMeetingsResponse = /*@__PURE__*/ proto3.makeMessageTyp
 );
 
 /**
+ * @generated from message aiserver.v1.ReportGrokBotMessagingCapabilitiesRequest
+ */
+export const ReportGrokBotMessagingCapabilitiesRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.ReportGrokBotMessagingCapabilitiesRequest",
+  () => [
+    { no: 1, name: "app_version", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "app_build", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 5, name: "ios_version", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 6, name: "client", kind: "enum", T: proto3.getEnumType(GrokBotMessagingCapabilityClient) },
+    { no: 7, name: "bundle_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 8, name: "team_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.ReportGrokBotMessagingCapabilitiesResponse
+ */
+export const ReportGrokBotMessagingCapabilitiesResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.ReportGrokBotMessagingCapabilitiesResponse",
+  () => [
+    { no: 1, name: "kept_for_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 2, name: "stale_after_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+  ],
+);
+
+/**
  * @generated from message aiserver.v1.ReportGrokBotNotificationPermissionRequest
  */
 export const ReportGrokBotNotificationPermissionRequest = /*@__PURE__*/ proto3.makeMessageType(
@@ -24354,6 +26750,41 @@ export const ReportSandBoxHostStateRequest = /*@__PURE__*/ proto3.makeMessageTyp
  */
 export const ReportSandBoxHostStateResponse = /*@__PURE__*/ proto3.makeMessageType(
   "aiserver.v1.ReportSandBoxHostStateResponse",
+  [],
+);
+
+/**
+ * @generated from message aiserver.v1.ReportSandBoxStoreFlushRequest
+ */
+export const ReportSandBoxStoreFlushRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.ReportSandBoxStoreFlushRequest",
+  () => [
+    { no: 1, name: "source", kind: "enum", T: proto3.getEnumType(SandBoxStoreFlushSource) },
+    { no: 2, name: "ok", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 3, name: "reason", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "reason_code", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 5, name: "noop", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+    { no: 6, name: "store_db_complete", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+    { no: 7, name: "manifest_entries", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 8, name: "store_db_entries", kind: "scalar", T: 13 /* ScalarType.UINT32 */, opt: true },
+    { no: 9, name: "agent_dir_entries", kind: "scalar", T: 13 /* ScalarType.UINT32 */, opt: true },
+    { no: 10, name: "files_uploaded", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 11, name: "deferred_for_space", kind: "scalar", T: 13 /* ScalarType.UINT32 */, opt: true },
+    { no: 12, name: "skipped_files", kind: "scalar", T: 13 /* ScalarType.UINT32 */, opt: true },
+    { no: 13, name: "skipped_files_bucket", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 14, name: "http_status_class", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 15, name: "cause", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 16, name: "cluster", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 17, name: "total_bytes", kind: "scalar", T: 4 /* ScalarType.UINT64 */, opt: true },
+    { no: 18, name: "flush_started_ago_ms", kind: "scalar", T: 13 /* ScalarType.UINT32 */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.ReportSandBoxStoreFlushResponse
+ */
+export const ReportSandBoxStoreFlushResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.ReportSandBoxStoreFlushResponse",
   [],
 );
 
@@ -24514,6 +26945,8 @@ export const ResolveGrokBotAutoReviewApprovalRequest = /*@__PURE__*/ proto3.make
     { no: 5, name: "approved_command", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 6, name: "session_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 8, name: "mcp_elicitation_content", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 9, name: "apply_to_group", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+    { no: 10, name: "group_request_ids", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
   ],
 );
 
@@ -24580,6 +27013,37 @@ export const ResolveGrokBotCredentialRequestResponse = /*@__PURE__*/ proto3.make
 );
 
 /**
+ * @generated from message aiserver.v1.ResolveGrokBotFlightBookingLinkRequest
+ */
+export const ResolveGrokBotFlightBookingLinkRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.ResolveGrokBotFlightBookingLinkRequest",
+  () => [
+    { no: 1, name: "agent_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "entry_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "card_index", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 4, name: "offer_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "session_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.ResolveGrokBotFlightBookingLinkResponse
+ */
+export const ResolveGrokBotFlightBookingLinkResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.ResolveGrokBotFlightBookingLinkResponse",
+  () => [
+    { no: 1, name: "outcome", kind: "enum", T: proto3.getEnumType(GrokBotFlightBookingLinkOutcome) },
+    { no: 2, name: "url", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "seller", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "fare_title", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "price_minor", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 6, name: "currency", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 7, name: "fetched_at_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 8, name: "expires_at_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+  ],
+);
+
+/**
  * @generated from message aiserver.v1.ResolveGrokBotLocalToolPermissionRequest
  */
 export const ResolveGrokBotLocalToolPermissionRequest = /*@__PURE__*/ proto3.makeMessageType(
@@ -24640,6 +27104,7 @@ export const ResolveGrokBotVirtualCardApprovalRequest = /*@__PURE__*/ proto3.mak
     { no: 5, name: "payment_method_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 6, name: "attestation", kind: "message", T: SpendApprovalAttestation, opt: true },
     { no: 7, name: "pay_another_way", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 8, name: "network_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
   ],
 );
 
@@ -24655,6 +27120,8 @@ export const ResolveGrokBotVirtualCardApprovalResponse = /*@__PURE__*/ proto3.ma
     { no: 4, name: "message", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 5, name: "refusal", kind: "message", T: GrokBotHarnessRefusal, opt: true },
     { no: 6, name: "enrolled_credential_ids", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 7, name: "answerable", kind: "enum", T: proto3.getEnumType(GrokBotVirtualCardAnswerable) },
+    { no: 8, name: "remember_refusal", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ],
 );
 
@@ -25371,6 +27838,52 @@ export const RuleDescriptor = /*@__PURE__*/ proto3.makeMessageType(
 );
 
 /**
+ * @generated from message aiserver.v1.RunCanvasConnectorActionRequest
+ */
+export const RunCanvasConnectorActionRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.RunCanvasConnectorActionRequest",
+  () => [
+    { no: 1, name: "store_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "canvas_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "connector", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "tool", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "args", kind: "message", T: Struct },
+    { no: 6, name: "slot_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 7, name: "slot_value_json", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 8, name: "agent_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 9, name: "press_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.RunCanvasConnectorActionResponse
+ */
+export const RunCanvasConnectorActionResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.RunCanvasConnectorActionResponse",
+  () => [
+    { no: 1, name: "outcome", kind: "enum", T: proto3.getEnumType(RunCanvasConnectorActionResponse_Outcome) },
+    { no: 2, name: "detail", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "as_of", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from enum aiserver.v1.RunCanvasConnectorActionResponse.Outcome
+ */
+export const RunCanvasConnectorActionResponse_Outcome = /*@__PURE__*/ proto3.makeEnum(
+  "aiserver.v1.RunCanvasConnectorActionResponse.Outcome",
+  [
+    {no: 0, name: "OUTCOME_UNSPECIFIED", localName: "UNSPECIFIED"},
+    {no: 1, name: "OUTCOME_DONE", localName: "DONE"},
+    {no: 2, name: "OUTCOME_SENT_NOT_RECORDED", localName: "SENT_NOT_RECORDED"},
+    {no: 3, name: "OUTCOME_FAILED", localName: "FAILED"},
+    {no: 4, name: "OUTCOME_NOT_CONNECTED", localName: "NOT_CONNECTED"},
+    {no: 5, name: "OUTCOME_REFUSED", localName: "REFUSED"},
+    {no: 6, name: "OUTCOME_UNCONFIRMED", localName: "UNCONFIRMED"},
+  ],
+);
+
+/**
  * @generated from message aiserver.v1.RunGenerateImageError
  */
 export const RunGenerateImageError = /*@__PURE__*/ proto3.makeMessageType(
@@ -26038,6 +28551,7 @@ export const SandSetupManifestEntry = /*@__PURE__*/ proto3.makeMessageType(
     { no: 1, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 2, name: "setup", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 3, name: "check", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 4, name: "run_on_guest_rootfs", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ],
 );
 
@@ -26110,6 +28624,7 @@ export const SandUnifiedTrialPlansOffer = /*@__PURE__*/ proto3.makeMessageType(
     { no: 3, name: "features", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
     { no: 4, name: "action_label", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 5, name: "href", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 6, name: "action", kind: "message", T: DashboardAction, opt: true },
   ],
 );
 
@@ -26272,6 +28787,59 @@ export const SearchGrokBotPlacesAreaResponse = /*@__PURE__*/ proto3.makeMessageT
 );
 
 /**
+ * @generated from message aiserver.v1.SearchGrokBotSimilarProductsRequest
+ */
+export const SearchGrokBotSimilarProductsRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.SearchGrokBotSimilarProductsRequest",
+  () => [
+    { no: 1, name: "agent_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "entry_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "card_index", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 4, name: "product_index", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 5, name: "session_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.SearchGrokBotSimilarProductsResponse
+ */
+export const SearchGrokBotSimilarProductsResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.SearchGrokBotSimilarProductsResponse",
+  () => [
+    { no: 1, name: "outcome", kind: "enum", T: proto3.getEnumType(GrokBotSimilarProductsSearchOutcome) },
+    { no: 2, name: "shopping_card_json", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.SearchGrokBotTranscriptsRequest
+ */
+export const SearchGrokBotTranscriptsRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.SearchGrokBotTranscriptsRequest",
+  () => [
+    { no: 1, name: "target", kind: "enum", T: proto3.getEnumType(GrokBotTranscriptSearchTarget) },
+    { no: 2, name: "query", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "limit", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 4, name: "agent_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 5, name: "before_seq", kind: "scalar", T: 4 /* ScalarType.UINT64 */, opt: true },
+    { no: 6, name: "continuation", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.SearchGrokBotTranscriptsResponse
+ */
+export const SearchGrokBotTranscriptsResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.SearchGrokBotTranscriptsResponse",
+  () => [
+    { no: 1, name: "message_matches", kind: "message", T: GrokBotTranscriptMessageMatch, repeated: true },
+    { no: 2, name: "file_matches", kind: "message", T: GrokBotTranscriptFileMatch, repeated: true },
+    { no: 3, name: "complete", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 4, name: "continuation", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+  ],
+);
+
+/**
  * @generated from message aiserver.v1.SearchSymbolsParams
  */
 export const SearchSymbolsParams = /*@__PURE__*/ proto3.makeMessageType(
@@ -26385,6 +28953,7 @@ export const SendGrokBotDraftRequest = /*@__PURE__*/ proto3.makeMessageType(
     { no: 2, name: "entry_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 3, name: "session_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 6, name: "shown_signature_html", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 9, name: "forward_shown", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
   ],
 );
 
@@ -26396,6 +28965,33 @@ export const SendGrokBotDraftResponse = /*@__PURE__*/ proto3.makeMessageType(
   () => [
     { no: 1, name: "accepted", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 2, name: "refusal", kind: "message", T: GrokBotHarnessRefusal, opt: true },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.SendGrokBotOnboardingDripStepNowInternalRequest
+ */
+export const SendGrokBotOnboardingDripStepNowInternalRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.SendGrokBotOnboardingDripStepNowInternalRequest",
+  () => [
+    { no: 1, name: "drip_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "step_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "user_id", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 4, name: "reason", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.SendGrokBotOnboardingDripStepNowInternalResponse
+ */
+export const SendGrokBotOnboardingDripStepNowInternalResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.SendGrokBotOnboardingDripStepNowInternalResponse",
+  () => [
+    { no: 1, name: "outcome", kind: "enum", T: proto3.getEnumType(GrokBotOnboardingDripManualSendOutcome) },
+    { no: 2, name: "reason", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "detail", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "run_uuid", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "warnings", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
   ],
 );
 
@@ -26453,6 +29049,7 @@ export const SendGrokBotUserMessageRequest = /*@__PURE__*/ proto3.makeMessageTyp
     { no: 21, name: "send_source", kind: "enum", T: proto3.getEnumType(GrokBotSendSource) },
     { no: 22, name: "first_sent_age_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */, opt: true },
     { no: 25, name: "renders_mcp_elicitation_forms", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
+    { no: 26, name: "rendered_card_kinds", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
   ],
 );
 
@@ -26507,6 +29104,7 @@ export const SetActiveTailnetRequest = /*@__PURE__*/ proto3.makeMessageType(
     { no: 1, name: "personal", kind: "scalar", T: 8 /* ScalarType.BOOL */, oneof: "choice" },
     { no: 2, name: "team_id", kind: "scalar", T: 5 /* ScalarType.INT32 */, oneof: "choice" },
     { no: 3, name: "personal_account_key", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "magic_dns_suffix", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ],
 );
 
@@ -26666,6 +29264,7 @@ export const SetGrokBotAgentPluginVariablesRequest = /*@__PURE__*/ proto3.makeMe
     { no: 2, name: "plugin_id", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
     { no: 3, name: "variables", kind: "message", T: Struct },
     { no: 4, name: "merge_with_stored", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 5, name: "clear_service_account", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ],
 );
 
@@ -26720,6 +29319,29 @@ export const SetGrokBotAgentRoutineEnabledRequest = /*@__PURE__*/ proto3.makeMes
  */
 export const SetGrokBotAgentRoutineEnabledResponse = /*@__PURE__*/ proto3.makeMessageType(
   "aiserver.v1.SetGrokBotAgentRoutineEnabledResponse",
+  () => [
+    { no: 1, name: "routine", kind: "message", T: GrokBotAgentRoutine },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.SetGrokBotAgentRoutineForTeamRequest
+ */
+export const SetGrokBotAgentRoutineForTeamRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.SetGrokBotAgentRoutineForTeamRequest",
+  () => [
+    { no: 1, name: "agent_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "automation_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "for_team", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 4, name: "time_zone", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.SetGrokBotAgentRoutineForTeamResponse
+ */
+export const SetGrokBotAgentRoutineForTeamResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.SetGrokBotAgentRoutineForTeamResponse",
   () => [
     { no: 1, name: "routine", kind: "message", T: GrokBotAgentRoutine },
   ],
@@ -26790,6 +29412,28 @@ export const SetGrokBotAgentVoiceResponse = /*@__PURE__*/ proto3.makeMessageType
   "aiserver.v1.SetGrokBotAgentVoiceResponse",
   () => [
     { no: 1, name: "agent", kind: "message", T: GrokBotAgent },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.SetGrokBotCartItemRequest
+ */
+export const SetGrokBotCartItemRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.SetGrokBotCartItemRequest",
+  () => [
+    { no: 1, name: "agent_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "item", kind: "message", T: GrokBotCartItem },
+    { no: 3, name: "quantity", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.SetGrokBotCartItemResponse
+ */
+export const SetGrokBotCartItemResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.SetGrokBotCartItemResponse",
+  () => [
+    { no: 1, name: "items", kind: "message", T: GrokBotCartItem, repeated: true },
   ],
 );
 
@@ -26901,6 +29545,17 @@ export const SetGrokBotMcpToolPermissionsResponse = /*@__PURE__*/ proto3.makeMes
 );
 
 /**
+ * @generated from message aiserver.v1.SetGrokBotOnboardingDripRouterStatusInternalRequest
+ */
+export const SetGrokBotOnboardingDripRouterStatusInternalRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.SetGrokBotOnboardingDripRouterStatusInternalRequest",
+  () => [
+    { no: 1, name: "drip_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "status", kind: "enum", T: proto3.getEnumType(GrokBotOnboardingDripRouterStatus) },
+  ],
+);
+
+/**
  * @generated from message aiserver.v1.SetGrokBotOnboardingDripStatusInternalRequest
  */
 export const SetGrokBotOnboardingDripStatusInternalRequest = /*@__PURE__*/ proto3.makeMessageType(
@@ -26993,6 +29648,7 @@ export const SetGrokBotUserMcpSettingsRequest = /*@__PURE__*/ proto3.makeMessage
   () => [
     { no: 1, name: "settings", kind: "message", T: GrokBotUserMcpSettings },
     { no: 2, name: "keep_disabled_tools", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 3, name: "keep_user_time_zone_override", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ],
 );
 
@@ -27003,6 +29659,27 @@ export const SetGrokBotUserMcpSettingsResponse = /*@__PURE__*/ proto3.makeMessag
   "aiserver.v1.SetGrokBotUserMcpSettingsResponse",
   () => [
     { no: 1, name: "settings", kind: "message", T: GrokBotUserMcpSettings },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.SetGrokBotUserProfilePhotoRequest
+ */
+export const SetGrokBotUserProfilePhotoRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.SetGrokBotUserProfilePhotoRequest",
+  () => [
+    { no: 1, name: "kind", kind: "enum", T: proto3.getEnumType(GrokBotUserProfilePhotoKind) },
+    { no: 2, name: "image_data_url", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.SetGrokBotUserProfilePhotoResponse
+ */
+export const SetGrokBotUserProfilePhotoResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.SetGrokBotUserProfilePhotoResponse",
+  () => [
+    { no: 1, name: "profile", kind: "message", T: GrokBotUserProfile },
   ],
 );
 
@@ -27076,6 +29753,35 @@ export const SetMcpConfigRequest = /*@__PURE__*/ proto3.makeMessageType(
  */
 export const SetMcpConfigResponse = /*@__PURE__*/ proto3.makeMessageType(
   "aiserver.v1.SetMcpConfigResponse",
+  [],
+);
+
+/**
+ * @generated from message aiserver.v1.SetOnePasswordPreviousIntegrationRequest
+ */
+export const SetOnePasswordPreviousIntegrationRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.SetOnePasswordPreviousIntegrationRequest",
+  () => [
+    { no: 1, name: "use_previous_integration", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.SetSandAutomationSlackWorkspaceRequest
+ */
+export const SetSandAutomationSlackWorkspaceRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.SetSandAutomationSlackWorkspaceRequest",
+  () => [
+    { no: 1, name: "automation_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "slack_team_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.SetSandAutomationSlackWorkspaceResponse
+ */
+export const SetSandAutomationSlackWorkspaceResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.SetSandAutomationSlackWorkspaceResponse",
   [],
 );
 
@@ -27466,6 +30172,7 @@ export const SlackAppAuditWorkspace = /*@__PURE__*/ proto3.makeMessageType(
   () => [
     { no: 1, name: "slack_team_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 2, name: "name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "internal", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ],
 );
 
@@ -27502,6 +30209,21 @@ export const SlackIntegrationSettings = /*@__PURE__*/ proto3.makeMessageType(
     { no: 1, name: "hidden", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 3, name: "inbound_install_policy", kind: "message", T: SlackInboundInstallPolicy, opt: true },
     { no: 4, name: "inbound_install_policy_managed_by_organization", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.SlackLinkedWorkspace
+ */
+export const SlackLinkedWorkspace = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.SlackLinkedWorkspace",
+  () => [
+    { no: 1, name: "slack_team_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "display_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "linked_at_ms", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 4, name: "status", kind: "enum", T: proto3.getEnumType(SlackLinkedWorkspaceStatus) },
+    { no: 5, name: "sand_automation_count", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 6, name: "sand_automation_count_truncated", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ],
 );
 
@@ -28184,6 +30906,27 @@ export const SuggestedCodeBlock = /*@__PURE__*/ proto3.makeMessageType(
 );
 
 /**
+ * @generated from message aiserver.v1.SummarizeGrokBotTeamReviewItemsRequest
+ */
+export const SummarizeGrokBotTeamReviewItemsRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.SummarizeGrokBotTeamReviewItemsRequest",
+  () => [
+    { no: 1, name: "agent_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "item_ids", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.SummarizeGrokBotTeamReviewItemsResponse
+ */
+export const SummarizeGrokBotTeamReviewItemsResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.SummarizeGrokBotTeamReviewItemsResponse",
+  () => [
+    { no: 1, name: "summary", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
  * @generated from message aiserver.v1.SuperGrokHeavyUltraEndedNotice
  */
 export const SuperGrokHeavyUltraEndedNotice = /*@__PURE__*/ proto3.makeMessageType(
@@ -28600,6 +31343,7 @@ export const TeamTailnetTeamView = /*@__PURE__*/ proto3.makeMessageType(
     { no: 15, name: "multiple_available", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 16, name: "tailnet_names", kind: "map", K: 9 /* ScalarType.STRING */, V: {kind: "scalar", T: 9 /* ScalarType.STRING */} },
     { no: 17, name: "box_access", kind: "message", T: TeamTailnetBoxAccess },
+    { no: 18, name: "allow_unlabeled", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
   ],
 );
 
@@ -29018,7 +31762,10 @@ export const UnlinkMicrosoftTeamsAccountResponse = /*@__PURE__*/ proto3.makeMess
  */
 export const UnlinkSlackAccessRequest = /*@__PURE__*/ proto3.makeMessageType(
   "aiserver.v1.UnlinkSlackAccessRequest",
-  [],
+  () => [
+    { no: 1, name: "slack_team_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 2, name: "all_workspaces", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ],
 );
 
 /**
@@ -29119,6 +31866,8 @@ export const UpdateGrokBotAgentAccessResponse = /*@__PURE__*/ proto3.makeMessage
     { no: 5, name: "viewer_user_id", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
     { no: 6, name: "bot_team_directory", kind: "message", T: GrokBotAccessBotTeamDirectory },
     { no: 7, name: "personal_bot_people", kind: "message", T: GrokBotAccessPersonDirectoryEntry, repeated: true },
+    { no: 8, name: "listed_people", kind: "message", T: GrokBotAccessPersonDirectoryEntry, repeated: true },
+    { no: 9, name: "listed_groups", kind: "message", T: GrokBotAccessGroupDirectoryEntry, repeated: true },
   ],
 );
 
@@ -29321,6 +32070,26 @@ export const UpdateGrokBotMarketplaceListingTemplateInternalRequest = /*@__PURE_
 );
 
 /**
+ * @generated from message aiserver.v1.UpdateGrokBotMeetingSettingsRequest
+ */
+export const UpdateGrokBotMeetingSettingsRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.UpdateGrokBotMeetingSettingsRequest",
+  () => [
+    { no: 1, name: "meeting_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "agent_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "settings", kind: "message", T: GrokBotMeetingSettings },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.UpdateGrokBotMeetingSettingsResponse
+ */
+export const UpdateGrokBotMeetingSettingsResponse = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.UpdateGrokBotMeetingSettingsResponse",
+  [],
+);
+
+/**
  * @generated from message aiserver.v1.UpdateGrokBotOnboardingDripInternalRequest
  */
 export const UpdateGrokBotOnboardingDripInternalRequest = /*@__PURE__*/ proto3.makeMessageType(
@@ -29328,6 +32097,21 @@ export const UpdateGrokBotOnboardingDripInternalRequest = /*@__PURE__*/ proto3.m
   () => [
     { no: 1, name: "drip_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 2, name: "slug", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.UpdateGrokBotOnboardingDripRouteInternalRequest
+ */
+export const UpdateGrokBotOnboardingDripRouteInternalRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.UpdateGrokBotOnboardingDripRouteInternalRequest",
+  () => [
+    { no: 1, name: "drip_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "route_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "apps", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 4, name: "roles", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 5, name: "plans", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 6, name: "target_drip_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ],
 );
 
@@ -29362,6 +32146,8 @@ export const UpdateGrokBotUserRuntimeSettingsRequest = /*@__PURE__*/ proto3.make
     { no: 10, name: "auto_review_rule_save", kind: "message", T: GrokBotAutoReviewRuleSave, opt: true },
     { no: 11, name: "bots_hidden", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
     { no: 12, name: "sidebar_sections_base", kind: "message", T: GrokBotSidebarSections, opt: true },
+    { no: 13, name: "user_time_zone", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 14, name: "user_time_zone_override", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
   ],
 );
 
@@ -29508,6 +32294,7 @@ export const UpdateTeamTailnetRequest = /*@__PURE__*/ proto3.makeMessageType(
     { no: 3, name: "magic_dns_suffix", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 4, name: "consent", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
     { no: 5, name: "magic_dns_suffixes", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 6, name: "allow_unlabeled", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
   ],
 );
 
@@ -30080,6 +32867,56 @@ export const VoteGrokBotFeedbackResponse = /*@__PURE__*/ proto3.makeMessageType(
   "aiserver.v1.VoteGrokBotFeedbackResponse",
   () => [
     { no: 1, name: "refusal", kind: "message", T: GrokBotHarnessRefusal, opt: true },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.WatchGrokBotCalendarEventsConnected
+ */
+export const WatchGrokBotCalendarEventsConnected = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.WatchGrokBotCalendarEventsConnected",
+  () => [
+    { no: 1, name: "latest_cursor", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.WatchGrokBotCalendarEventsEvent
+ */
+export const WatchGrokBotCalendarEventsEvent = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.WatchGrokBotCalendarEventsEvent",
+  () => [
+    { no: 1, name: "connected", kind: "message", T: WatchGrokBotCalendarEventsConnected, oneof: "event" },
+    { no: 2, name: "notify", kind: "message", T: WatchGrokBotCalendarEventsNotify, oneof: "event" },
+    { no: 3, name: "heartbeat", kind: "message", T: WatchGrokBotCalendarEventsHeartbeat, oneof: "event" },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.WatchGrokBotCalendarEventsHeartbeat
+ */
+export const WatchGrokBotCalendarEventsHeartbeat = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.WatchGrokBotCalendarEventsHeartbeat",
+  () => [
+    { no: 1, name: "latest_cursor", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ],
+);
+
+/**
+ * @generated from message aiserver.v1.WatchGrokBotCalendarEventsNotify
+ */
+export const WatchGrokBotCalendarEventsNotify = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.WatchGrokBotCalendarEventsNotify",
+  [],
+);
+
+/**
+ * @generated from message aiserver.v1.WatchGrokBotCalendarEventsRequest
+ */
+export const WatchGrokBotCalendarEventsRequest = /*@__PURE__*/ proto3.makeMessageType(
+  "aiserver.v1.WatchGrokBotCalendarEventsRequest",
+  () => [
+    { no: 1, name: "machine_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ],
 );
 

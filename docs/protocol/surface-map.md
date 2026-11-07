@@ -1,6 +1,6 @@
 # Used protocol surface → SDK / CLI / MCP
 
-Service `aiserver.v1.GrokBotService`. Field-level detail: [baselines/used-surface-0.79.2.json](baselines/used-surface-0.79.2.json).
+Service `aiserver.v1.GrokBotService`. Field-level detail: [baselines/used-surface-0.79.3.json](baselines/used-surface-0.79.3.json) (vendor = 0.79.3).
 The RPC list is derived from code (`client.<rpc>(` in `src/`) by `tools/protocol/used_surface.py`.
 
 | RPC | SDK (`src/ops`) | CLI | MCP tool | Write? | Level |
@@ -31,9 +31,9 @@ No write RPC has been executed live.
 - `SendGrokBotUserMessageRequest` enums `source`(13)/`initiator`(18)/`send_source`(21) are sent as 0 — unverified.
 - `ListGrokBotTranscriptEntriesRequest.limit` (4) is not sent (0); client-side cap only.
 
-## 0.79.2 additive fields relevant to this surface (not yet used)
+## 0.79.x additive fields relevant to this surface (present in vendor, not used/exposed)
 
-From [baselines/used-surface-diff-0.78.4-to-0.79.2.md](baselines/used-surface-diff-0.78.4-to-0.79.2.md):
+From [baselines/used-surface-diff-0.78.4-to-0.79.3.md](baselines/used-surface-diff-0.78.4-to-0.79.3.md) (identical to the 0.79.2 diff):
 `CreateGrokBotAgentRequest` +18 visibility / +19 team_id / +20 bot_builder_requested;
 `GetGrokBotUserRuntimeSettingsRequest` +1 after_main_agent_change; `GrokBotAgent` +36 shared_with_others;
 `SendGrokBotUserMessageRequest` +26 rendered_card_kinds; runtime settings time-zone fields; `GrokBotAgentTask` +12..15.

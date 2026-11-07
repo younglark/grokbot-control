@@ -50,3 +50,14 @@ python3 tools/protocol/used_surface.py --src src --old docs/protocol/baselines/u
   --new /tmp/gb-X/out/snapshot.json -o /tmp/gb-X/used-surface.md      # exit 1 = breaking change in used surface
 ```
 *Executed:* 0.78.4 → 0.79.2: 0 breaking, 14 additive field lines.
+
+## 0.79.3 run (2026-11-07) — current vendor
+
+- Feed opened without login → 0.79.3 / `4739412…`; deb downloaded to a dir outside the repo, hashed, `dpkg-deb -x` (no install, no execution).
+- `asar_extract.py` → proto.cjs / main-app.cjs / main-core.cjs (hashes in baseline-manifest.md).
+- `extract_proto.py` (text parse, bundle not executed): 0 unresolved / 0 relocated / 0 backward edges.
+- `grpc_tools.protoc` descriptor set + protoc-gen-es 1.10.1 / protoc-gen-connect-es 1.6.1 (`target=js`), installed with `npm install` in a temp dir.
+- Toolchain reproducibility: regenerating from upstream 0.78.4 `.proto` gives the old vendor byte-for-byte.
+- `tools/protocol/verify_generated.mjs`: 0 errors (2923 msgs / 387 enums / 464 GrokBotService RPCs; 2923 round-trips).
+- Upstream `compare.mjs` / `cross-wire.mjs` **not run** (they `require()` the App's proto.cjs).
+- `fingerprint.py` on main-app.cjs: same auth anchors as 0.79.2; only minified identifiers changed.

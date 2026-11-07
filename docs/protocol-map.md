@@ -1,8 +1,8 @@
 # 协议映射与覆盖矩阵（细化）
 
-基线：`grokbot-proto` @ **49fd8ce** / APP **0.78.4**。  
+基线：vendor = App **0.79.3**（本仓库从App恢复生成，见 docs/protocol/baseline-manifest.md；此前为 `grokbot-proto` @ 49fd8ce / 0.78.4）。
 App 行为旁证：Linux **0.79.2** `main-app.pretty.cjs`（静态，未登录）。  
-**0.78.4↔0.79.2 兼容未联调。**
+**0.78.4→0.79.3 used surface 0 breaking（仅新增字段）；0.79.3 vendor 仅离线验证，未联调。**
 
 ## 覆盖矩阵
 
@@ -32,7 +32,7 @@ App 行为旁证：Linux **0.79.2** `main-app.pretty.cjs`（静态，未登录�
 
 **0.78.4 Request 另有：** `purpose`/`origin`/`create_intent`/`create_caller` 等——App 该路径未全用；控制面默认值待定。
 
-**未证实 / drift：** App 代码还传 `visibility`/`teamId`/`botBuilderRequested`，**不在** 0.78.4 `CreateGrokBotAgentRequest` 字段表→标 schema drift，S0 必核。
+**未证实：** App 代码还传 `visibility`/`teamId`/`botBuilderRequested`；0.79.3 vendor 已含这些字段（+18/+19/+20），但取值语义未经 live 验证，本实现仍**不发送**。
 
 ## Sidebar 写语义（重点）
 

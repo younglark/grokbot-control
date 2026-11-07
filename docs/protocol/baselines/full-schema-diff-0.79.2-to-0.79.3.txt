@@ -1,0 +1,23 @@
+====================================================================
+messages  2922 -> 2923   (+1 -0 ~1)
+enums     387 -> 387
+services  7 -> 7
+====================================================================
+
+--- new messages ---
+  + aiserver.v1.SetOnePasswordPreviousIntegrationRequest
+
+--- removed messages ---
+
+--- changed messages ---
+  ~ aiserver.v1.OnePasswordState
+      +4:uses_previous_integration:bool
+
+--- enum changes ---
+  (0 enums changed, +0 new, -0 removed)
+
+--- service / RPC changes ---
+  methods 661 -> 662
+
+  aiserver.v1.GrokBotService
+    + SetOnePasswordPreviousIntegration(aiserver.v1.SetOnePasswordPreviousIntegrationRequest) -> aiserver.v1.OnePasswordState [Unary]

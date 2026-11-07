@@ -44,7 +44,7 @@ node dist/cli/main.js --json auth logout             # 只删本工具自己的�
 ```
 
 鉴权限制（详见 docs/protocol-map.md「Auth」）：
-- 协议来自 Grok Bot Linux 0.79.2 **静态逆向**，非官方公开 API。2026-11-07 已人工验证一次：浏览器登录 + 只读 `bot list` / `sidebar list` / `bot status` 成功；刷新与所有写操作**未** live 验证。
+- 协议来自 Grok Bot Linux App **静态逆向**，非官方公开 API。`vendor/proto-gen` 现为 **0.79.3**（本仓库从App恢复生成，离线校验）。2026-11-07 的人工 live 验证（浏览器登录 + 只读 `bot list` / `sidebar list` / `bot status`）使用的是**旧 0.78.4 vendor**；0.79.3 vendor 尚未 live 调用。刷新与所有写操作**未** live 验证。
 - 仅支持 Cursor token；xAI identity 登录结果返回 `unsupported`。
 - 刷新需显式配置公开 OAuth client_id：`GBT_OAUTH_CLIENT_ID`（本工具不内置）。未配置时 token 过期后需重新登录。
 - 凭据独立于 App（不读取、不复用 App 的 sand-secrets.json）。logout 只删本地文件，不吊销服务端会话。
@@ -71,4 +71,4 @@ node dist/cli/main.js --json auth logout             # 只删本工具自己的�
 
 ## 协议 vendor
 
-见 `vendor/proto-gen/NOTICE.md`（proto `49fd8ce` / App `0.78.4`；生成器 Buf Connect Apache-2.0；schema 本身无单独官方许可声明）。
+见 `vendor/proto-gen/NOTICE.md`（App `0.79.3` commit `4739412`，本仓库从App恢复生成；生成器 Buf Connect Apache-2.0；schema 本身无单独官方许可声明）。
