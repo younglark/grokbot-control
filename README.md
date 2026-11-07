@@ -50,6 +50,21 @@ node dist/cli/main.js --json auth logout             # 只删本工具自己的�
 - 凭据独立于 App（不读取、不复用 App 的 sand-secrets.json）。logout 只删本地文件，不吊销服务端会话。
 - MCP：`GBT_MCP_READONLY=1 node dist/mcp/main.js` 提供 `auth_whoami / auth_login_begin / auth_login_complete(≤120s) / auth_login_cancel / auth_logout` + 只读工具。
 
+## 文件优先同步（无 SQLite）
+
+CLI：`gbc sync pull --agent-id BOT [--session-id SESSION] --dir /absolute/private/root
+--account-id STABLE_ID --team-id none --ack-unverified-scope`；`gbc sync status|render|attachments --dir /absolute/private/root`。
+pull/render 明确授权本地写，不需要远端 `--allow-writes`；`--dry-run` 纯本地计划、无 RPC/文件。
+身份是操作者显式声明而非服务端验证，必须核对稳定 ID，不能用邮箱/token 哈希。
+**render 已可直接 rg 已确认 JSON UI entry 的正文**：message、send-message(text)、notice、
+tool-call 名称/状态/summary、附件文件引用；其余类型/省略/未知 body 仍 opaque，不猜解密。
+静态解码证据和 synthetic genuine-schema fixture 见 [transcript-body-0.79.3.md](docs/protocol/transcript-body-0.79.3.md)。
+例如 `rg '关键词' /absolute/private/root/derived -g '*.md'`；旧 opaque 归档可离线重新 render。
+每次从头有界拉取合并，不删缺失行，不承诺完整性；无 Watch/附件下载/`--all`。
+MCP 设 `GBT_SYNC_ROOT` 才提供 `sync_status`，另需 `GBT_SYNC_ALLOW_LOCAL_WRITES=1` 才有
+`sync_pull/sync_render/sync_attachments`（READONLY 排除写工具；scope 在启动配置；attachments 可选远端 file_path 过滤）。
+命令示例、scope 限制、格式与恢复步骤见 [docs/sync-format.md](docs/sync-format.md)。
+
 ## 文档
 
 | 文件 | 内容 |
@@ -62,6 +77,7 @@ node dist/cli/main.js --json auth logout             # 只删本工具自己的�
 | [docs/acceptance.md](docs/acceptance.md) | 验收 |
 | [docs/review.md](docs/review.md) | 审查 |
 | [docs/references.md](docs/references.md) | 一手来源 |
+| [docs/sync-format.md](docs/sync-format.md) | 文件同步格式、身份限制、预算、崩溃恢复 |
 | [docs/implementation-status.md](docs/implementation-status.md) | 实现状态 |
 | [/workspace/grokbot-control-implementation.md](../grokbot-control-implementation.md) | 本轮实现报告 |
 

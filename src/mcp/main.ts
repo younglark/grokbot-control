@@ -25,7 +25,13 @@ async function main() {
     version: "0.1.0",
   });
 
-  const tools = buildTools({ readOnly });
+  const tools = buildTools({ readOnly, sync: process.env.GBT_SYNC_ROOT ? {
+    root: process.env.GBT_SYNC_ROOT,
+    allowLocalWrites: process.env.GBT_SYNC_ALLOW_LOCAL_WRITES === "1",
+    accountId: process.env.GBT_SYNC_ACCOUNT_ID,
+    teamId: process.env.GBT_SYNC_TEAM_ID,
+    acknowledgeUnverifiedScope: process.env.GBT_SYNC_ACK_UNVERIFIED_SCOPE === "1",
+  } : undefined });
   for (const t of tools) {
     server.registerTool(
       t.name,

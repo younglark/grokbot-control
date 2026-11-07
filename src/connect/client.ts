@@ -17,6 +17,8 @@ export type ConnectConfig = {
   baseUrl: string;
   auth?: AuthProvider;
   transport?: Transport;
+  /** Optional transport decoded-response cap (sync uses 16MiB). */
+  readMaxBytes?: number;
 };
 
 export function createAuthInterceptor(auth: AuthProvider): Interceptor {
@@ -45,6 +47,7 @@ export function createGrokBotClient(cfg: ConnectConfig): GrokBotClient {
     createConnectTransport({
       baseUrl: cfg.baseUrl.replace(/\/$/, ""),
       httpVersion: "1.1",
+      readMaxBytes: cfg.readMaxBytes,
       interceptors,
     });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { syncCommand } from "./sync.js";
 import { HELP } from "./help.js";
 import { buildPlane, flag, hasFlag, parseGlobals, persistMockState } from "./config.js";
 import { catchToExit, emitResult, usageExit } from "./io.js";
@@ -18,6 +19,7 @@ async function main(): Promise<number> {
   if (!noun || !verb) usageExit("missing <noun> <verb>", "gbc --help");
 
   try {
+    if (noun === "sync") return emitResult(await syncCommand(globals, rest), asJson);
     const plane = buildPlane(globals);
     const write = {
       dryRun: globals.dryRun,

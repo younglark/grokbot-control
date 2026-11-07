@@ -122,8 +122,8 @@ export class MessageOps {
           (e.ciphertext || e.omitted ? undefined : undefined);
         return {
           entry_id: id,
-          kind: String(e.kind ?? e.type ?? ""),
-          omitted: Boolean(e.omitted || e.ciphertext),
+          kind: String(e.entryKind ?? e.kind ?? e.type ?? ""),
+          omitted: Boolean(e.bodyOmitted || e.omitted || e.ciphertext),
           preview: preview ? String(preview).slice(0, 200) : undefined,
           untrusted: true,
         } satisfies TranscriptEntryView;

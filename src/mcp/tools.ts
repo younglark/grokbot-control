@@ -1,3 +1,5 @@
+import path from "node:path";
+import { GbcError } from "../errors.js";
 import { z } from "zod";
 import type { ControlPlane } from "../ops/plane.js";
 import type { ResultEnvelope } from "../dto/result.js";
@@ -23,7 +25,8 @@ const writeFlags = {
   allow_writes: z.boolean().optional(),
 };
 
-export function buildTools(opts?: { readOnly?: boolean }): ToolDef[] {
+export type SyncToolConfig = { root: string; allowLocalWrites?: boolean; accountId?: string; teamId?: string; acknowledgeUnverifiedScope?: boolean };
+export function buildTools(opts?: { readOnly?: boolean; sync?: SyncToolConfig }): ToolDef[] {
   const all: ToolDef[] = [
     {
       name: "list_bots",
@@ -295,6 +298,24 @@ export function buildTools(opts?: { readOnly?: boolean }): ToolDef[] {
       handler: (p) => p.authOps.logout(),
     },
   ];
+  if (opts?.sync) {
+    const c = { ...opts.sync }; // startup-only copy: callers cannot choose paths or account scope
+    if (!path.isAbsolute(c.root)) throw new GbcError("invalid_argument", "MCP sync root must be absolute");
+    const selectors = { agent_id: agentId.optional(), session_id: agentId.optional() };
+    all.push({ name: "sync_status", description: "Read bounded local archive status; no login/RPC", readOnly: true,
+      inputSchema: z.object(selectors).strict(), handler: (p,a) => p.sync.status({ dir: c.root, agentId: a.agent_id as string | undefined, sessionId: a.session_id as string | undefined }) });
+    if (c.allowLocalWrites && !opts.readOnly) {
+      all.push({ name: "sync_pull", description: "Write a bounded local snapshot to the configured private root. Only remote read RPCs; known JSON entry kinds decoded, unknown bodies opaque, completeness unknown.",
+        inputSchema: z.object({ agent_id: agentId, session_id: agentId.optional(), dry_run: z.boolean().optional(), max_pages: z.number().int().min(1).max(1000).optional(), max_bytes: z.number().int().min(1).max(256*1024*1024).optional(), timeout_ms: z.number().int().min(1).max(300000).optional() }).strict(),
+        handler: (p,a) => p.sync.pull({ dir: c.root, agentId: String(a.agent_id), sessionId: a.session_id as string | undefined, accountId: c.accountId ?? "", teamId: c.teamId ?? "", acknowledgeUnverifiedScope: c.acknowledgeUnverifiedScope === true, dryRun: a.dry_run as boolean | undefined, maxPages: a.max_pages as number | undefined, maxBytes: a.max_bytes as number | undefined, timeoutMs: a.timeout_ms as number | undefined }) });
+      all.push({ name: "sync_render", description: "Rebuild readable Markdown for verified JSON message/tool-summary shapes locally; unknown bodies opaque, no decryption or RPC",
+        inputSchema: z.object({ ...selectors, dry_run: z.boolean().optional() }).strict(),
+        handler: (p,a) => p.sync.render({ dir: c.root, agentId: a.agent_id as string | undefined, sessionId: a.session_id as string | undefined, dryRun: a.dry_run as boolean | undefined }) });
+      all.push({ name: "sync_attachments", description: "On-demand download of synced user-attachment file_path via ResolveGrokBotAttachmentReads + HTTPS GET into the configured private root. Not live verified; signed URLs never stored; not blob_hash hydration.",
+        inputSchema: z.object({ ...selectors, path: z.string().min(1).max(1024).optional(), dry_run: z.boolean().optional(), max_bytes: z.number().int().min(1).max(256*1024*1024).optional(), max_file_bytes: z.number().int().min(1).max(128*1024*1024).optional(), timeout_ms: z.number().int().min(1).max(300000).optional() }).strict(),
+        handler: (p,a) => p.sync.attachments({ dir: c.root, agentId: a.agent_id as string | undefined, sessionId: a.session_id as string | undefined, path: a.path as string | undefined, dryRun: a.dry_run as boolean | undefined, maxBytes: a.max_bytes as number | undefined, maxFileBytes: a.max_file_bytes as number | undefined, timeoutMs: a.timeout_ms as number | undefined }) });
+    }
+  }
   if (opts?.readOnly) return all.filter((t) => t.readOnly);
   return all;
 }

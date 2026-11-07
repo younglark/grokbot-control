@@ -1,3 +1,4 @@
+import { SyncOps } from "../sync/core.js";
 import type { AuthProvider } from "../auth/types.js";
 import { createGrokBotClient, type ConnectConfig, type GrokBotClient } from "../connect/client.js";
 import { AuthOps } from "./auth.js";
@@ -14,6 +15,7 @@ export type ControlPlaneOptions = ConnectConfig & {
 
 export class ControlPlane {
   readonly client: GrokBotClient;
+  readonly sync: SyncOps;
   readonly bot: BotOps;
   readonly message: MessageOps;
   readonly session: SessionOps;
@@ -27,6 +29,7 @@ export class ControlPlane {
     this.auth = opts.auth;
     this.simulated = Boolean(opts.simulated);
     this.client = createGrokBotClient(opts);
+    this.sync = new SyncOps(createGrokBotClient({ ...opts, readMaxBytes: 16 * 1024 * 1024 }), opts.baseUrl, this.simulated);
     const f = { simulated: this.simulated };
     this.authOps = new AuthOps(this.auth, f);
     this.bot = new BotOps(this.client, f);

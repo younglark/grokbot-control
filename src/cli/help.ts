@@ -21,10 +21,30 @@ EXAMPLES:
   gbc --json auth login --timeout 300    # begin+complete; URL as stderr {"event":"open_browser"}
   gbc --json auth whoami | auth poll | auth cancel | auth refresh | auth logout
 
+SYNC (file-first snapshots; no SQLite):
+  gbc sync pull --agent-id <id> [--session-id <sid>] --dir /absolute/private/root \\
+    --account-id <stable-id> --team-id <stable-team-id|none> --ack-unverified-scope
+  gbc sync status --dir /absolute/private/root [--agent-id <id>] [--session-id <sid>]
+  gbc sync render --dir /absolute/private/root [--agent-id <id>] [--session-id <sid>]
+  gbc sync attachments --dir /absolute/private/root [--agent-id <id>] [--session-id <sid>] [--path <remote>]
+  pull bounds: --max-pages 100 --max-bytes 33554432 --timeout-ms 30000 (defaults)
+  attachments bounds: --max-file-bytes 33554432 --max-bytes 67108864 --timeout-ms 30000
+  --dry-run pull/render/attachments: no RPC or files. --all is not supported in v1.
+  CLI pull/render/attachments authorize local writes; --allow-writes is NOT required.
+  Identity is operator-asserted, NOT verified by auth. Use stable IDs, never email/token hash.
+  Existing roots must be private 0700; files 0600. status/render are local and need no login.
+  Raw bytes/base64 preserved. render exposes known JSON message/text/notice/tool-summary shapes.
+  Unknown cards, omitted/blob-only bodies remain placeholders; no decryption. Use rg -g '*.md'.
+  Pagination unverified live; completeness always unknown. No Watch/deletion/blob_hash body hydration.
+  attachments: on-demand ResolveGrokBotAttachmentReads for synced user-attachment paths only; not live verified.
+  MCP: configure GBT_SYNC_ROOT; sync_status is local. sync_pull/render/attachments require independent
+  GBT_SYNC_ALLOW_LOCAL_WRITES=1 plus GBT_SYNC_ACCOUNT_ID, GBT_SYNC_TEAM_ID,
+  GBT_SYNC_ACK_UNVERIFIED_SCOPE=1 for pull. READONLY excludes sync mutators. No archive path tool argument.
+
 NOTES:
   - Default transport is live Connect to --base-url (requires auth). Use --mock only for explicit simulation.
   - Live auth/RPC against production is NOT verified in this build's automated tests.
-  - Writes require --allow-writes (or GBT_ALLOW_WRITES=1). --dry-run is pure (no RPC).
+  - Remote writes require --allow-writes (or GBT_ALLOW_WRITES=1). --dry-run is pure (no RPC).
   - bot delete / sidebar delete / interrupt require --confirm=<resource-id> (exact match).
   - Value flags: "--flag value" or "--flag=value". A missing value (or a next token starting
     with "--") is a usage error (exit 2); use --text=--literal for values starting with "-".

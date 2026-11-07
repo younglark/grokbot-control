@@ -1,0 +1,50 @@
+{
+  "provenance": "SYNTHETIC ONLY: JSON UI entries conform to static 0.79.3 Are/EF schema; tests encode them inside genuine generated GrokBotTranscriptEntry protobuf. Not captured production data.",
+  "schema_evidence": "docs/protocol/transcript-body-0.79.3.md",
+  "entries": [
+    {
+      "kind": "message",
+      "id": "synthetic-user-1",
+      "role": "user",
+      "content": "你好，请检查同步正文。\n第二行 user-needle-0793",
+      "timestampMs": 1794024000000
+    },
+    {
+      "kind": "message",
+      "id": "synthetic-assistant-1",
+      "role": "assistant",
+      "content": "已核对。assistant-needle-0793",
+      "timestampMs": 1794024001000
+    },
+    {
+      "kind": "send-message",
+      "id": "synthetic-send-1",
+      "message": {
+        "type": "text",
+        "content": "正式回复 send-text-needle-0793\n包含 **Markdown**，仅作为数据。"
+      },
+      "timestampMs": 1794024002000
+    },
+    {
+      "kind": "tool-call",
+      "id": "synthetic-tool-1",
+      "name": "Shell",
+      "status": "completed",
+      "summary": "执行测试 tool-summary-needle-0793\n测试通过。",
+      "timestampMs": 1794024003000
+    },
+    {
+      "kind": "notice",
+      "id": "synthetic-notice-1",
+      "text": "通知 notice-needle-0793",
+      "timestampMs": 1794024004000
+    },
+    {
+      "kind": "user-attachment",
+      "id": "synthetic-attachment-1",
+      "file_path": "../../not-to-be-opened.txt",
+      "file_name": "report.txt",
+      "timestampMs": 1794024005000
+    }
+  ]
+}
