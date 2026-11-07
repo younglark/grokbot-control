@@ -244,14 +244,17 @@ describe("refresh (evidence A:56108-56125, A:54459)", () => {
     assert.equal(mode(new FileCredentialStore().credFile("cursor", API)), 0o600);
   });
 
-  it("no client_id configured -> auth_refresh_unconfigured, creds kept, no network", async () => {
+  it("no client_id configured -> refresh throws; getAccessToken falls back to still-valid token", async () => {
     seed(soon(), "R1", { client_id: undefined, credential_source: undefined });
     const f = fakeFetch(() => Response.json({}));
     const a = createAuthProvider({ kind: "cursor", backend: API, http: f.http });
     await assert.rejects(a.refresh(), (e: GbcError) => e.code === "auth_refresh_unconfigured");
     assert.equal(f.calls.length, 0);
     assert.ok(new FileCredentialStore().load("cursor", API));
-    await assert.rejects(a.getAccessToken(), (e: GbcError) => e.code === "auth_refresh_unconfigured");
+    // P2-1 regression: near-expiry without client_id must NOT fail all RPCs; keep using unexpired token.
+    const tok = await a.getAccessToken();
+    assert.ok(tok);
+    assert.equal(f.calls.length, 0);
   });
 
   it("HTTP 401 / network error keep creds; shouldLogout clears; expired + failure throws", async () => {
@@ -485,23 +488,7 @@ describe("refresh (evidence A:56108-56125, A:54459)", () => {
     const tok = await a429.getAccessToken();
     assert.ok(tok);
 
-    // abort/timeout path
-    seed(jwt(Math.floor(Date.now() / 1000) - 5));
-    const aTo = createAuthProvider({
-      kind: "cursor",
-      backend: API,
-      clientId: "PUBLIC_ID",
-      refreshDeadlineMs: 50,
-      http: {
-        fetch: (async (_u: RequestInfo | URL, init?: RequestInit) => {
-          await new Promise<void>((_r, rej) => {
-            init?.signal?.addEventListener("abort", () => rej(Object.assign(new Error("aborted"), { name: "AbortError" })));
-          });
-          return new Response();
-        }) as typeof fetch,
-      },
-    });
-    await assert.rejects(aTo.refresh({ force: true }), (e: GbcError) => e.code === "auth_refresh_timeout" || e.code === "auth_refresh_network");
+    // Caller-deadline timeout (exchange not aborted) covered in "review regressions" below.
   });
 
   it("classifyExpiry helper: missing / illegal / early window", () => {
@@ -717,5 +704,265 @@ describe('refresh runtime validation and shared cooldown', () => {
     for (const exp of [Infinity, -1, Number.MAX_VALUE, 1.25]) assert.equal(classifyExpiry(exp,0).stillValid,false);
     assert.equal(classifyExpiry(600000,300000).needsRefresh,false); // exact 300s is outside <300s
     assert.equal(classifyExpiry(599999,300000).needsRefresh,true);
+  });
+});
+
+describe("review regressions (P2/P3 on 91d5dfe)", () => {
+  function seed(
+    access: string,
+    refresh = "R1",
+    extra: Partial<import("../src/auth/types.js").StoredCredential> = {},
+  ) {
+    const exp = (() => {
+      try {
+        return (JSON.parse(Buffer.from(access.split(".")[1]!, "base64url").toString()).exp as number) * 1000;
+      } catch {
+        return undefined;
+      }
+    })();
+    new FileCredentialStore().save({
+      kind: "cursor",
+      backend: API,
+      access_token: access,
+      refresh_token: refresh,
+      expires_at_ms: exp,
+      updated_at_ms: 0,
+      revision: 1,
+      credential_source: "login_poll",
+      login_kind: "browser_deep_control",
+      client_id: "PUBLIC_ID",
+      session_id: "sess-1",
+      account_subject: "u1",
+      refresh_endpoint: `${API}/oauth/token`,
+      ...extra,
+    });
+  }
+  const soon = () => jwt(Math.floor(Date.now() / 1000) + 60);
+  const later = () => jwt(Math.floor(Date.now() / 1000) + 7200);
+
+  it("P2-1: near-expiry without client_id keeps serving still-valid token via getAccessToken", async () => {
+    const access = soon();
+    seed(access, "R1", { client_id: undefined, credential_source: undefined });
+    const f = fakeFetch(() => Response.json({ access_token: later() }));
+    const a = createAuthProvider({ kind: "cursor", backend: API, http: f.http });
+    await assert.rejects(a.refresh({ force: true }), (e: GbcError) => e.code === "auth_refresh_unconfigured");
+    assert.equal(await a.getAccessToken(), access);
+    assert.equal(f.calls.length, 0);
+  });
+
+  it("P2-1: missing exp + unconfigured still returns opaque access token text", async () => {
+    seed("opaque-not-jwt", "R1", { client_id: undefined, credential_source: undefined, expires_at_ms: undefined });
+    const a = createAuthProvider({ kind: "cursor", backend: API, http: fakeFetch(() => Response.json({})).http });
+    assert.equal(await a.getAccessToken(), "opaque-not-jwt");
+  });
+
+  it("P2-2: caller deadline returns unknown; exchange continues and writes rotated tokens", async () => {
+    seed(soon());
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let entered = 0;
+    const fresh = later();
+    const a = createAuthProvider({
+      kind: "cursor",
+      backend: API,
+      clientId: "PUBLIC_ID",
+      refreshDeadlineMs: 40,
+      http: {
+        fetch: (async () => {
+          entered++;
+          await gate;
+          return Response.json({ access_token: fresh, refresh_token: "R-rotated" });
+        }) as typeof fetch,
+      },
+    });
+    const err = await a.refresh({ force: true }).then(
+      () => null,
+      (e: GbcError) => e,
+    );
+    assert.ok(err);
+    assert.equal(err!.code, "auth_refresh_timeout");
+    assert.equal(err!.outcome, "unknown");
+    assert.equal((err!.details as { rpc_dispatched?: unknown }).rpc_dispatched, "unknown");
+    assert.equal(entered, 1);
+    // Credentials still the old pair at caller timeout.
+    assert.equal(new FileCredentialStore().load("cursor", API)!.refresh_token, "R1");
+    release();
+    // Background exchange must finish and persist rotation (do not abandon spent RT).
+    for (let i = 0; i < 50; i++) {
+      const c = new FileCredentialStore().load("cursor", API);
+      if (c?.refresh_token === "R-rotated") break;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    const saved = new FileCredentialStore().load("cursor", API)!;
+    assert.equal(saved.refresh_token, "R-rotated");
+    assert.equal(saved.access_token, fresh);
+  });
+
+  it("P2-2: invalid_grant after ambiguous timeout does not clear credentials", async () => {
+    seed(soon(), "R-amb");
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const a = createAuthProvider({
+      kind: "cursor",
+      backend: API,
+      clientId: "PUBLIC_ID",
+      refreshDeadlineMs: 30,
+      http: {
+        fetch: (async () => {
+          await gate;
+          return Response.json({ error: "invalid_grant" }, { status: 400 });
+        }) as typeof fetch,
+      },
+    });
+    // Caller times out first → markAmbiguous; exchange still in flight.
+    await assert.rejects(a.refresh({ force: true }), (e: GbcError) => {
+      return e.code === "auth_refresh_timeout" && e.outcome === "unknown";
+    });
+    assert.ok(new FileCredentialStore().load("cursor", API));
+    // Completing the exchange with invalid_grant must keep credentials (protect window).
+    release();
+    await new Promise((r) => setTimeout(r, 50));
+    // Drain background rejection.
+    try {
+      await a.refresh({ force: true });
+    } catch {
+      /* expected */
+    }
+    assert.ok(
+      new FileCredentialStore().load("cursor", API),
+      "invalid_grant after ambiguous timeout must not wipe credentials",
+    );
+  });
+
+  it("P3-1: 401 refresh adopts disk token when rejected bearer already replaced (no second rotation)", async () => {
+    const access1 = jwt(Math.floor(Date.now() / 1000) + 3600);
+    const access2 = jwt(Math.floor(Date.now() / 1000) + 7200);
+    seed(access1);
+    let refreshCalls = 0;
+    const auth = createAuthProvider({
+      kind: "cursor",
+      backend: API,
+      clientId: "PUBLIC_ID",
+      http: fakeFetch(() => {
+        refreshCalls++;
+        return Response.json({ access_token: access2, refresh_token: "R2" });
+      }).http,
+    });
+    // Peer already wrote a new access token (simulate concurrent refresh).
+    const cur = new FileCredentialStore().load("cursor", API)!;
+    new FileCredentialStore().save({
+      ...cur,
+      access_token: access2,
+      refresh_token: "R2",
+      revision: 2,
+      expires_at_ms: Date.now() + 7200_000,
+    });
+
+    let attempts = 0;
+    const interceptor = createAuthInterceptor(auth);
+    const next = async (req: { header: Headers }) => {
+      attempts++;
+      const h = req.header.get("authorization");
+      if (attempts === 1) {
+        assert.equal(h, `Bearer ${access2}`);
+        throw new ConnectError("nope", Code.Unauthenticated);
+      }
+      assert.equal(h, `Bearer ${access2}`);
+      return { header: new Headers(), trailer: new Headers(), message: { ok: true }, stream: false as const };
+    };
+    // getAccessToken returns access2 (fresh); 401 with rejected=access2 would force-refresh —
+    // but first write access1 as what interceptor captured... Use a custom path:
+    // Call refresh directly with rejectedAccessToken=access1 while disk has access2.
+    const r = await auth.refresh({ force: true, rejectedAccessToken: access1 });
+    assert.equal(r.refreshed, false);
+    assert.equal(r.reason, "peer_refreshed");
+    assert.equal(refreshCalls, 0);
+
+    // Interceptor path: seed so getAccessToken yields access1, then peer flips to access2 before refresh.
+    seed(access1, "R1", { revision: 1 });
+    refreshCalls = 0;
+    let flipped = false;
+    const auth2 = createAuthProvider({
+      kind: "cursor",
+      backend: API,
+      clientId: "PUBLIC_ID",
+      http: fakeFetch(() => {
+        refreshCalls++;
+        return Response.json({ access_token: later(), refresh_token: "R9" });
+      }).http,
+    });
+    attempts = 0;
+    const next2 = async (req: { header: Headers }) => {
+      attempts++;
+      if (attempts === 1) {
+        // Flip disk after the rejected bearer was chosen.
+        const c = new FileCredentialStore().load("cursor", API)!;
+        new FileCredentialStore().save({
+          ...c,
+          access_token: access2,
+          refresh_token: "R2",
+          revision: (c.revision ?? 0) + 1,
+          expires_at_ms: Date.now() + 7200_000,
+        });
+        flipped = true;
+        throw new ConnectError("nope", Code.Unauthenticated);
+      }
+      assert.equal(req.header.get("authorization"), `Bearer ${access2}`);
+      return { header: new Headers(), trailer: new Headers(), message: { ok: true }, stream: false as const };
+    };
+    const readReq = {
+      stream: false as const,
+      method: { name: "ListGrokBotAgents" },
+      header: new Headers(),
+      service: { typeName: "aiserver.v1.GrokBotService" },
+      url: "http://x",
+      requestMethod: "POST",
+      signal: new AbortController().signal,
+      message: {},
+      contextValues: undefined as never,
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const out = await createAuthInterceptor(auth2)(next2 as any)(readReq as any);
+    assert.equal((out as { message: { ok: boolean } }).message.ok, true);
+    assert.equal(flipped, true);
+    assert.equal(refreshCalls, 0);
+    assert.equal(attempts, 2);
+  });
+
+  it("P3-2: cooldown is per session — new login session is not blocked by prior cooldown", async () => {
+    seed(soon(), "R1", { session_id: "old-sess" });
+    let calls = 0;
+    const http = fakeFetch(() => {
+      calls++;
+      return new Response("", { status: 429, headers: { "retry-after": "30" } });
+    }).http;
+    // Same long-lived provider instance (MCP process) across account switch.
+    const a = createAuthProvider({ kind: "cursor", backend: API, clientId: "PUBLIC_ID", http });
+    await assert.rejects(a.refresh({ force: true }), (e: GbcError) => e.code === "auth_refresh_rate_limited");
+    // Still-valid token soft-returns under old session cooldown (no second HTTP).
+    const soft = await a.refresh({ force: true });
+    assert.equal(soft.refreshed, false);
+    assert.equal(calls, 1);
+
+    // Simulate re-login on disk: new session_id must not inherit in-process cooldown.
+    seed(soon(), "R2", { session_id: "new-sess", revision: 1, refresh_cooldown_until_ms: undefined });
+    await assert.rejects(a.refresh({ force: true }), (e: GbcError) => e.code === "auth_refresh_rate_limited");
+    assert.equal(calls, 2);
+  });
+
+  it("P3-3: refresh access token with mismatched JWT sub is not saved", async () => {
+    seed(soon());
+    const other = jwt(Math.floor(Date.now() / 1000) + 7200, { sub: "other-user" });
+    const a = createAuthProvider({
+      kind: "cursor",
+      backend: API,
+      clientId: "PUBLIC_ID",
+      http: fakeFetch(() => Response.json({ access_token: other, refresh_token: "R-bad" })).http,
+    });
+    await assert.rejects(a.refresh({ force: true }), (e: GbcError) => e.code === "auth_refresh_subject_mismatch");
+    const c = new FileCredentialStore().load("cursor", API)!;
+    assert.equal(c.refresh_token, "R1");
+    assert.equal(c.account_subject, "u1");
+    assert.notEqual(c.access_token, other);
   });
 });

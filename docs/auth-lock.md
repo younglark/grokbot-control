@@ -45,9 +45,12 @@ entry revision/session: a sibling's usable rotation satisfies that force. Change
 rather than returning credentials for a different login. All cooperating writers must use this protocol.
 
 Try-lock + async 25ms wait keeps Node's event loop responsive. Wait budget defaults to 30s; AbortSignal
-cancels only waiting, not an acquired exchange. HTTP budget <=20s includes body decoding; a canceled
-caller must not abandon an already-spent refresh token. Transient cooldown persisted under mutation lock;
-wait/deadline failures are structured and do not delete credentials or retry forever.
+cancels only waiting, not an acquired exchange. The caller-visible HTTP budget is <=20s, but the IdP
+exchange is never aborted mid-flight (Grok Build BoundedRefresh semantics): on deadline the caller gets
+`outcome=unknown` / `rpc_dispatched=unknown` while the exchange continues under singleflight and still
+persists a successful rotation. A follow-up `invalid_grant` inside that ambiguous window does not wipe
+credentials. Transient cooldown is per `session_id` (memory + disk); a re-login must not inherit the
+previous session's cooldown. Wait/deadline failures are structured and do not retry forever.
 
 ## Install/build/distribution
 

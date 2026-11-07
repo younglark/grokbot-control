@@ -64,6 +64,7 @@ function connectCodeFor(gbc: GbcError): Code {
     case "auth_revoked":
     case "auth_refresh_unconfigured":
     case "auth_refresh_client_mismatch":
+    case "auth_refresh_subject_mismatch":
       return Code.Unauthenticated;
     case "denied":
     case "permission_denied":
@@ -133,11 +134,12 @@ export function createAuthInterceptor(auth: AuthProvider): Interceptor {
     } catch (err) {
       if (!isUnauthenticated(err)) throw err;
 
-      // Closest to App Qz recovery: refresh credentials for the *next* request.
+      // Closest to App Qz / Grok Build recovery: only force-rotate when the rejected
+      // bearer is still the current disk token; otherwise adopt the newer pair.
       // Never replay writes. Optional: one refresh+retry for whitelisted read-only unary.
       let refreshed = false;
       try {
-        await auth.refresh({ force: true });
+        await auth.refresh({ force: true, rejectedAccessToken: token });
         refreshed = true;
       } catch {
         /* keep original 401; creds may be cleared on shouldLogout */

@@ -117,8 +117,12 @@ export type AuthProvider = {
   /** Poll until completed, timeout, cancel or 3 consecutive non-404 failures. */
   completeLogin(opts?: { timeoutMs?: number; signal?: AbortSignal }): Promise<AuthCompleteResult>;
   cancelLogin(): Promise<{ had_pending: boolean }>;
-  /** Refresh when near expiry / missing exp, or when force=true. Never prints tokens. */
-  refresh(opts?: { force?: boolean; signal?: AbortSignal }): Promise<RefreshResult>;
+  /**
+   * Refresh when near expiry / missing exp, or when force=true. Never prints tokens.
+   * `rejectedAccessToken`: on 401 recovery, pass the bearer the server rejected; if disk
+   * already has a different access token, adopt it without another force rotation.
+   */
+  refresh(opts?: { force?: boolean; signal?: AbortSignal; rejectedAccessToken?: string }): Promise<RefreshResult>;
   /** Local only: removes this tool's own credential + pending files. Does not revoke server-side. */
   logout(): Promise<{ removed_credential: boolean; removed_pending: boolean }>;
   /** Pure: no network. */

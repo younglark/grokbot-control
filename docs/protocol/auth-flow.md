@@ -37,12 +37,15 @@ State machine (minimal, App-aligned):
 3. **Refresh POST**: fixed HTTPS `{backend}/oauth/token`, `redirect:error`, 20s deadline, schema requires
    non-empty `access_token`; absent `refresh_token` keeps old. Atomic save only if session/account/revision
    unchanged (CAS).
-4. **Failures**: network/timeout/5xx/429 keep creds + cooldown; fallback only when old token still valid and
-   revision unchanged. `shouldLogout`/policy: rescue newer pair under lock, else conditional clear — never
-   fallback revoked token. malformed/config: structured error, no credential clear, no spin.
+4. **Failures**: network/timeout/5xx/429 keep creds + per-session cooldown; caller deadline does not abort the
+   IdP exchange (background writeback; `rpc_dispatched=unknown`). Fallback when old token still valid (also for
+   unconfigured/client_mismatch/malformed/redirect — not only `retryable`). `shouldLogout`/policy: rescue newer
+   pair under lock, else conditional clear — never fallback revoked token; `invalid_grant` after an ambiguous
+   timeout keeps creds. New access JWT `sub` must match expected account subject or the rotation is refused.
 5. **logout/login/save** share `withCredentialLock` with refresh; native advisory-lock ownership is OS-managed (Linux OFD / macOS flock / Windows LockFileEx; see ../auth-lock.md); never stale-break/unlink lock files.
 6. **CLI/MCP**: `auth refresh` vs `--force` / `force:true`; whoami offline; AuthOps returns non-secret metadata;
    MCP `auth_refresh` excluded from READONLY.
-7. **RPC 401**: update creds for next request, return original error; write RPCs never auto-replayed; read-only
-   unary whitelist may refresh+retry once. Pre-RPC failures annotate `rpc_dispatched=false`.
+7. **RPC 401**: pass the rejected bearer into force refresh; if disk already rotated, adopt without another
+   network refresh. Write RPCs never auto-replayed; read-only unary whitelist may refresh+retry once.
+   Pre-RPC failures annotate `rpc_dispatched=false`.
 8. **staticTokenProvider**: never auto-refresh / no disk refresh; expired → re-provide/login.

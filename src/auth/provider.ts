@@ -192,10 +192,46 @@ export function createAuthProvider(opts: AuthProviderOptions): AuthProvider {
   const lockKey = `${kind}|${backend}`;
   const refreshDeadlineMs = Math.min(opts.refreshDeadlineMs ?? REFRESH_DEADLINE_MS, REFRESH_DEADLINE_MS);
 
-  /** In-process singleflight for refresh/getAccessToken. */
+  /** In-process singleflight for refresh/getAccessToken (full exchange, never aborted mid-flight). */
   let inflight: Promise<RefreshResult> | undefined;
-  /** Soft cooldown after 429 / 5xx / network (ms epoch). */
-  let cooldownUntil = 0;
+  /** Soft cooldown after 429 / 5xx / network, keyed by session_id so a re-login is not blocked. */
+  const cooldownBySession = new Map<string, number>();
+  /**
+   * After a caller-visible refresh timeout the IdP exchange may still complete (or may already
+   * have rotated the refresh token). Remember the spent RT briefly so a follow-up invalid_grant
+   * does not wipe credentials that a still-running exchange (or peer) is about to replace.
+   */
+  let ambiguousExchange: { session_id?: string; refresh_token: string; until_ms: number } | undefined;
+
+  const sessionKey = (sessionId: string | undefined) => sessionId ?? "";
+  const cooldownFor = (sessionId: string | undefined, diskMs?: number) =>
+    Math.max(cooldownBySession.get(sessionKey(sessionId)) ?? 0, diskMs ?? 0);
+  const setCooldown = (sessionId: string | undefined, until: number) => {
+    cooldownBySession.set(sessionKey(sessionId), until);
+  };
+  const clearCooldown = (sessionId: string | undefined) => {
+    cooldownBySession.delete(sessionKey(sessionId));
+  };
+  const markAmbiguous = (sessionId: string | undefined, refreshToken: string) => {
+    ambiguousExchange = { session_id: sessionId, refresh_token: refreshToken, until_ms: now() + 120_000 };
+  };
+  const isAmbiguousProtect = (sessionId: string | undefined, refreshToken: string | undefined) =>
+    Boolean(
+      ambiguousExchange &&
+        refreshToken &&
+        ambiguousExchange.refresh_token === refreshToken &&
+        ambiguousExchange.session_id === sessionId &&
+        ambiguousExchange.until_ms > now(),
+    );
+  const clearAmbiguousIf = (sessionId: string | undefined, refreshToken: string | undefined) => {
+    if (
+      ambiguousExchange &&
+      ambiguousExchange.refresh_token === refreshToken &&
+      ambiguousExchange.session_id === sessionId
+    ) {
+      ambiguousExchange = undefined;
+    }
+  };
 
   const configuredClientId = () => opts.clientId ?? process.env.GBT_OAUTH_CLIENT_ID?.trim() ?? "";
   const migrateConfirmed = () => process.env.GBT_AUTH_CONFIRM_MIGRATE === "1";
@@ -224,6 +260,7 @@ export function createAuthProvider(opts: AuthProviderOptions): AuthProvider {
           {
             exitCode: 4,
             hint: "Unset GBT_OAUTH_CLIENT_ID to use the bound id, or re-login / confirm migrate carefully. Credentials kept.",
+            details: { rpc_dispatched: false, can_fallback: true },
           },
         );
       }
@@ -243,6 +280,7 @@ export function createAuthProvider(opts: AuthProviderOptions): AuthProvider {
       {
         exitCode: 4,
         hint: "Set GBT_OAUTH_CLIENT_ID, re-login so client_id is persisted, or set GBT_AUTH_CONFIRM_MIGRATE=1 after configuring. Credentials were kept. client_id is never guessed from JWT.",
+        details: { rpc_dispatched: false, can_fallback: true },
       },
     );
   }
@@ -358,7 +396,7 @@ export function createAuthProvider(opts: AuthProviderOptions): AuthProvider {
     return { needs: false, reason: "already_fresh" };
   }
 
-  async function doRefreshLocked(force: boolean): Promise<RefreshResult> {
+  async function doRefreshLocked(force: boolean, rejectedAccessToken?: string): Promise<RefreshResult> {
     requireCursor("refresh");
 
     type Snap = {
@@ -376,12 +414,17 @@ export function createAuthProvider(opts: AuthProviderOptions): AuthProvider {
       const cur = store.load(kind, backend);
       if (!cur) throw new GbcError("auth", "not logged in", { exitCode: 4 });
 
+      // 401 recovery: if disk already rotated away from the rejected bearer, adopt it.
+      if (force && rejectedAccessToken && cur.access_token && cur.access_token !== rejectedAccessToken) {
+        return metaFromCred(cur, false, "peer_refreshed", "rejected access token already replaced on disk; adopting without force rotation");
+      }
+
       const decision = refreshDecision(cur, force);
       if (!decision.needs) {
         return metaFromCred(cur, false, "already_fresh", "token still fresh enough; no refresh sent");
       }
 
-      cooldownUntil = Math.max(cooldownUntil, cur.refresh_cooldown_until_ms ?? 0);
+      const cooldownUntil = cooldownFor(cur.session_id, cur.refresh_cooldown_until_ms);
       if (cooldownUntil > now()) {
         const exp = classifyExpiry(cur.expires_at_ms, now());
         if (exp.stillValid) {
@@ -402,21 +445,31 @@ export function createAuthProvider(opts: AuthProviderOptions): AuthProvider {
         throw new GbcError(
           "auth_refresh_unconfigured",
           "legacy credential has no client_id/provenance; set GBT_OAUTH_CLIENT_ID (and optionally GBT_AUTH_CONFIRM_MIGRATE=1)",
-          { exitCode: 4, hint: "Credentials kept. client_id is never guessed from JWT." },
+          {
+            exitCode: 4,
+            hint: "Credentials kept. client_id is never guessed from JWT.",
+            details: { rpc_dispatched: false, can_fallback: classifyExpiry(cur.expires_at_ms, now()).stillValid },
+          },
         );
       }
       if (!cur.client_id && !configuredClientId() && !migrateConfirmed()) {
         throw new GbcError(
           "auth_refresh_unconfigured",
           "credential has no bound client_id; configure GBT_OAUTH_CLIENT_ID or GBT_AUTH_CONFIRM_MIGRATE=1 after setting it",
-          { exitCode: 4 },
+          {
+            exitCode: 4,
+            details: { rpc_dispatched: false, can_fallback: classifyExpiry(cur.expires_at_ms, now()).stillValid },
+          },
         );
       }
 
       const endpoint = new URL(refreshUrl);
       if (endpoint.protocol !== "https:" || endpoint.username || endpoint.password ||
           (cur.refresh_endpoint && cur.refresh_endpoint !== refreshUrl)) {
-        throw new GbcError("auth_refresh_unconfigured", "refresh endpoint binding must be trusted HTTPS and match stored provenance", { exitCode: 4 });
+        throw new GbcError("auth_refresh_unconfigured", "refresh endpoint binding must be trusted HTTPS and match stored provenance", {
+          exitCode: 4,
+          details: { rpc_dispatched: false, can_fallback: classifyExpiry(cur.expires_at_ms, now()).stillValid },
+        });
       }
       const { clientId, persist } = resolveClientId(cur);
       return {
@@ -434,16 +487,18 @@ export function createAuthProvider(opts: AuthProviderOptions): AuthProvider {
     if ("refreshed" in snap) return snap;
 
     const { cur, decision, clientId, persist, expectedRevision, expectedSession, expectedSubject, refreshToken } = snap;
-    const saveCooldown = async () => withCredentialLock(lockKey, async () => {
-      const current = store.load(kind, backend);
-      if (current && current.session_id === expectedSession && (current.revision ?? 0) === expectedRevision) {
-        store.save({ ...current, refresh_cooldown_until_ms: cooldownUntil });
-      }
-    });
+    const saveCooldown = async (until: number) => {
+      setCooldown(expectedSession, until);
+      await withCredentialLock(lockKey, async () => {
+        const current = store.load(kind, backend);
+        if (current && current.session_id === expectedSession && (current.revision ?? 0) === expectedRevision) {
+          store.save({ ...current, refresh_cooldown_until_ms: until });
+        }
+      });
+    };
 
-    const requestStarted = Date.now();
-    const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), refreshDeadlineMs);
+    // Do NOT abort the IdP exchange on the caller deadline — the server may already have
+    // rotated the refresh token (Grok Build refresh_chain / BoundedRefresh semantics).
     let res: Response;
     try {
       res = await http.fetch(refreshUrl, {
@@ -451,31 +506,31 @@ export function createAuthProvider(opts: AuthProviderOptions): AuthProvider {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ client_id: clientId, grant_type: "refresh_token", refresh_token: refreshToken }),
         redirect: "error",
-        signal: ac.signal,
       });
     } catch (e) {
-      clearTimeout(timer);
-      const aborted = (e as { name?: string })?.name === "AbortError" || ac.signal.aborted;
-      cooldownUntil = now() + (aborted ? 5_000 : 10_000);
-      await saveCooldown();
+      const aborted = (e as { name?: string })?.name === "AbortError";
+      const until = now() + (aborted ? 5_000 : 10_000);
+      await saveCooldown(until);
       const exp = classifyExpiry(cur.expires_at_ms, now());
+      // Fetch was dispatched; a transport abort/reset after send is result-unknown, not "not sent".
       throw new GbcError(
         aborted ? "auth_refresh_timeout" : "auth_refresh_network",
-        aborted ? "token refresh timed out (20s); credentials kept" : "token refresh network error; credentials kept",
+        aborted
+          ? "token refresh aborted after dispatch; credentials kept (outcome unknown)"
+          : "token refresh network error; credentials kept",
         {
           exitCode: 8,
           retryable: true,
-          details: { rpc_dispatched: false, can_fallback: exp.stillValid, revision: expectedRevision },
+          outcome: "unknown",
+          details: { rpc_dispatched: "unknown", can_fallback: exp.stillValid, revision: expectedRevision },
         },
       );
-    } finally {
-      clearTimeout(timer);
     }
 
     if (res.status >= 300 && res.status < 400) {
       throw new GbcError("auth_refresh_redirect", `token refresh refused redirect HTTP ${res.status}; credentials kept`, {
         exitCode: 4,
-        details: { rpc_dispatched: false },
+        details: { rpc_dispatched: true, can_fallback: classifyExpiry(cur.expires_at_ms, now()).stillValid },
       });
     }
 
@@ -490,45 +545,41 @@ export function createAuthProvider(opts: AuthProviderOptions): AuthProvider {
           if (Number.isFinite(when)) wait = Math.min(Math.max(0, when - now()), 300_000);
         }
       }
-      cooldownUntil = now() + wait;
-      await saveCooldown();
+      await saveCooldown(now() + wait);
       const exp = classifyExpiry(cur.expires_at_ms, now());
       throw new GbcError("auth_refresh_rate_limited", `token refresh rate-limited (429); credentials kept; retry after ${wait}ms`, {
         exitCode: 8,
         retryable: true,
-        details: { rpc_dispatched: false, can_fallback: exp.stillValid, retry_after_ms: wait, revision: expectedRevision },
+        details: { rpc_dispatched: true, can_fallback: exp.stillValid, retry_after_ms: wait, revision: expectedRevision },
       });
     }
 
-    let bodyTimer: ReturnType<typeof setTimeout> | undefined;
-    const parsed: unknown = await Promise.race([
-      res.json().catch(() => undefined),
-      new Promise<never>((_, reject) => {
-        bodyTimer = setTimeout(() => { ac.abort(); reject(new GbcError("auth_refresh_timeout", "refresh body deadline exceeded; credentials kept", { retryable: true, exitCode: 8 })); }, Math.max(1, refreshDeadlineMs - (Date.now() - requestStarted)));
-      }),
-    ]).finally(() => clearTimeout(bodyTimer));
+    // Body decode is part of the exchange; never abandon mid-read for the caller budget.
+    const parsed: unknown = await res.json().catch(() => undefined);
     const payload = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : undefined;
     const terminal = payload?.shouldLogout === true || payload?.error === POLICY_VIOLATION || payload?.error === "invalid_grant";
     if (!res.ok && !terminal) {
       if (res.status >= 500) {
-        cooldownUntil = now() + 10_000;
-        await saveCooldown();
+        await saveCooldown(now() + 10_000);
         const exp = classifyExpiry(cur.expires_at_ms, now());
         throw new GbcError("auth_refresh_failed", `token refresh failed HTTP ${res.status}; credentials kept`, {
           exitCode: 8,
           retryable: true,
-          details: { rpc_dispatched: false, can_fallback: exp.stillValid, revision: expectedRevision },
+          details: { rpc_dispatched: true, can_fallback: exp.stillValid, revision: expectedRevision },
         });
       }
       throw new GbcError("auth_refresh_failed", `token refresh failed HTTP ${res.status}; credentials kept`, {
         exitCode: 4,
-        details: { rpc_dispatched: false },
+        details: { rpc_dispatched: true, can_fallback: classifyExpiry(cur.expires_at_ms, now()).stillValid },
       });
     }
 
     if (!payload || (payload.shouldLogout !== undefined && typeof payload.shouldLogout !== "boolean") ||
         (payload.error !== undefined && typeof payload.error !== "string")) {
-      throw new GbcError("auth_refresh_malformed", "invalid refresh response schema; credentials kept", { exitCode: 4 });
+      throw new GbcError("auth_refresh_malformed", "invalid refresh response schema; credentials kept", {
+        exitCode: 4,
+        details: { rpc_dispatched: true, can_fallback: classifyExpiry(cur.expires_at_ms, now()).stillValid },
+      });
     }
     const body = payload;
 
@@ -547,49 +598,79 @@ export function createAuthProvider(opts: AuthProviderOptions): AuthProvider {
         ) {
           const peerExp = classifyExpiry(latest.expires_at_ms, now());
           if (peerExp.stillValid) {
+            clearAmbiguousIf(expectedSession, refreshToken);
             return metaFromCred(latest, false, "peer_refreshed", "shouldLogout ignored; newer local pair rescued under lock");
           }
         }
         if (!latest || latest.session_id !== expectedSession || (latest.revision ?? 0) !== expectedRevision) {
           throw new GbcError("auth_revoked", "stale refresh cannot revoke changed session", { exitCode: 4, details: { revoked: true } });
         }
+        // After a caller-visible timeout the IdP may already have rotated; a follow-up
+        // invalid_grant must not wipe credentials while the ambiguous window is open.
+        if (body!.error === "invalid_grant" && isAmbiguousProtect(expectedSession, refreshToken)) {
+          throw new GbcError(
+            "auth_refresh_timeout",
+            "invalid_grant after ambiguous refresh timeout; credentials kept pending background/reconcile",
+            {
+              exitCode: 8,
+              retryable: true,
+              outcome: "unknown",
+              details: { rpc_dispatched: "unknown", can_fallback: classifyExpiry(latest.expires_at_ms, now()).stillValid, revoked: false },
+            },
+          );
+        }
         store.clear(kind, backend);
+        clearAmbiguousIf(expectedSession, refreshToken);
         if (body!.error === POLICY_VIOLATION) {
           throw new GbcError("denied", "session revoked by organization policy; local credential removed", {
             exitCode: 7,
-            details: { rpc_dispatched: false, revoked: true },
+            details: { rpc_dispatched: true, revoked: true },
           });
         }
         throw new GbcError("auth_revoked", "server requested logout; local credential removed. Log in again.", {
           exitCode: 4,
-          details: { rpc_dispatched: false, revoked: true },
+          details: { rpc_dispatched: true, revoked: true },
         });
       }
 
       if (typeof body!.access_token !== "string" || body!.access_token.trim().length === 0) {
         throw new GbcError("auth_refresh_malformed", "token refresh response had no access_token; credentials kept", {
           exitCode: 4,
-          details: { rpc_dispatched: false },
+          details: { rpc_dispatched: true, can_fallback: classifyExpiry(cur.expires_at_ms, now()).stillValid },
         });
       }
       if (body!.refresh_token !== undefined && typeof body!.refresh_token !== "string") {
         throw new GbcError("auth_refresh_malformed", "token refresh response had invalid refresh_token; credentials kept", {
           exitCode: 4,
-          details: { rpc_dispatched: false },
+          details: { rpc_dispatched: true, can_fallback: classifyExpiry(cur.expires_at_ms, now()).stillValid },
         });
+      }
+
+      // P3-3: refuse to persist an access token whose JWT sub differs from the expected account.
+      const newSub = decodeJwtPayload(body!.access_token as string)?.sub;
+      if (expectedSubject && typeof newSub === "string" && newSub.length > 0 && newSub !== expectedSubject) {
+        throw new GbcError(
+          "auth_refresh_subject_mismatch",
+          "refresh returned an access token for a different account subject; credentials kept",
+          {
+            exitCode: 4,
+            details: { rpc_dispatched: true, can_fallback: classifyExpiry(cur.expires_at_ms, now()).stillValid },
+          },
+        );
       }
 
       const latest = store.load(kind, backend);
       if (!latest) {
         throw new GbcError("auth_revoked", "credential disappeared during refresh (logout won); not saving rotated pair", {
           exitCode: 4,
-          details: { rpc_dispatched: false, revoked: true },
+          details: { rpc_dispatched: true, revoked: true },
         });
       }
       if (latest.session_id !== expectedSession || latest.account_subject !== expectedSubject) {
         throw new GbcError("auth_revoked", "login/account changed during refresh; retry explicitly", { exitCode: 4, details: { revoked: true } });
       }
       if ((latest.revision ?? 0) !== expectedRevision) {
+        clearAmbiguousIf(expectedSession, refreshToken);
         return metaFromCred(latest, false, "peer_refreshed", "revision changed during refresh; kept newer credential");
       }
       if (expectedSession && latest.session_id && latest.session_id !== expectedSession) {
@@ -613,29 +694,94 @@ export function createAuthProvider(opts: AuthProviderOptions): AuthProvider {
         if (again) return metaFromCred(again, false, "peer_refreshed", "CAS lost during save; kept on-disk credential");
         throw new GbcError("auth_revoked", "credential cleared during refresh save", { exitCode: 4, details: { revoked: true } });
       }
-      cooldownUntil = 0;
+      clearCooldown(expectedSession);
+      clearAmbiguousIf(expectedSession, refreshToken);
       return metaFromCred(next, true, decision.reason);
     });
   }
 
-  function refreshSingleflight(force: boolean, signal?: AbortSignal): Promise<RefreshResult> {
-    // Always join an in-flight refresh (force or not) — one network attempt per process.
-    if (inflight) return inflight;
-    const baseline = store.load(kind, backend);
-    const p = withCredentialLock(`singleflight|${lockKey}`, async () => {
-      const latest = store.load(kind, backend);
-      if (!latest || (baseline?.session_id !== latest.session_id)) {
-        throw new GbcError("auth_revoked", "session changed while waiting for refresh; retry explicitly", { exitCode: 4, details: { revoked: true } });
-      }
-      if ((latest.revision ?? 0) !== (baseline?.revision ?? 0) && classifyExpiry(latest.expires_at_ms, now()).stillValid) {
-        return metaFromCred(latest, false, "peer_refreshed");
-      }
-      return doRefreshLocked(force);
-    }, { waitMs: 30000, signal }).finally(() => {
-      if (inflight === p) inflight = undefined;
+  function raceCallerDeadline<T>(exchange: Promise<T>, baseline: StoredCredential | undefined): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        const exp = classifyExpiry(baseline?.expires_at_ms, now());
+        if (baseline?.refresh_token) markAmbiguous(baseline.session_id, baseline.refresh_token);
+        reject(
+          new GbcError(
+            "auth_refresh_timeout",
+            "token refresh timed out (20s); exchange continues in background; credentials kept",
+            {
+              exitCode: 8,
+              retryable: true,
+              outcome: "unknown",
+              details: {
+                rpc_dispatched: "unknown",
+                can_fallback: exp.stillValid,
+                revision: baseline?.revision ?? 0,
+              },
+            },
+          ),
+        );
+      }, refreshDeadlineMs);
     });
-    inflight = p;
-    return p;
+    return Promise.race([exchange, timeout]).finally(() => clearTimeout(timer));
+  }
+
+  function refreshSingleflight(
+    force: boolean,
+    signal?: AbortSignal,
+    rejectedAccessToken?: string,
+  ): Promise<RefreshResult> {
+    const baseline = store.load(kind, backend);
+
+    const startExchange = (forceFlag: boolean, rejected?: string): Promise<RefreshResult> => {
+      if (inflight) return inflight;
+      const entryBaseline = store.load(kind, backend);
+      const p = withCredentialLock(`singleflight|${lockKey}`, async () => {
+        const latest = store.load(kind, backend);
+        if (!latest || entryBaseline?.session_id !== latest.session_id) {
+          throw new GbcError("auth_revoked", "session changed while waiting for refresh; retry explicitly", {
+            exitCode: 4,
+            details: { revoked: true },
+          });
+        }
+        if (rejected && latest.access_token && latest.access_token !== rejected) {
+          return metaFromCred(latest, false, "peer_refreshed", "rejected access token already replaced while waiting");
+        }
+        if (
+          (latest.revision ?? 0) !== (entryBaseline?.revision ?? 0) &&
+          classifyExpiry(latest.expires_at_ms, now()).stillValid
+        ) {
+          return metaFromCred(latest, false, "peer_refreshed");
+        }
+        return doRefreshLocked(forceFlag, rejected);
+      }, { waitMs: 30000, signal }).finally(() => {
+        if (inflight === p) inflight = undefined;
+      });
+      inflight = p;
+      // Callers that timed out via raceCallerDeadline must not leave an unhandled rejection.
+      void p.catch(() => {});
+      return p;
+    };
+
+    const run = async (): Promise<RefreshResult> => {
+      if (inflight) {
+        const joined = await raceCallerDeadline(inflight, baseline);
+        if (!force) return joined;
+        const after = store.load(kind, backend);
+        if (rejectedAccessToken && after?.access_token && after.access_token !== rejectedAccessToken) {
+          return metaFromCred(after, false, "peer_refreshed", "rejected token replaced by in-flight refresh");
+        }
+        if (joined.refreshed) return joined;
+        if (joined.reason === "already_fresh") {
+          // Force must not reuse a non-force already_fresh no-op (Grok Build semantics).
+          return raceCallerDeadline(startExchange(true, rejectedAccessToken), after ?? baseline);
+        }
+        return joined;
+      }
+      return raceCallerDeadline(startExchange(force, rejectedAccessToken), baseline);
+    };
+    return run();
   }
 
   return {
@@ -647,6 +793,17 @@ export function createAuthProvider(opts: AuthProviderOptions): AuthProvider {
       if (!c) return undefined;
       const decision = refreshDecision(c, force);
       if (!decision.needs) return c.access_token;
+
+      // P2-1 / 04c1893: without client_id, do not fail still-valid tokens just because refresh is unconfigured.
+      if (!force && !c.client_id && !configuredClientId()) {
+        const exp = classifyExpiry(c.expires_at_ms, now());
+        if (exp.stillValid) return c.access_token;
+        if (!exp.status.ok && typeof c.access_token === "string" && c.access_token.trim().length > 0) {
+          // Missing/illegal exp and no way to refresh: keep using the opaque bearer (logged via note path only).
+          return c.access_token;
+        }
+      }
+
       try {
         await refreshSingleflight(force);
         const after = store.load(kind, backend);
@@ -677,11 +834,28 @@ export function createAuthProvider(opts: AuthProviderOptions): AuthProvider {
           "auth_refresh_malformed",
           "auth_refresh_redirect",
           "auth_refresh_client_mismatch",
+          "auth_refresh_subject_mismatch",
         ]);
-        if (e.retryable && details.can_fallback !== false && sameRev && exp.stillValid && fallbackCodes.has(e.code)) {
-          return again.access_token;
+        // Config / response anomalies are not retryable but must still fall back when the
+        // access token is unexpired (regression vs requiring e.retryable).
+        if (fallbackCodes.has(e.code) && details.can_fallback !== false && sameRev) {
+          if (exp.stillValid) return again.access_token;
+          const configCodes = new Set([
+            "auth_refresh_unconfigured",
+            "auth_refresh_client_mismatch",
+            "auth_refresh_malformed",
+            "auth_refresh_redirect",
+            "auth_refresh_subject_mismatch",
+          ]);
+          if (
+            configCodes.has(e.code) &&
+            !exp.status.ok &&
+            typeof again.access_token === "string" &&
+            again.access_token.trim().length > 0
+          ) {
+            return again.access_token;
+          }
         }
-        // Missing/illegal exp with refresh failure: no fallback.
         throw e;
       }
     },
@@ -755,7 +929,7 @@ export function createAuthProvider(opts: AuthProviderOptions): AuthProvider {
     async cancelLogin() {
       return { had_pending: store.clearPending(kind, backend) };
     },
-    refresh: (o) => refreshSingleflight(Boolean(o?.force), o?.signal),
+    refresh: (o) => refreshSingleflight(Boolean(o?.force), o?.signal, o?.rejectedAccessToken),
     async logout() {
       return withCredentialLock(lockKey, async () => ({
         removed_credential: store.clear(kind, backend),
