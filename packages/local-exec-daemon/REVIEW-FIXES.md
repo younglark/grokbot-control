@@ -179,3 +179,12 @@ Reviewer confirmed prior items closed (95 pass / 46 cases). Two remaining items,
 
 Counts: `npm test` 98 pass / 0 fail; run_all.sh 46 cases, 36 same, 10 allowed, 0 diff, lifecycle PASS, RC=0. Not drop-in.
 Note: reaping at init completion means background jobs started by the user's login profile do not survive the snapshot; official behavior for that case was not measured.
+
+### Round 4 review (HEAD 6a3fc20) → fix (2026-11-08, Asia/Singapore) — **修正待独立复验**
+
+| Item | Reproduced (before) | Fix | After |
+|---|---|---|---|
+| P2 stale PGID reclaim | /tmp/independent-r3-pgidguard/stale-lifecycle.cjs (kill//proc/spawn intercepted): original group empty at close, number later reused by an unrelated session whose leader exited → shutdown sent SIGKILL to -70001 twice | `InitGroup` ownership handle {pgid, retired}. Retired permanently on first cleanup signal, when found empty / reused (pid==pgid), and at init close. After retirement no path signals the number; /proc look-alikes are never ownership proof. Leader-alive shutdown and the pre-close timeout signal only via the handle | same probe: 0 signals. Regression (subprocess simulation, no real signals): empty→reuse→0 signals; surviving original residue → exactly one SIGKILL at close, none at shutdown |
+
+Counts: `npm test` 98 pass / 0 fail (the earlier reapInitGroup(number) unit test replaced by the ownership simulation); run_all.sh 46 cases, 36 same, 10 allowed, 0 diff, lifecycle PASS, RC=0; /tmp/independent-r3-initgroups probe: no live process, marker not written.
+Remaining limits: residue that leaves the group (setsid/own pgrp) is not tracked; between leader reap and the close handler a fully-empty group could in theory be reused before the one close-time check (the pid==pgid guard still applies); login-profile background jobs do not survive init (official not measured). Not drop-in.
