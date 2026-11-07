@@ -151,3 +151,19 @@ Review blocked e984310 (acceptance **failed**). Fixed in d75f9f0 (code+tests) an
 | P3 harness | — | strict diff (ids/envelopes, case set, probe failure → non-zero), deviations.json | run_all.sh RC=0: 39 cases, 32 same, 7 allowed |
 
 Tests: `npm test` in packages/local-exec-daemon → 77 pass / 0 fail / 0 skip.
+
+### Round 2 review → fixes (2026-11-08, Asia/Singapore) — **修正待独立再审**
+
+Reproduced first from evidence (/tmp/independent-r3-lifecycle, -locale, -cwdpersist), then fixed in 10d37df (code + regressions) and 5993cfa (gate).
+
+| Item | Evidence before fix | Fix | After |
+|---|---|---|---|
+| P2 shutdown vs shared init | lifecycle probe: init bash alive / profile continued after shutdownShells | `terminateInitialSnapshot()` SIGKILLs the init process group (interactive bash ignores SIGTERM; TERM let profile continue) and awaits close; only daemon shutdown calls it, per-request cancel does not | probe: initAliveAtReturn=false, initContinuedAfterShutdown=false, commandRan=false; test "ordinary cancel does not kill shared init" passes |
+| P2 emit failure | rejected notice emit left task registered (shutdown never settled) | guarded emitter (sync throw→rejection, first failure latches, aborts job, later emits no-op); body in try/catch/finally that clears timer, unregisters, resolves done | shutdownSettled=true; emit calls bounded (≤2 / ≤3 in tests) |
+| P2 locale | official NEXT=C.UTF-8; ours empty (dump `local LC_ALL=C` shadowed user value) | dump locals renamed `__gb_*` (excluded from dump); byte length via `$(LC_ALL=C; printf ${#PWD})` subshell | matches official golden locale-save/locale-read |
+| P2 cwd semantics | official golden cwdpersist reuses `sub` | session cwd reused when workingDirectory omitted; explicit overrides; re-validated against root each use, outside/missing → root; newline never in script | cwdpersist 2/2 same; tests cover explicit override, `cd /tmp` escape, newline |
+| P2 deviations.json | per-case whitelist hid any change | field-level rules pinning exact official/ours values (12 rules, 10 cases) | negative tests for all 10 cases |
+| P3 run_r3/diff gate | run_r3 exit 0 on probe failure | non-zero on probe exit/empty results; diff requires expected case set + results/events correspondence | negative tests pass |
+
+Counts: `npm test` 95 pass / 0 fail; run_all.sh 46 cases, 36 same, 10 allowed, 0 diff, lifecycle PASS, RC=0.
+Unresolved / not claimed: whether the official daemon strips inherited CURSOR_* env at spawn (unverified); behavior of official when session cwd is deleted or outside root (we fall back to root silently, unverified); not drop-in.

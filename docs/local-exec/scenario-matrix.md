@@ -1,6 +1,6 @@
 # local-exec 场景验收矩阵（0.79.3 Linux，2026-11-08 Asia/Singapore）
 
-> 状态：t101u 第一批（e984310）**独立验收未通过**（P1×2、P2×5、P3 harness）；d75f9f0/2ee10eb 已修正，**待再审**。不宣称 drop-in。
+> 状态：t101u 第一批（e984310）独立验收未通过；d75f9f0/2ee10eb 修正后第二轮再审又提出 P2×5、P3×1，已在 10d37df（代码+回归）/5993cfa（门禁）修正，**修正待独立再审**。不宣称 drop-in。
 
 证据等级：**实测** = 未修改的官方 `dist/local-exec-daemon/main.cjs`（asar 内 sha256 `5c1424ed…be`，与分析快照一致）在 bwrap 隔离 + 假 box SSE peer 下运行的帧；**静态** = 源码行号；**推断**；**未验证**。只覆盖已检查的 0.79.3 Linux 快照，不外推 macOS/Windows/其他版本。
 
@@ -21,17 +21,22 @@
 
 ## 3. 差分结果（`scripts/oracles/r3`；统计以 diff.py 帧级比较为准）
 
-2026-11-08 加固：diff.py 保留 id/requestId/kind/cwdState/throw，仅去 localExecutionTimeMs 与合并同流 chunk；校验 case 集合一致、探针步骤全 pass，否则非 0；允许差异必须列在 `deviations.json`。`OUT=/tmp/r5 ./run_all.sh`（官方+我们各 6 个探针）实测 RC=0：
+2026-11-08 第二轮加固（5993cfa）：diff.py 改为**字段级窄规则**——`deviations.json` 每条规则固定 probe/case/帧序号/字段路径及官方与我们的**精确值**（op=field/drop/sub），规则不精确匹配即报错，规则外任何差异仍为 DIFF；校验 results 与 events 一一对应、case 集合等于 `expected-cases.json`、探针步骤全 pass、results 非空；run_r3.py 探针非 0/输出无效时非 0 退出。另跑我们侧 lifecycle 探针（shutdown 杀共享 init 进程组、emit 失败收尾）。`OUT=/tmp/r7 ./run_all.sh`（官方+我们各 8 个探针）实测 RC=0：
 
-| 探针 | cases | same | allowed（deviations.json）|
+| 探针 | cases | same | allowed（规则 id）|
 |---|---|---|---|
-| main | 18 | 17 | 1（sh-ident）|
+| main | 18 | 17 | 1（sh-ident：env-node-path）|
 | cancel | 2 | 2 | 0 |
-| cwd | 3 | 1 | 2（cwd-save/cwd-check，安全）|
+| cwd | 3 | 1 | 2（cwd-save/cwd-check，换行 cwd 安全）|
 | edges | 13 | 9 | 4（multicwd/cwd-next 安全；path-save/path-read 原子性）|
 | options | 2 | 2 | 0 |
 | rootlink | 1 | 1 | 0 |
-| 合计 | 39 | 32 | 7 |
+| locale | 5 | 2 | 3（unicode-cwd/unicode-next/spoof-check：同一换行 cwd 截断安全偏离）|
+| cwdpersist | 2 | 2 | 0 |
+| 合计 | 46 | 36 | 10（7 项原偏离 + 3 个 locale 探针中同类换行 cwd 偏离）|
+| lifecycle（仅我们）| — | — | PASS |
+
+门禁负向测试（test/oracle-gate.test.cjs，基于 `golden/` 录制结果）：缺 results、空 events、步骤失败、丢 case、results/events 不对应均非 0；10 个偏离 case 各自正向通过、替换为任意 throw 或改 exit.code 均失败；run_r3 缺 lab/不存在探针非 0。
 
 以下为旧（宽松比较）记录：
 命令：`OUT=/tmp/r3 python3 run_r3.py official-v2`；`... ours-v5 PROBE_MAIN=/repo/packages/local-exec-daemon/dist/index.js BIND:/workspace/grokbot-control:/repo`；`python3 diff.py official-v2.json ours-v5.json`。
@@ -51,7 +56,7 @@
 | shell：bash 选择 | 一致（静态 + 实测 SHELL 未设/设为 bash 两种）| `$SHELL` 含 bash，否则 PATH 查找；无则 `Can't find Bash` |
 | shell：非 login、extglob、stdin=/dev/null、无 TTY | 一致（实测）| ARG0=`--`、LOGIN=0、EXTGLOB=1、CATRC=0 |
 | shell：初始登录快照 | 一致（实测）| `.bash_profile`/`.bashrc` 的 export/函数/alias 生效、非 export 变量不生效 |
-| shell：跨调用状态 | 一致（实测用例）| export/函数/alias/shopt 持久；`set -o` 持久但**排除 errexit/nounset/pipefail/posix**（官方过滤，oracle options-read）；非 export 不持久；`exit` 跳过保存；unset 传播；cwd 不持久，exit.cwd=最终 pwd |
+| shell：跨调用状态 | 一致（实测用例）| export/函数/alias/shopt 持久；`set -o` 持久但**排除 errexit/nounset/pipefail/posix**（官方过滤，oracle options-read）；非 export 不持久；`exit` 跳过保存；unset 传播；**cwd 跨调用持久**：未给 workingDirectory 时沿用上次最终 cwd（官方 golden cwdpersist：`cd sub` 后下次 `pwd`=sub），显式 workingDirectory 覆盖；沿用前重新做 root/realpath/symlink 校验，越界（如 `cd /tmp`）或已删除则回到 root；exit.cwd=最终 pwd；含换行的 cwd 只作为长度前缀数据，不进入脚本 |
 | shell：请求级变量排除 | 一致（实测 vars-read）| CURSOR_REQUEST_ID/CONVERSATION_ID/AGENT_STORE、SUDO_ASKPASS、CURSOR_ASKPASS、CURSOR_SANDBOX*、*_proxy、POSIXLY_CORRECT、ELECTRON_RUN_AS_NODE 不跨调用（按变量名；官方按整行 grep）|
 | shell：多行 alias / 引号值 / 特殊函数名 | 一致（实测 alias-read、quoted-read、func-read）| BASH_ALIASES + %q 序列化 |
 | shell：首次快照期间取消/共享等待/shutdown | 一致（实测 cancel-init/check）| 入口登记；未 spawn 即 start+USER_ABORT；timeout 在 spawn 时起算（官方同）|
