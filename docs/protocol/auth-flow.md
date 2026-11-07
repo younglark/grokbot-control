@@ -22,3 +22,27 @@ Boundaries:
   `"delivered"` result, near offset ~1.14 MB). Not analysed; check it first on the next version bump.
 - Device policy header `x-cursor-mdm-signin-policy` and App client headers are not sent/forged.
 - App credential storage (`sand-secrets.json` under Electron userData) is documented only so it is NOT reused.
+
+
+## Token auto-refresh hardening (t47u)
+
+State machine (minimal, App-aligned):
+
+1. **Provenance**: stored credentials bind `kind`, `login_kind`, `credential_source`, backend, `refresh_endpoint`,
+   optional `client_id` / issuer / account subject / `session_id` / `revision` / expiry. `client_id` comes from
+   `GBT_OAUTH_CLIENT_ID` or a login-persisted binding — never hardcoded, never guessed from JWT. Legacy files
+   without binding require explicit config (and optional `GBT_AUTH_CONFIRM_MIGRATE=1`).
+2. **getAccessToken**: missing/illegal exp, within 5 min of exp, or `force` → refresh; else return. In-process
+   singleflight + cross-process credential lock; re-read under lock; reuse peer refresh.
+3. **Refresh POST**: fixed HTTPS `{backend}/oauth/token`, `redirect:error`, 20s deadline, schema requires
+   non-empty `access_token`; absent `refresh_token` keeps old. Atomic save only if session/account/revision
+   unchanged (CAS).
+4. **Failures**: network/timeout/5xx/429 keep creds + cooldown; fallback only when old token still valid and
+   revision unchanged. `shouldLogout`/policy: rescue newer pair under lock, else conditional clear — never
+   fallback revoked token. malformed/config: structured error, no credential clear, no spin.
+5. **logout/login/save** share `withCredentialLock` with refresh; native advisory-lock ownership is OS-managed (Linux OFD / macOS flock / Windows LockFileEx; see ../auth-lock.md); never stale-break/unlink lock files.
+6. **CLI/MCP**: `auth refresh` vs `--force` / `force:true`; whoami offline; AuthOps returns non-secret metadata;
+   MCP `auth_refresh` excluded from READONLY.
+7. **RPC 401**: update creds for next request, return original error; write RPCs never auto-replayed; read-only
+   unary whitelist may refresh+retry once. Pre-RPC failures annotate `rpc_dispatched=false`.
+8. **staticTokenProvider**: never auto-refresh / no disk refresh; expired → re-provide/login.

@@ -37,6 +37,8 @@ node dist/cli/main.js --json auth login-begin        # stdout: authorization_url
 node dist/cli/main.js --json auth complete --timeout 300   # 轮询 GET /auth/poll；成功后凭据写入 ~/.gbc（0600）
 # 或单命令：auth login --timeout 300（URL 走 stderr 的 open_browser 事件，stdout 只放结果）
 node dist/cli/main.js --json auth whoami             # 本地状态，不联网、不打印 token
+node dist/cli/main.js --json auth refresh            # 临期才联网；足够新则 refreshed:false
+node dist/cli/main.js --json auth refresh --force    # 强制刷新（验证/401恢复）
 node dist/cli/main.js --json bot list --limit 20     # 只读
 node dist/cli/main.js --json sidebar list
 node dist/cli/main.js --json bot status --agent-id <agent_id>
@@ -46,9 +48,9 @@ node dist/cli/main.js --json auth logout             # 只删本工具自己的�
 鉴权限制（详见 docs/protocol-map.md「Auth」）：
 - 协议来自 Grok Bot Linux App **静态逆向**，非官方公开 API。`vendor/proto-gen` 现为 **0.79.3**（本仓库从App恢复生成，离线校验）。较早人工登录验证使用旧0.78.4 vendor；0.79.3 的选定正常RPC已进行隔离临时bot验收，范围/skip见 implementation-status。不能由此推定所有RPC或OAuth刷新已验证。
 - 仅支持 Cursor token；xAI identity 登录结果返回 `unsupported`。
-- 刷新需显式配置公开 OAuth client_id：`GBT_OAUTH_CLIENT_ID`（本工具不内置）。未配置时 token 过期后需重新登录。
+- 刷新需显式配置公开 OAuth client_id：`GBT_OAUTH_CLIENT_ID`（本工具不内置，也不从 JWT 猜测），或登录时已持久化的绑定；旧凭据可用 `GBT_AUTH_CONFIRM_MIGRATE=1` 确认迁移。临期（<5min）/缺非法 exp / `--force` 才刷新；进程内 singleflight + 跨进程锁；`shouldLogout` 不回退已撤销 token。
 - 凭据独立于 App（不读取、不复用 App 的 sand-secrets.json）。logout 只删本地文件，不吊销服务端会话。
-- MCP：`GBT_MCP_READONLY=1 node dist/mcp/main.js` 提供 `auth_whoami / auth_login_begin / auth_login_complete(≤120s) / auth_login_cancel / auth_logout` + 只读工具。
+- MCP：`GBT_MCP_READONLY=1 node dist/mcp/main.js` 仅提供 `auth_whoami` + 只读业务工具（不含 login/logout/cancel/refresh 凭据写工具）。非 READONLY 另有 `auth_refresh`（仅非 secret 元数据）。
 
 ## 文件优先同步（无 SQLite）
 
@@ -98,3 +100,9 @@ MCP 设 `GBT_SYNC_ROOT` 才提供 `sync_status`，另需 `GBT_SYNC_ALLOW_LOCAL_W
 附件仅按需App store aliases，用户上传和send-message attachment均支持；每次Resolve+条件GET，流式预算与scope绑定。
 attachments需与pull一致的`--account-id --team-id --ack-unverified-scope`。
 `--page-size 1 --max-pages 1`可做小量分页验收。详细边界见[格式文档](docs/sync-format.md)。
+
+### Native auth lock installation
+跨进程 refresh 使用 `fs-native-extensions@1.5.3` 原生 OS advisory lock（非外部 flock 命令、非 mtime lease）。
+Node20+，Linux/macOS/Windows x64/arm64 npm包预编译；缺binding fail closed。升级前停止全部旧MCP进程，旧Linux flock与新OFD锁不互通。
+Linux x64已实测；macOS/Windows仅源码检查+CI矩阵，未在本机执行。Windows需另核查用户目录ACL；只支持本地文件系统。
+详见 [native lock构建/平台/证据](docs/auth-lock.md)。

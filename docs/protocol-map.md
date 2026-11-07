@@ -85,11 +85,14 @@ Source: STATIC reverse engineering of Grok Bot Linux 0.79.2 (`/workspace/grokbot
 | client_id | App picks a public id per backend (C:35866-35869). **Not embedded**; set `GBT_OAUTH_CLIENT_ID` explicitly | analysis §6 |
 
 CLI: `auth login-begin` → `auth complete [--timeout 1..900]` (cross-process via 0600 pending file, 15 min TTL),
-or `auth login`; `auth poll` (single), `auth cancel`, `auth refresh`, `auth whoami`, `auth logout` (local only).
-MCP: `auth_whoami`, `auth_login_begin`, `auth_login_complete` (≤120 s), `auth_login_cancel`, `auth_logout`
-(available in `GBT_MCP_READONLY=1`). Failure semantics: refresh network/5xx → retryable, creds kept;
-4xx/bad payload → creds kept; `shouldLogout` → local cred removed. Missing/expired token → `unauthenticated`
-(exit 4) before any RPC is sent.
+or `auth login`; `auth poll` (single), `auth cancel`, `auth refresh [--force]`, `auth whoami`/`status` (offline),
+`auth logout` (local only). MCP: `auth_whoami`, `auth_login_begin`, `auth_login_complete` (≤120 s),
+`auth_login_cancel`, `auth_logout` (credential writers excluded from `GBT_MCP_READONLY=1`); `auth_refresh` is **not** in READONLY.
+Failure semantics: network/timeout/5xx/429 → retryable, creds kept, cooldown; fallback only if old token still
+valid and revision unchanged. `shouldLogout`/policy/terminal → rescue newer pair under lock else clear; never
+fallback revoked token. malformed/config → structured error, creds kept. Pre-RPC refresh failure keeps
+`rpc_dispatched=false`. RPC 401: refresh for next request, return original error; write 0 replays; whitelisted
+read-only unary may refresh+retry once. Credentials carry provenance (client_id binding, revision, session_id).
 
 ### Live status (2026-11-07, one manual run)
 - Verified live: browser login (`loginDeepControl`, `redirectTarget=cli`) → `GET /auth/poll` → Cursor token (kind `cursor`, backend api2);

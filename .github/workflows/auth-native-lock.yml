@@ -1,0 +1,54 @@
+name: Native auth lock
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  prebuilt:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14, windows-latest]
+        node: [20, 22]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm ci --ignore-scripts
+      - run: npm run typecheck
+      - run: npm run build
+      - run: node --import tsx --test test/auth-lock.test.ts test/auth-process.test.ts
+  source-build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+          - os: macos-14
+            platform: darwin
+            arch: arm64
+          - os: windows-latest
+            platform: win32
+            arch: x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --ignore-scripts
+      # Upstream CMake project needs its dev dependencies; no repo dependency changes.
+      - run: npm install --prefix node_modules/fs-native-extensions --include=dev --ignore-scripts
+      - name: Remove shipped prebuilds so tests cannot silently use them
+        run: node -e "require('fs').rmSync('node_modules/fs-native-extensions/prebuilds',{recursive:true,force:true})"
+      # Same source-build chain as upstream fs-native-extensions/prebuild.yml. No publish/upload.
+      - uses: holepunchto/actions/compile-prebuilds@v1
+        with:
+          path: node_modules/fs-native-extensions
+          platform: ${{ matrix.platform }}
+          arch: ${{ matrix.arch }}
+          upload: false
+      - run: node --import tsx --test test/auth-lock.test.ts test/auth-process.test.ts

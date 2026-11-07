@@ -324,6 +324,16 @@ export function buildTools(opts?: {
       inputSchema: z.object({}),
       handler: (p) => p.authOps.logout(),
     },
+    {
+      name: "auth_refresh",
+      description:
+        "Refresh local Cursor OAuth credentials (non-secret metadata only). Without force, may report already_fresh with no network call. Auto refresh still happens before RPCs when near expiry. Not exposed under GBT_MCP_READONLY=1.",
+      authTool: true,
+      inputSchema: z.object({
+        force: z.boolean().optional(),
+      }),
+      handler: (p, a) => p.authOps.refresh({ force: Boolean(a.force) }),
+    },
   ];
   if (opts?.sync) {
     const c = { ...opts.sync }; // startup-only copy: callers cannot choose paths or account scope
@@ -455,6 +465,6 @@ export function buildTools(opts?: {
       });
     }
   }
-  if (opts?.readOnly) return all.filter((t) => t.readOnly);
+  if (opts?.readOnly) return all.filter((t) => t.readOnly && !t.authTool);
   return all;
 }

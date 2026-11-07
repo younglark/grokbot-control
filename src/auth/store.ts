@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { withAdvisoryLock, type LockWaitOptions } from "./lock.js";
 import type { AuthKind, PendingLogin, StoredCredential } from "./types.js";
 
 export function credentialsDir(): string {
@@ -64,6 +65,20 @@ export class FileCredentialStore {
     writeSecretJson(this.credFile(cred.kind, cred.backend), cred);
   }
 
+  /**
+   * CAS save: only write when on-disk revision matches expectedRevision (undefined/0 = absent or legacy).
+   * Returns false without writing when revision diverged (logout / new login / peer refresh).
+   */
+  saveIfRevision(cred: StoredCredential, expectedRevision: number | undefined): boolean {
+    const cur = this.load(cred.kind, cred.backend);
+    const curRev = cur?.revision ?? 0;
+    const exp = expectedRevision ?? 0;
+    if (cur && curRev !== exp) return false;
+    if (!cur && exp !== 0) return false;
+    this.save(cred);
+    return true;
+  }
+
   clear(kind: AuthKind, backend: string): boolean {
     const f = this.credFile(kind, backend);
     if (!fs.existsSync(f)) return false;
@@ -94,40 +109,9 @@ export class FileCredentialStore {
   }
 }
 
-const STALE_LOCK_MS = 60_000;
-
-/** Cross-process single-flight refresh via O_EXCL lockfile (stale locks > 60s are broken). */
-export async function withRefreshLock<T>(backend: string, fn: () => Promise<T>, waitMs = 30_000): Promise<T> {
-  const dir = ensureDir();
-  const lock = path.join(dir, `refresh-${Buffer.from(backend).toString("base64url")}.lock`);
-  const start = Date.now();
-  for (;;) {
-    let fd: number | undefined;
-    try {
-      fd = fs.openSync(lock, "wx", 0o600);
-    } catch {
-      try {
-        const st = fs.statSync(lock);
-        if (Date.now() - st.mtimeMs > STALE_LOCK_MS) {
-          fs.unlinkSync(lock);
-          continue;
-        }
-      } catch {
-        continue;
-      }
-      if (Date.now() - start > waitMs) throw new Error("refresh lock timeout");
-      await new Promise((r) => setTimeout(r, 50));
-      continue;
-    }
-    try {
-      return await fn();
-    } finally {
-      fs.closeSync(fd);
-      try {
-        fs.unlinkSync(lock);
-      } catch {
-        /* ignore */
-      }
-    }
-  }
+/** Separate permanent native locks for refresh exchange and short credential mutations. */
+export async function withCredentialLock<T>(lockKey: string, fn: () => Promise<T>, options: number | LockWaitOptions = 30_000): Promise<T> {
+  const lock = path.join(ensureDir(), `refresh-${Buffer.from(lockKey).toString("base64url")}.lock`);
+  return withAdvisoryLock(lock, fn, typeof options === "number" ? { waitMs: options } : options);
 }
+export const withRefreshLock = withCredentialLock;

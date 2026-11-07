@@ -1,7 +1,7 @@
 import { createClient } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-node";
 import { Code, ConnectError } from "@connectrpc/connect";
-import type { Interceptor, Transport } from "@connectrpc/connect";
+import type { Interceptor, Transport, UnaryRequest } from "@connectrpc/connect";
 import { GrokBotService } from "#proto-gen/GrokBotService";
 import type { AuthProvider } from "../auth/types.js";
 import { GbcError } from "../errors.js";
@@ -21,21 +21,141 @@ export type ConnectConfig = {
   readMaxBytes?: number;
 };
 
+/**
+ * Project read-only unary RPCs eligible for at most one 401 refresh+retry.
+ * Writes are never retried. Membership is by Connect method name (PascalCase),
+ * never by HTTP verb alone.
+ */
+export const READ_ONLY_UNARY_METHODS = new Set([
+  "ListGrokBotAgents",
+  "ListGrokBotAgentStatuses",
+  "GetGrokBotUserRuntimeSettings",
+  "ListGrokBotAgentSessions",
+  "GetGrokBotSendStatus",
+  "ListGrokBotAgentTodos",
+  "ListGrokBotAgentTasks",
+  "ListGrokBotSubagents",
+  "ListGrokBotTranscriptEntries",
+  "ResolveGrokBotAttachmentReads",
+  "PresignSandBoxStoreReads",
+]);
+
+function isUnauthenticated(err: unknown): boolean {
+  if (err instanceof ConnectError) return err.code === Code.Unauthenticated;
+  const anyErr = err as { code?: string | number; name?: string };
+  const c = String(anyErr.code ?? "");
+  return c === "unauthenticated" || c === "16" || c === String(Code.Unauthenticated);
+}
+
+function methodName(req: { method?: { name?: string } }): string {
+  return req.method?.name ?? "";
+}
+
+function isReadOnlyUnary(req: { stream?: boolean; method?: { name?: string } }): boolean {
+  if (req.stream) return false;
+  return READ_ONLY_UNARY_METHODS.has(methodName(req));
+}
+
+
+function connectCodeFor(gbc: GbcError): Code {
+  switch (gbc.code) {
+    case "unauthenticated":
+    case "auth":
+    case "auth_revoked":
+    case "auth_refresh_unconfigured":
+    case "auth_refresh_client_mismatch":
+      return Code.Unauthenticated;
+    case "denied":
+    case "permission_denied":
+      return Code.PermissionDenied;
+    case "auth_refresh_network":
+    case "auth_refresh_timeout":
+    case "auth_refresh_rate_limited":
+    case "auth_refresh_cooldown":
+    case "auth_refresh_lock_timeout":
+      return Code.Unavailable;
+    default:
+      return gbc.retryable ? Code.Unavailable : Code.FailedPrecondition;
+  }
+}
+
+/** Carry GbcError through Connect as `cause` so ops can restore structured codes. */
+export function gbcAsConnect(gbc: GbcError): ConnectError {
+  return new ConnectError(gbc.message, connectCodeFor(gbc), undefined, undefined, gbc);
+}
+
+export function unwrapGbcCause(err: unknown): GbcError | undefined {
+  if (err instanceof GbcError) return err;
+  if (err instanceof ConnectError && err.cause instanceof GbcError) return err.cause;
+  const anyErr = err as { cause?: unknown };
+  if (anyErr?.cause instanceof GbcError) return anyErr.cause;
+  return undefined;
+}
+
 export function createAuthInterceptor(auth: AuthProvider): Interceptor {
   return (next) => async (req) => {
     let token: string | undefined;
     try {
       token = await auth.getAccessToken();
     } catch (e) {
-      // Fail locally (request NOT sent) as Unauthenticated -> exit 4; never include token text.
-      const msg = e instanceof GbcError ? e.message : "credential load/refresh failed";
-      throw new ConnectError(`${msg} (request not sent)`, Code.Unauthenticated);
+      // Fail locally (request NOT sent). Wrap as ConnectError with GbcError cause so
+      // mapConnectError can restore structured codes (Connect may not pass plain Error).
+      const gbc =
+        e instanceof GbcError
+          ? new GbcError(e.code, e.message, {
+              retryable: e.retryable,
+              outcome: e.outcome,
+              hint: e.hint,
+              exitCode: e.exitCode,
+              details: {
+                ...((typeof e.details === "object" && e.details) || {}),
+                rpc_dispatched: false,
+              },
+            })
+          : new GbcError("unauthenticated", "credential load/refresh failed (request not sent)", {
+              exitCode: 4,
+              details: { rpc_dispatched: false },
+            });
+      throw gbcAsConnect(gbc);
     }
     if (!token) {
-      throw new ConnectError("not logged in: run `gbc auth login` (request not sent)", Code.Unauthenticated);
+      throw gbcAsConnect(
+        new GbcError("unauthenticated", "not logged in: run `gbc auth login` (request not sent)", {
+          exitCode: 4,
+          details: { rpc_dispatched: false },
+        }),
+      );
     }
     req.header.set("authorization", `Bearer ${token}`);
-    return next(req);
+
+    try {
+      return await next(req);
+    } catch (err) {
+      if (!isUnauthenticated(err)) throw err;
+
+      // Closest to App Qz recovery: refresh credentials for the *next* request.
+      // Never replay writes. Optional: one refresh+retry for whitelisted read-only unary.
+      let refreshed = false;
+      try {
+        await auth.refresh({ force: true });
+        refreshed = true;
+      } catch {
+        /* keep original 401; creds may be cleared on shouldLogout */
+      }
+
+      const allowRetry = refreshed && isReadOnlyUnary(req as UnaryRequest);
+      if (!allowRetry) throw err;
+
+      let token2: string | undefined;
+      try {
+        token2 = await auth.getAccessToken();
+      } catch {
+        throw err;
+      }
+      if (!token2 || token2 === token) throw err;
+      req.header.set("authorization", `Bearer ${token2}`);
+      return next(req);
+    }
   };
 }
 
@@ -66,6 +186,20 @@ export type MapErrorOpts = {
 };
 
 export function mapConnectError(err: unknown, requestId: string, opts?: MapErrorOpts): GbcError {
+  const caused = unwrapGbcCause(err);
+  if (caused) {
+    const details = {
+      ...((typeof caused.details === "object" && caused.details) || {}),
+      request_id: requestId,
+    };
+    return new GbcError(caused.code, caused.message, {
+      retryable: caused.retryable,
+      outcome: caused.outcome,
+      hint: caused.hint,
+      exitCode: caused.exitCode,
+      details,
+    });
+  }
   const base = mapConnectErrorBase(err, requestId);
   if (opts?.write && WRITE_AMBIGUOUS.has(base.code)) {
     return new GbcError("unknown", `write outcome unknown (${base.code}): ${base.message}`, {
@@ -105,7 +239,7 @@ function mapConnectErrorBase(err: unknown, requestId: string): GbcError {
   switch (codeStr) {
     case "unauthenticated":
     case "16":
-      return new GbcError("unauthenticated", msg, { exitCode: 4 });
+      return new GbcError("unauthenticated", msg, { exitCode: 4, details: { request_id: requestId, rpc_dispatched: true } });
     case "not_found":
     case "5":
       return new GbcError("not_found", msg, { exitCode: 5 });

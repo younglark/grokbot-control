@@ -31,6 +31,7 @@ export class AuthOps {
         outcome: err.outcome,
         retryable: err.retryable,
         hint: err.hint,
+        details: err.details,
       });
     }
   }
@@ -66,11 +67,13 @@ export class AuthOps {
     return this.run((a) => a.cancelLogin());
   }
 
-  refresh() {
-    return this.run(async (a) => {
-      const c = await a.refresh();
-      return { refreshed: true, kind: c.kind, backend: c.backend, expires_at_ms: c.expires_at_ms };
-    });
+  /**
+   * Refresh credentials. Without force: may return refreshed:false / reason already_fresh
+   * when the token is still outside the 5-minute early window (no network call).
+   * With force: always attempts a network refresh (for verification / 401 recovery).
+   */
+  refresh(opts?: { force?: boolean }) {
+    return this.run(async (a) => a.refresh({ force: Boolean(opts?.force) }));
   }
 
   logout() {

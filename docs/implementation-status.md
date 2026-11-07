@@ -1,5 +1,19 @@
 # 实现状态（2026-11-07，SGT）
 
+## Token 自动刷新加固（t47u，未提交）
+基于 main@04c1893 本地实现，对照 App 0.79.3 分析最小可靠状态机：
+- 凭据 provenance/revision/session 绑定；client_id 仅 GBT_OAUTH_CLIENT_ID 或登录持久化，不硬编码、不从 JWT 猜。
+- getAccessToken：缺/非法 exp、临期<5min、force → 刷新；进程内 singleflight + 跨进程锁；锁内重读复用。
+- 刷新：固定 HTTPS `/oauth/token`、禁 redirect、20s、schema 校验；CAS 保存旋转 pair。
+- 失败分类：网络/5xx/429 保留+cooldown；shouldLogout 锁内救援后再清，绝不回退已撤销 token。
+- logout/login 与 refresh 共享锁；Linux kernel flock 分离 refresh/mutation 两把锁；不按 mtime 强拆、不 unlink 锁。
+- CLI `auth refresh [--force]` 区分 already_fresh / 实际刷新；whoami 离线；MCP `auth_refresh` 非 READONLY。
+- RPC401：更新凭据供下次，原错误返回；写 0 重放；只读白名单最多 1 次 refresh+retry；预 RPC 失败 `rpc_dispatched=false`。
+- staticTokenProvider 永不自动 refresh / 无磁盘 refresh。
+默认不做 live refresh 验收（mock 覆盖）。
+
+# 实现状态（2026-11-07，SGT）
+
 前轮修订基于939e4f7；正文补读本轮基于 main@8a6cf21，以下分别记录，不扩大 live 声称。
 
 ## 本轮修复
@@ -57,3 +71,22 @@
 - P2 partial：仅本轮hydrate失败/generation_changed→partial/exit9；decoder unsupported只计数。
 - P3体积：hydration/reread不内联重复body_base64，对象+sha256装载。
 - P3 generation0：精确重读始终传`generation:e.generation`（含0）。
+
+## t47u 继续修复：跨进程刷新合并（2026-11-07，Asia/Shanghai）
+- 独立 Linux util-linux `flock` refresh 锁覆盖有界 HTTP；mutation 短锁保护 login/logout/CAS。等待者以进入时 session/revision 为基线，force 也复用已旋转 pair。
+- kernel 锁不 unlink、不按 mtime 猜 stale；父进程退出/崩溃关闭 helper stdin，OS 释放；锁等待超时结构化错误。依赖 Linux `flock`/sh/cat，缺失 fail closed。
+- 429/网络/timeout/5xx cooldown 条件持久化，跨进程等待后不风暴重试。HTTP400 invalid_grant 明确 terminal；新登录不被旧 terminal 清除。
+- 响应运行时字段校验、非空白 access_token；exp 必须 safe integer；准确300s不刷新（规则为<300s）。配置/malformed不fallback。
+- READONLY 排除所有 authTool 凭据写工具，保留离线 auth_whoami。
+- 新增真正 Node 子进程协同 mock HTTP：4进程 force 仅1次请求、旋转复用、logout/login保存竞争、owner SIGKILL恢复、timeout、invalid_grant。
+- 当前完整 npm test **196/196**（基线174，新增22个顶层测试；子进程场景在1项测试内多断言）；typecheck/build、protocol-tools **5/5**、diff --check通过。无live refresh、无commit/push。
+- 测试边界：login/logout竞争的跨进程用例以受控 fixture store clear/save模拟原子落盘时机；provider共享mutation锁的行为另有单进程实例测试。没有真实OAuth服务器验收。
+
+## t50u Native advisory-lock替换（2026-11-07，Asia/Shanghai）
+- 保留此前auth修改；fs-native-extensions **1.5.3**（Apache-2.0）替换外部flock/sh/cat。接口独立在auth/lock.ts，永久lock file，try_lock+异步有界等待，无mtime抢锁/daemon/helper。
+- Linux `F_OFD_SETLK`、macOS `flock`、Windows `LockFileEx`源码已核实；GrokBuild fs2语义对照见[auth-lock.md](auth-lock.md)。Linux原生锁命名空间不同于旧flock，升级必须停止全部旧进程。
+- 实际provider logout/login也用Node子进程测试（替代前轮fixture直接写）；native owner crash、mtime回拨不抢锁、cancel/timeout不释放他人锁、event loop响应与缺binding fail-closed已测。
+- Node20/22预编译+三平台源码构建CI配置，无发布/上传；Mac/Windows及源码重构建未在本机执行。Linux x64运行验证不代表其它平台通过。
+- 不新增用户电脑依赖；正常npm ci直接使用integrity锁定npm tarball预编译，无Rust/C++要求；非覆盖平台需维护者CMake/C工具链源码构建。
+
+最终验证：npm test **199/199**；npm run typecheck / build通过；protocol-tools **5/5**；git diff --check通过。当前工作树未提交，未commit/push、未真实refresh。源码构建矩阵为配置证据，不冒充已执行结果。

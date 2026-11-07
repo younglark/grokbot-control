@@ -19,7 +19,7 @@ EXAMPLES:
   gbc --json auth login-begin            # prints authorization_url; open it in a browser
   gbc --json auth complete --timeout 300 # polls until signed in (exit 8 auth_pending on timeout)
   gbc --json auth login --timeout 300    # begin+complete; URL as stderr {"event":"open_browser"}
-  gbc --json auth whoami | auth poll | auth cancel | auth refresh | auth logout
+  gbc --json auth whoami | auth poll | auth cancel | auth refresh [--force] | auth logout
 
 SYNC (file-first snapshots; no SQLite):
   gbc sync pull --agent-id <id> [--session-id <sid>] --dir /absolute/private/root \\
@@ -61,8 +61,16 @@ NOTES:
   - GBT_TRUST_BACKEND / --trust-backend: only the exact value "1" trusts a custom --base-url.
   - Auth: independent Cursor browser login (static-RE protocol, not official API). Verifier only in a
     0600 pending file (15 min); credentials in $GBT_CREDENTIALS_DIR (default ~/.gbc, 0600). Tokens and
-    verifier are never printed. xai kind: unsupported. Refresh needs GBT_OAUTH_CLIENT_ID (not built in).
-    logout is local only. Not logged in -> exit 4 before any RPC is sent.
+    verifier are never printed. xai kind: unsupported. Refresh needs GBT_OAUTH_CLIENT_ID or a
+    login-persisted client_id binding (never hardcoded / never guessed from JWT). auth refresh
+    without --force may report already_fresh (no network); --force always attempts refresh.
+    whoami/status stay offline. RPC 401 updates creds for next request; write RPCs are never auto-
+    replayed; whitelisted read-only unary may refresh+retry once. logout/login share the credential
+    lock with refresh. Not logged in / pre-RPC refresh failure -> structured auth/retryable error with rpc_dispatched=false.
+  - Native auth lock: fs-native-extensions@1.5.3, Node20+, Linux/macOS/Windows prebuilds.
+    Missing binding fails closed: npm ci; see docs/auth-lock.md. Local filesystem only; Windows
+    ACL privacy requires operator verification. Stop ALL old MCPs before upgrading (lock namespaces differ).
+    Wait deadline 30s, refresh HTTP <=20s; wait cancellation never abandons an acquired exchange.
   - MCP cancel ≠ Interrupt. Disconnect does not interrupt runs.
   - Room commands are not mixed into sidebar.
 

@@ -84,13 +84,16 @@ async function main(): Promise<number> {
       } else if (verb === "cancel") {
         code = emitResult(await ops.cancel(), asJson);
       } else if (verb === "refresh") {
-        code = emitResult(await ops.refresh(), asJson);
+        code = emitResult(
+          await ops.refresh({ force: hasFlag(rest, "--force") }),
+          asJson,
+        );
       } else if (verb === "logout") {
         code = emitResult(await ops.logout(), asJson);
       } else {
         usageExit(
           `unknown command: auth ${verb}`,
-          "gbc auth whoami|login|login-begin|complete|poll|cancel|refresh|logout",
+          "gbc auth whoami|login|login-begin|complete|poll|cancel|refresh[--force]|logout",
         );
       }
     } else if (noun === "bot" && verb === "list") {
