@@ -123,34 +123,23 @@ test('outbound client {id:7} golden-stable; schema ls encodes; interim/typo thro
   assert.throws(() => encodeExecClientMessageJson(typoExtra), (e) => /unknown|cannot decode/i.test(e.message));
 });
 
-test('handleLs success emits directoryTreeRoot that encodes without interim fallback', async () => {
+test('handleLs matches official 0.79.3 oracle: LsResult.error ripgrep-unconfigured (not a tree)', async () => {
+  const oracle = require('./fixtures/official-0793-oracle-r3.json').cases.ls;
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'led-ls-'));
   try {
-    fs.mkdirSync(path.join(root, 'sub'));
-    fs.writeFileSync(path.join(root, 'a.txt'), 'x');
-    fs.writeFileSync(path.join(root, 'b.txt'), 'y');
-    resetExecIdCounter(1);
     const got = [];
     await handleLs({ root, requestId: 'ls1', msgId: 1, path: root, emit: (f) => got.push(f) });
-    const client = got.find((f) => f.kind === 'client');
-    assert.ok(client);
-    const tree = client.message.lsResult.success.directoryTreeRoot;
-    assert.equal(tree.absPath, fs.realpathSync(root));
-    assert.equal(tree.childrenWereProcessed, true);
-    assert.deepEqual(
-      (tree.childrenFiles || []).map((f) => f.name).sort(),
-      ['a.txt', 'b.txt'],
-    );
-    assert.equal((tree.childrenDirs || []).length, 1);
-    assert.equal(path.basename(tree.childrenDirs[0].absPath), 'sub');
-    assert.equal(client.message.lsResult.success.entries, undefined);
-    assert.equal(client.message.lsResult.success.path, undefined);
-    // Production path: encode without interim detector
-    const round = encodeExecClientMessage(client.message);
-    assert.equal(round.lsResult.success.directoryTreeRoot.absPath, tree.absPath);
-    assert.equal(isInterimLsListingMessage(client.message), false);
-    const box = prepareBoxExecFrame(client);
-    assert.equal(box.message.lsResult.success.directoryTreeRoot.absPath, tree.absPath);
+    const real = fs.realpathSync(root);
+    const norm = got.map((f) => {
+      const m = JSON.parse(JSON.stringify(f.message).split(real).join('<ROOT>'));
+      delete m.localExecutionTimeMs;
+      return { kind: f.kind, message: m };
+    });
+    const want = oracle.map((f) => ({ kind: f.kind, message: f.message }));
+    assert.deepEqual(norm, want);
+    // Generated codec accepts it (no hand-written wire shape).
+    const box = prepareBoxExecFrame(got.find((f) => f.kind === 'client'));
+    assert.equal(box.message.lsResult.error.error, oracle[0].message.lsResult.error.error);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

@@ -1,10 +1,8 @@
 import { proto3 } from "@bufbuild/protobuf";
 import {
   ExecClientMessage,
-  LsDirectoryTreeNode,
-  LsDirectoryTreeNode_File,
+  LsError,
   LsResult,
-  LsSuccess,
   ShellAbortReason,
   SandboxPolicy,
   SandboxPolicy_Type,
@@ -127,6 +125,10 @@ export async function handleRead(args: {
   }
 }
 
+/** Exact official 0.79.3 message (daemon.formatted.cjs L19008–19011, nl()). */
+export const RIPGREP_UNCONFIGURED =
+  "Ripgrep path not configured. Call configureRipgrepPath() at startup.";
+
 export async function handleLs(args: {
   root: string;
   requestId: string;
@@ -134,55 +136,26 @@ export async function handleLs(args: {
   path: string;
   emit: Emit;
 }): Promise<void> {
-  // Official LocalLsExecutor builds LsDirectoryTreeNode via ripgrep stream
-  // (daemon.formatted.cjs ~L129447–129609). Without configureRipgrepPath we
-  // emit the same frozen schema shape from a shallow readdir — not a drop-in
-  // of official depth/ignore/budget/rg behavior.
+  // Official 0.79.3 Linux: LocalLsExecutor (L129403+) calls nl() before the
+  // ripgrep tree build; the module-level ripgrep path (Z2) is never assigned in
+  // this build, so the reachable behavior is LsResult.error with the requested
+  // path. Verified by isolated oracle (docs/local-exec-scenario-matrix.md,
+  // official-v2 "ls"). We match the observed behavior, not the design intent.
+  // Path guard stays (official ls escape behavior is unverified).
   const { root, requestId, msgId, emit } = args;
   try {
     const abs = assertRealpathUnderRoot(root, args.path);
-    const entries = await fs.promises.readdir(abs, { withFileTypes: true });
-    const childrenDirs: LsDirectoryTreeNode[] = [];
-    const childrenFiles: LsDirectoryTreeNode_File[] = [];
-    for (const d of entries) {
-      if (d.isDirectory()) {
-        childrenDirs.push(
-          new LsDirectoryTreeNode({
-            absPath: path.join(abs, d.name),
-            childrenWereProcessed: false,
-          }),
-        );
-      } else {
-        // Official File is name-only (optional terminal_metadata); non-dir
-        // dirents (files/symlinks) map to children_files.
-        childrenFiles.push(new LsDirectoryTreeNode_File({ name: d.name }));
-      }
-    }
-    childrenDirs.sort((a, b) =>
-      path.basename(a.absPath).localeCompare(path.basename(b.absPath)),
-    );
-    childrenFiles.sort((a, b) => a.name.localeCompare(b.name));
-    const tree = new LsDirectoryTreeNode({
-      absPath: abs,
-      childrenDirs,
-      childrenFiles,
-      childrenWereProcessed: true,
-    });
     const client = new ExecClientMessage({
       id: msgId,
       message: {
         case: "lsResult",
         value: new LsResult({
-          result: { case: "success", value: new LsSuccess({ directoryTreeRoot: tree }) },
+          result: { case: "error", value: new LsError({ path: abs, error: RIPGREP_UNCONFIGURED }) },
         }),
       },
       localExecutionTimeMs: 1,
     });
-    await emit({
-      kind: "client",
-      requestId,
-      message: client.toJson() as Record<string, unknown>,
-    });
+    await emit({ kind: "client", requestId, message: client.toJson() as Record<string, unknown> });
     await emit({ kind: "control", requestId, message: { streamClose: { id: msgId } } });
   } catch (e) {
     await requestError(requestId, msgId, e, emit);
@@ -317,7 +290,8 @@ export function detectServerMessageType(serverMessage: Record<string, unknown>):
   for (const k of Object.keys(serverMessage)) {
     if (k.endsWith("Args") || k === "readArgs" || k === "lsArgs" || k === "shellStreamArgs") return k;
   }
-  return "unknown";
+  // Official throws "...of type ${case}" with case undefined for unknown oneofs.
+  return "undefined";
 }
 
 export async function dispatchExec(args: {

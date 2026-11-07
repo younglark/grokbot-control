@@ -1,0 +1,820 @@
+{
+ "_source": "official grok-bot 0.79.3 main.cjs (sha256 5c1424ed\u2026be) run unchanged in bwrap via /workspace/local-exec-oracle-r3/scripts/run_r3.py official-v2; fake box SSE peer only; localExecutionTimeMs stripped; paths normalized",
+ "_rawSha256": "3d86c227f536495781855da910e6a6f7b90606382c1bd97c137a81ffc3a3fa18",
+ "cases": {
+  "ls": [
+   {
+    "kind": "client",
+    "requestId": "ls",
+    "message": {
+     "id": 1,
+     "lsResult": {
+      "error": {
+       "path": "<ROOT>",
+       "error": "Ripgrep path not configured. Call configureRipgrepPath() at startup."
+      }
+     }
+    }
+   },
+   {
+    "kind": "control",
+    "requestId": "ls",
+    "message": {
+     "streamClose": {
+      "id": 1
+     }
+    }
+   }
+  ],
+  "grep": [
+   {
+    "kind": "control",
+    "requestId": "grep",
+    "message": {
+     "throw": {
+      "id": 2,
+      "error": "No handler found for server message of type grepArgs"
+     }
+    },
+    "cwdState": "unset"
+   },
+   {
+    "kind": "control",
+    "requestId": "grep",
+    "message": {
+     "streamClose": {
+      "id": 2
+     }
+    }
+   }
+  ],
+  "glob": [
+   {
+    "kind": "control",
+    "requestId": "glob",
+    "message": {
+     "throw": {
+      "id": 3,
+      "error": "No handler found for server message of type undefined"
+     }
+    },
+    "cwdState": "unset"
+   },
+   {
+    "kind": "control",
+    "requestId": "glob",
+    "message": {
+     "streamClose": {
+      "id": 3
+     }
+    }
+   }
+  ],
+  "delete": [
+   {
+    "kind": "control",
+    "requestId": "delete",
+    "message": {
+     "throw": {
+      "id": 4,
+      "error": "No handler found for server message of type deleteArgs"
+     }
+    },
+    "cwdState": "unset"
+   },
+   {
+    "kind": "control",
+    "requestId": "delete",
+    "message": {
+     "streamClose": {
+      "id": 4
+     }
+    }
+   }
+  ],
+  "write": [
+   {
+    "kind": "control",
+    "requestId": "write",
+    "message": {
+     "throw": {
+      "id": 5,
+      "error": "No handler found for server message of type writeArgs"
+     }
+    },
+    "cwdState": "unset"
+   },
+   {
+    "kind": "control",
+    "requestId": "write",
+    "message": {
+     "streamClose": {
+      "id": 5
+     }
+    }
+   }
+  ],
+  "sh-ident": [
+   {
+    "kind": "client",
+    "requestId": "sh-ident",
+    "message": {
+     "id": 6,
+     "shellStream": {
+      "start": {
+       "sandboxPolicy": {
+        "type": "TYPE_INSECURE_NONE"
+       }
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "sh-ident",
+    "message": {
+     "id": 6,
+     "shellStream": {
+      "stdout": {
+       "data": "ARG0=--\nLOGIN=0\nBASH=/usr/bin/bash\nSHELLV=/bin/sh\nEXTGLOB=1\nPATH=<HOME>/rcbin:/runtime:/usr/bin:/bin\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "sh-ident",
+    "message": {
+     "id": 6,
+     "shellStream": {
+      "stdout": {
+       "data": "PWD=<ROOT>\nCATRC=0\nTTY0=0\nTTY1=0\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "sh-ident",
+    "message": {
+     "id": 6,
+     "shellStream": {
+      "stdout": {
+       "data": "AGENT_TRANSCRIPTS CURSOR_AGENT FORCE_COLOR GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0 HOME NODE_PATH NO_COLOR PATH PROFVAR PWD RCVAR SAND_AGENT SAND_BACKEND_URL SAND_CLIENT_APP_VERSION SAND_DATA_ROOT SAND_DISABLE_ANALYTICS SAND_DISABLE_TELEMETRY SAND_LOCAL_EXEC_ROOT SAND_USER_DATA_DIR SHLVL TERM TMPDIR XDG_CACHE_HOME XDG_CONFIG_HOME _ _ZO_DOCTOR __CURSOR_SANDBOX_ENV_RESTORE "
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "sh-ident",
+    "message": {
+     "id": 6,
+     "shellStream": {
+      "stdout": {
+       "data": "\nAGENT_TRANSCRIPTS=<ROOT>/agent-transcripts\nCURSOR_AGENT=1\nFORCE_COLOR=0\nGIT_CONFIG_COUNT=1\nGIT_CONFIG_KEY_0=core.quotePath\nGIT_CONFIG_VALUE_0=false\nNODE_PATH=/deps\nNO_COLOR=1\nTERM=dumb\n_ZO_DOCTOR=0\nSAND_AGENT=1\nSHLVL=1\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "sh-ident",
+    "message": {
+     "id": 6,
+     "shellStream": {
+      "exit": {
+       "cwd": "<ROOT>"
+      }
+     }
+    }
+   },
+   {
+    "kind": "control",
+    "requestId": "sh-ident",
+    "message": {
+     "streamClose": {
+      "id": 6
+     }
+    }
+   }
+  ],
+  "sh-state1": [
+   {
+    "kind": "client",
+    "requestId": "sh-state1",
+    "message": {
+     "id": 7,
+     "shellStream": {
+      "start": {
+       "sandboxPolicy": {
+        "type": "TYPE_INSECURE_NONE"
+       }
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "sh-state1",
+    "message": {
+     "id": 7,
+     "shellStream": {
+      "stdout": {
+       "data": "set\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "sh-state1",
+    "message": {
+     "id": 7,
+     "shellStream": {
+      "exit": {
+       "cwd": "<ROOT>/sub"
+      }
+     }
+    }
+   },
+   {
+    "kind": "control",
+    "requestId": "sh-state1",
+    "message": {
+     "streamClose": {
+      "id": 7
+     }
+    }
+   }
+  ],
+  "sh-state2": [
+   {
+    "kind": "client",
+    "requestId": "sh-state2",
+    "message": {
+     "id": 8,
+     "shellStream": {
+      "start": {
+       "sandboxPolicy": {
+        "type": "TYPE_INSECURE_NONE"
+       }
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "sh-state2",
+    "message": {
+     "id": 8,
+     "shellStream": {
+      "stdout": {
+       "data": "PWD2=<ROOT>\nVAR2=persisted\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "sh-state2",
+    "message": {
+     "id": 8,
+     "shellStream": {
+      "stdout": {
+       "data": "FN2=1\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "sh-state2",
+    "message": {
+     "id": 8,
+     "shellStream": {
+      "exit": {
+       "cwd": "<ROOT>"
+      }
+     }
+    }
+   },
+   {
+    "kind": "control",
+    "requestId": "sh-state2",
+    "message": {
+     "streamClose": {
+      "id": 8
+     }
+    }
+   }
+  ],
+  "sh-state3-nocwd": [
+   {
+    "kind": "client",
+    "requestId": "sh-state3-nocwd",
+    "message": {
+     "id": 9,
+     "shellStream": {
+      "start": {
+       "sandboxPolicy": {
+        "type": "TYPE_INSECURE_NONE"
+       }
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "sh-state3-nocwd",
+    "message": {
+     "id": 9,
+     "shellStream": {
+      "stdout": {
+       "data": "PWD3=<ROOT>\nVAR3=persisted\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "sh-state3-nocwd",
+    "message": {
+     "id": 9,
+     "shellStream": {
+      "exit": {
+       "cwd": "<ROOT>"
+      }
+     }
+    }
+   },
+   {
+    "kind": "control",
+    "requestId": "sh-state3-nocwd",
+    "message": {
+     "streamClose": {
+      "id": 9
+     }
+    }
+   }
+  ],
+  "sh-exitcode": [
+   {
+    "kind": "client",
+    "requestId": "sh-exitcode",
+    "message": {
+     "id": 10,
+     "shellStream": {
+      "start": {
+       "sandboxPolicy": {
+        "type": "TYPE_INSECURE_NONE"
+       }
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "sh-exitcode",
+    "message": {
+     "id": 10,
+     "shellStream": {
+      "stdout": {
+       "data": "out\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "sh-exitcode",
+    "message": {
+     "id": 10,
+     "shellStream": {
+      "stderr": {
+       "data": "err\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "sh-exitcode",
+    "message": {
+     "id": 10,
+     "shellStream": {
+      "exit": {
+       "code": 7,
+       "cwd": "<ROOT>"
+      }
+     }
+    }
+   },
+   {
+    "kind": "control",
+    "requestId": "sh-exitcode",
+    "message": {
+     "streamClose": {
+      "id": 10
+     }
+    }
+   }
+  ],
+  "sh-timeout": [
+   {
+    "kind": "client",
+    "requestId": "sh-timeout",
+    "message": {
+     "id": 11,
+     "shellStream": {
+      "start": {
+       "sandboxPolicy": {
+        "type": "TYPE_INSECURE_NONE"
+       }
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "sh-timeout",
+    "message": {
+     "id": 11,
+     "shellStream": {
+      "stdout": {
+       "data": "before\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "sh-timeout",
+    "message": {
+     "id": 11,
+     "shellStream": {
+      "exit": {
+       "code": 4294967295,
+       "cwd": "<ROOT>",
+       "aborted": true,
+       "abortReason": "SHELL_ABORT_REASON_TIMEOUT"
+      }
+     }
+    }
+   },
+   {
+    "kind": "control",
+    "requestId": "sh-timeout",
+    "message": {
+     "streamClose": {
+      "id": 11
+     }
+    }
+   }
+  ],
+  "sh-init": [
+   {
+    "kind": "client",
+    "requestId": "sh-init",
+    "message": {
+     "id": 12,
+     "shellStream": {
+      "start": {
+       "sandboxPolicy": {
+        "type": "TYPE_INSECURE_NONE"
+       }
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "sh-init",
+    "message": {
+     "id": 12,
+     "shellStream": {
+      "stdout": {
+       "data": "RC=rc PROF=prof RCPLAIN=unset\nPATH=<HOME>/rcbin:/runtime:/usr/bin:/bin\nRCFN=1\nRCAL=1\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "sh-init",
+    "message": {
+     "id": 12,
+     "shellStream": {
+      "exit": {
+       "cwd": "<ROOT>"
+      }
+     }
+    }
+   },
+   {
+    "kind": "control",
+    "requestId": "sh-init",
+    "message": {
+     "streamClose": {
+      "id": 12
+     }
+    }
+   }
+  ],
+  "sh-plain1": [
+   {
+    "kind": "client",
+    "requestId": "sh-plain1",
+    "message": {
+     "id": 13,
+     "shellStream": {
+      "start": {
+       "sandboxPolicy": {
+        "type": "TYPE_INSECURE_NONE"
+       }
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "sh-plain1",
+    "message": {
+     "id": 13,
+     "shellStream": {
+      "exit": {
+       "cwd": "<ROOT>"
+      }
+     }
+    }
+   },
+   {
+    "kind": "control",
+    "requestId": "sh-plain1",
+    "message": {
+     "streamClose": {
+      "id": 13
+     }
+    }
+   }
+  ],
+  "sh-plain2": [
+   {
+    "kind": "client",
+    "requestId": "sh-plain2",
+    "message": {
+     "id": 14,
+     "shellStream": {
+      "start": {
+       "sandboxPolicy": {
+        "type": "TYPE_INSECURE_NONE"
+       }
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "sh-plain2",
+    "message": {
+     "id": 14,
+     "shellStream": {
+      "stdout": {
+       "data": "PLAINV=unset\nMYAL=1\nNULLGLOB=1\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "sh-plain2",
+    "message": {
+     "id": 14,
+     "shellStream": {
+      "stdout": {
+       "data": "NOGLOB=1\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "sh-plain2",
+    "message": {
+     "id": 14,
+     "shellStream": {
+      "exit": {
+       "cwd": "<ROOT>"
+      }
+     }
+    }
+   },
+   {
+    "kind": "control",
+    "requestId": "sh-plain2",
+    "message": {
+     "streamClose": {
+      "id": 14
+     }
+    }
+   }
+  ],
+  "sh-exit1": [
+   {
+    "kind": "client",
+    "requestId": "sh-exit1",
+    "message": {
+     "id": 15,
+     "shellStream": {
+      "start": {
+       "sandboxPolicy": {
+        "type": "TYPE_INSECURE_NONE"
+       }
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "sh-exit1",
+    "message": {
+     "id": 15,
+     "shellStream": {
+      "exit": {
+       "code": 3,
+       "cwd": "<ROOT>"
+      }
+     }
+    }
+   },
+   {
+    "kind": "control",
+    "requestId": "sh-exit1",
+    "message": {
+     "streamClose": {
+      "id": 15
+     }
+    }
+   }
+  ],
+  "sh-exit2": [
+   {
+    "kind": "client",
+    "requestId": "sh-exit2",
+    "message": {
+     "id": 16,
+     "shellStream": {
+      "start": {
+       "sandboxPolicy": {
+        "type": "TYPE_INSECURE_NONE"
+       }
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "sh-exit2",
+    "message": {
+     "id": 16,
+     "shellStream": {
+      "stdout": {
+       "data": "EXV=unset\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "sh-exit2",
+    "message": {
+     "id": 16,
+     "shellStream": {
+      "exit": {
+       "cwd": "<ROOT>"
+      }
+     }
+    }
+   },
+   {
+    "kind": "control",
+    "requestId": "sh-exit2",
+    "message": {
+     "streamClose": {
+      "id": 16
+     }
+    }
+   }
+  ],
+  "sh-unset2": [
+   {
+    "kind": "client",
+    "requestId": "sh-unset2",
+    "message": {
+     "id": 17,
+     "shellStream": {
+      "start": {
+       "sandboxPolicy": {
+        "type": "TYPE_INSECURE_NONE"
+       }
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "sh-unset2",
+    "message": {
+     "id": 17,
+     "shellStream": {
+      "stdout": {
+       "data": "R3=unset\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "sh-unset2",
+    "message": {
+     "id": 17,
+     "shellStream": {
+      "exit": {
+       "cwd": "<ROOT>"
+      }
+     }
+    }
+   },
+   {
+    "kind": "control",
+    "requestId": "sh-unset2",
+    "message": {
+     "streamClose": {
+      "id": 17
+     }
+    }
+   }
+  ],
+  "sh-badcwd": [
+   {
+    "kind": "client",
+    "requestId": "sh-badcwd",
+    "message": {
+     "id": 18,
+     "shellStream": {
+      "stderr": {
+       "data": "working directory <ROOT>/nope does not exist on this machine; running in <ROOT> instead\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "sh-badcwd",
+    "message": {
+     "id": 18,
+     "shellStream": {
+      "start": {
+       "sandboxPolicy": {
+        "type": "TYPE_INSECURE_NONE"
+       }
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "sh-badcwd",
+    "message": {
+     "id": 18,
+     "shellStream": {
+      "stdout": {
+       "data": "<ROOT>\n"
+      }
+     }
+    }
+   },
+   {
+    "kind": "client",
+    "requestId": "sh-badcwd",
+    "message": {
+     "id": 18,
+     "shellStream": {
+      "exit": {
+       "cwd": "<ROOT>"
+      }
+     }
+    }
+   },
+   {
+    "kind": "control",
+    "requestId": "sh-badcwd",
+    "message": {
+     "streamClose": {
+      "id": 18
+     }
+    }
+   }
+  ]
+ }
+}
