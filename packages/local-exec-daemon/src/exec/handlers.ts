@@ -12,7 +12,7 @@ import * as path from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
 import { assertRealpathUnderRoot, assertUnderRoot, PathGuardError } from "./path";
 import type { PermissionMode } from "../settings";
-import { commitShell, MAX_STATE_BYTES, prepareShell, type PreparedShell } from "./shell-session";
+import { commitShell, getSessionCwd, MAX_STATE_BYTES, prepareShell, terminateInitialSnapshot, type PreparedShell } from "./shell-session";
 
 export type ExecFrameOut =
   | { kind: "client"; requestId: string; message: Record<string, unknown> }
@@ -46,6 +46,8 @@ export async function requestError(requestId: string, msgId: number, error: unkn
 export async function shutdownShells(): Promise<void> {
   const jobs = [...shells.values()];
   jobs.forEach(j => j.abort(ShellAbortReason.USER_ABORT));
+  // Daemon shutdown (not per-request cancel) also ends the shared initial-snapshot process group.
+  await terminateInitialSnapshot();
   await Promise.all(jobs.map(j => j.done));
 }
 
@@ -167,8 +169,20 @@ export async function handleShellStream(args: {
   root: string; requestId: string; msgId: number; command: string;
   workingDirectory?: string; timeout?: number; emit: Emit;
 }): Promise<void> {
-  const { root, requestId, msgId, command, emit } = args;
+  const { root, requestId, msgId, command } = args;
   const startedAt = Date.now();
+  // Guarded emitter: a sync throw becomes a rejection; the first failure latches, aborts the job
+  // and every later emit becomes a no-op, so a broken reply channel cannot cause unbounded emits.
+  let emitFailed = false;
+  const emit: Emit = (f) => {
+    if (emitFailed) return Promise.resolve();
+    let p: Promise<unknown>;
+    try { p = Promise.resolve(args.emit(f)); } catch (e) { p = Promise.reject(e); }
+    return p.then(() => undefined, (e) => {
+      if (!emitFailed) { emitFailed = true; abortJob(ShellAbortReason.USER_ABORT); }
+      throw e;
+    }) as ReturnType<Emit>;
+  };
   // Lifecycle is registered on entry so cancel/timeout/shutdown cover the whole request:
   // cwd validation, (shared) initial-snapshot wait, spawn, run and close. Official oracle
   // (independent-r3-cancel): cancel during a slow login snapshot → USER_ABORT exit, no start
@@ -205,19 +219,31 @@ export async function handleShellStream(args: {
     resolveDone();
   };
 
+  const body = async (): Promise<void> => {
   let cwd: string;
   let realRoot: string;
   let prepared: PreparedShell;
   let notice: string | undefined;
   try {
     realRoot = fs.realpathSync(root);
-    const wanted = args.workingDirectory || root;
+    // Explicit workingDirectory wins; otherwise reuse the session cwd (official oracle cwdpersist),
+    // re-validated against the root on every use; fall back to the root.
+    const session = args.workingDirectory ? undefined : getSessionCwd();
+    const wanted = args.workingDirectory || session || root;
     // Accept the logical root (may be a symlink, oracle independent-r3-rootlink) or its canonical
     // form; both checks keep symlink-escape protection via realpath.
+    const guard = (target: string): string => {
+      try { return assertRealpathUnderRoot(root, target); }
+      catch (e) { if (!(e instanceof PathGuardError) || realRoot === path.resolve(root)) throw e; return assertRealpathUnderRoot(realRoot, target); }
+    };
     let abs: string;
-    try { abs = assertRealpathUnderRoot(root, wanted); }
-    catch (e) { if (!(e instanceof PathGuardError) || realRoot === path.resolve(root)) throw e; abs = assertRealpathUnderRoot(realRoot, wanted); }
-    if (!fs.existsSync(abs)) {
+    if (session !== undefined) {
+      // A session cwd outside the root (e.g. `cd /tmp`) is never reused; fall back to the root.
+      try { abs = guard(session); } catch { abs = realRoot; }
+    } else abs = guard(wanted);
+    if (!fs.existsSync(abs) && !args.workingDirectory) {
+      cwd = realRoot; // stale session cwd: silently use the root (official behavior unverified)
+    } else if (!fs.existsSync(abs)) {
       // Official (oracle sh-badcwd): stderr notice, then run in the root. Escapes stay refused.
       notice = `working directory ${abs} does not exist on this machine; running in ${realRoot} instead\n`;
       cwd = realRoot;
@@ -301,8 +327,9 @@ export async function handleShellStream(args: {
       drain = setTimeout(() => { void finish(code); }, 5000);
     });
     child.once("spawn", () => {
-      emit({ kind: "client", requestId, message: { id: msgId,
-        shellStream: { start: { sandboxPolicy: new SandboxPolicy({type: SandboxPolicy_Type.INSECURE_NONE}).toJson() } }, localExecutionTimeMs: 1 } });
+      Promise.resolve(emit({ kind: "client", requestId, message: { id: msgId,
+        shellStream: { start: { sandboxPolicy: new SandboxPolicy({type: SandboxPolicy_Type.INSECURE_NONE}).toJson() } }, localExecutionTimeMs: 1 } }))
+        .catch(() => abortJob(ShellAbortReason.USER_ABORT));
     });
     if (args.timeout && args.timeout > 0) timeoutTimer = setTimeout(() => abortJob(ShellAbortReason.TIMEOUT), args.timeout);
     for (const [stream, name] of [[child.stdout, "stdout"], [child.stderr, "stderr"]] as const) {
@@ -317,6 +344,11 @@ export async function handleShellStream(args: {
     }
   }
   await done;
+  };
+  // Any failure (including a rejected emit) settles the registered lifecycle; no further emits here.
+  try { await body(); }
+  catch { console.error("[local-exec] shell request failed; lifecycle closed without further replies"); }
+  finally { clearTimeout(timeoutTimer); shells.delete(requestId); resolveDone(); }
 }
 export function cancelRequest(requestId: string): boolean {
   const job = shells.get(requestId);

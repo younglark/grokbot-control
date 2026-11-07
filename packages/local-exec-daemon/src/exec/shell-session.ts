@@ -41,29 +41,31 @@ const INIT_MARK = "__GB_STATE_INIT__";
  * Builtins only. The restore script never contains cwd.
  */
 export const DUMP_FN = String.raw`__gb_dump_state() {
-  builtin local LC_ALL=C __n __l __k __f
-  builtin printf '%s\n%s\n%s\n' '${STATE_START}' "${"$"}{#PWD}" "$PWD"
+  builtin local __gb_n __gb_l __gb_k __gb_f __gb_len
+  # Byte length in a subshell so the C locale never shadows the user's LC_ALL (review P2-3).
+  __gb_len=$(LC_ALL=C; builtin printf '%s' "${"$"}{#PWD}")
+  builtin printf '%s\n%s\n%s\n' '${STATE_START}' "$__gb_len" "$PWD"
   builtin printf '%s\n' 'builtin unset ELECTRON_RUN_AS_NODE 2>/dev/null'
-  for __n in $(builtin compgen -e); do
-    case "$__n" in
-      PWD|OLDPWD|SHLVL|_|SHELLOPTS|BASHOPTS|BASH_*|POSIXLY_CORRECT|ELECTRON_RUN_AS_NODE|SUDO_ASKPASS|CURSOR_ASKPASS|CURSOR_CONVERSATION_ID|CURSOR_REQUEST_ID|CURSOR_AGENT_STORE|CURSOR_SANDBOX*|__GB_*) continue;;
+  for __gb_n in $(builtin compgen -e); do
+    case "$__gb_n" in
+      PWD|OLDPWD|SHLVL|_|SHELLOPTS|BASHOPTS|BASH_*|POSIXLY_CORRECT|ELECTRON_RUN_AS_NODE|SUDO_ASKPASS|CURSOR_ASKPASS|CURSOR_CONVERSATION_ID|CURSOR_REQUEST_ID|CURSOR_AGENT_STORE|CURSOR_SANDBOX*|__GB_*|__gb_*) continue;;
       *_proxy|*_PROXY|*_Proxy) continue;;
     esac
-    builtin printf 'builtin export %s=%q\n' "$__n" "${"$"}{!__n}"
+    builtin printf 'builtin export %s=%q\n' "$__gb_n" "${"$"}{!__gb_n}"
   done
   builtin unset -f __gb_dump_state 2>/dev/null
-  __f=$(builtin declare -f)
-  [[ -n "$__f" ]] && builtin printf '__gb_f=%q; builtin eval -- "$__gb_f"; builtin unset __gb_f\n' "$__f"
-  for __k in "${"$"}{!BASH_ALIASES[@]}"; do
-    builtin printf 'BASH_ALIASES[%q]=%q\n' "$__k" "${"$"}{BASH_ALIASES[$__k]}"
+  __gb_f=$(builtin declare -f)
+  [[ -n "$__gb_f" ]] && builtin printf '__gb_f=%q; builtin eval -- "$__gb_f"; builtin unset __gb_f\n' "$__gb_f"
+  for __gb_k in "${"$"}{!BASH_ALIASES[@]}"; do
+    builtin printf 'BASH_ALIASES[%q]=%q\n' "$__gb_k" "${"$"}{BASH_ALIASES[$__gb_k]}"
   done
-  while builtin read -r __l; do
-    case "$__l" in *' login_shell'|*' restricted_shell') continue;; esac
-    builtin printf 'builtin %s 2>/dev/null\n' "$__l"
+  while builtin read -r __gb_l; do
+    case "$__gb_l" in *' login_shell'|*' restricted_shell') continue;; esac
+    builtin printf 'builtin %s 2>/dev/null\n' "$__gb_l"
   done < <(builtin shopt -p)
-  while builtin read -r __l; do
-    case "$__l" in *'o errexit'|*'o nounset'|*'o pipefail'|*'o posix'|*'o history'|*'o monitor') continue;; esac
-    builtin printf 'builtin %s 2>/dev/null\n' "$__l"
+  while builtin read -r __gb_l; do
+    case "$__gb_l" in *'o errexit'|*'o nounset'|*'o pipefail'|*'o posix'|*'o history'|*'o monitor') continue;; esac
+    builtin printf 'builtin %s 2>/dev/null\n' "$__gb_l"
   done < <(builtin set +o)
   builtin printf '%s\n' '${STATE_END}'
 }
@@ -103,9 +105,30 @@ export function findBash(env: NodeJS.ProcessEnv = process.env): string | null {
 
 let snapshot: string | null = null;
 let initPromise: Promise<string> | null = null;
+let initChild: ReturnType<typeof spawn> | null = null;
+let initClosed: Promise<void> = Promise.resolve();
+/**
+ * Session cwd (official oracle cwdpersist: with no workingDirectory the next call reuses the
+ * previous call's final cwd). Kept as structured data only; never part of the restore script.
+ */
+let sessionCwd: string | undefined;
+export function getSessionCwd(): string | undefined { return sessionCwd; }
 
 /** Test-only reset of daemon-global shell state. */
-export function resetShellState(): void { snapshot = null; initPromise = null; }
+export function resetShellState(): void { snapshot = null; initPromise = null; sessionCwd = undefined; }
+
+/**
+ * Daemon shutdown: terminate the shared initial-snapshot process group and wait for it to close.
+ * Ordinary request cancellation never calls this (other waiters keep their shared init).
+ */
+export async function terminateInitialSnapshot(): Promise<void> {
+  const child = initChild;
+  if (!child || child.exitCode !== null || child.signalCode !== null) return initClosed;
+  // SIGKILL the whole group: an interactive (-i) bash ignores SIGTERM, and a TERM'd foreground
+  // child would let the profile continue running before an escalation fires (review probe).
+  try { if (child.pid) process.kill(-child.pid, "SIGKILL"); } catch { /* gone */ }
+  await initClosed;
+}
 
 /** Lazily capture the initial interactive-login snapshot once per daemon (shared by waiters). */
 export function initialSnapshot(bash: string, timeoutMs = 10000): Promise<string> {
@@ -122,6 +145,8 @@ export function initialSnapshot(bash: string, timeoutMs = 10000): Promise<string
         env: { ...process.env, ...BASE_ENV }, detached: true, stdio: ["ignore", "pipe", "ignore"], cwd: os.homedir(),
       });
     } catch { finish(""); return; }
+    initChild = child;
+    initClosed = new Promise<void>((r) => child.once("close", () => r()));
     const t = setTimeout(() => { try { if (child.pid) process.kill(-child.pid, "SIGKILL"); } catch { /* gone */ } finish(""); }, timeoutMs);
     child.stdout?.on("data", (b: Buffer) => { size += b.length; if (size <= MAX_STATE_BYTES * 2) chunks.push(b); });
     child.once("error", () => finish(""));
@@ -169,5 +194,6 @@ export function commitShell(dumped: Buffer, aborted: boolean): string | undefine
   const parsed = parseState(dumped);
   if (!parsed) return undefined;
   snapshot = parsed.script;
+  sessionCwd = parsed.cwd;
   return parsed.cwd;
 }
