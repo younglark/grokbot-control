@@ -52,6 +52,45 @@ node dist/cli/main.js --json auth logout             # 只删本工具自己的�
 - 凭据独立于 App（不读取、不复用 App 的 sand-secrets.json）。logout 只删本地文件，不吊销服务端会话。
 - MCP：`GBT_MCP_READONLY=1 node dist/mcp/main.js` 仅提供 `auth_whoami` + 只读业务工具（不含 login/logout/cancel/refresh 凭据写工具）。非 READONLY 另有 `auth_refresh`（仅非 secret 元数据）。
 
+## Publish / npx
+
+本包可发布到 [npm](https://www.npmjs.com/)（包名 `grokbot-control`）。**未声明 SPDX `license`**：`vendor/proto-gen` 来自逆向恢复的 schema，许可不清，见该目录 `NOTICE.md`；请自行评估分发风险。
+
+### 一次性准备
+
+1. 在 [npmjs.com](https://www.npmjs.com/) 创建账号并开启 2FA。
+2. 创建 **Automation** 类型的 granular access token（允许 publish），写入本仓库 GitHub **Settings → Secrets and variables → Actions** 的 `NPM_TOKEN`。不要把 token 写进仓库或 workflow 明文。
+3. 确认 `.github/workflows/publish.yml` 已存在（tag `v*` push 或 Release published 时：`npm ci` → `npm test` → `npm publish --access public`）。
+
+### 发版
+
+```bash
+# 工作区干净、已通过本地 build/test
+npm version patch   # 或 minor / major；会改 package.json 并打 vX.Y.Z tag
+git push origin main --follow-tags
+```
+
+CI 会用 `NPM_TOKEN` 发布。同一版本不要既推 tag 又对同一 tag 再发 GitHub Release 触发二次 publish（第二次会因版本已存在而失败）。
+
+### 安装 / 运行
+
+```bash
+npx --yes --package=grokbot-control@latest gbc --help
+npx --yes --package=grokbot-control@latest gbc --mock --json bot list
+npx --yes --package=grokbot-control@latest gbc-mcp
+```
+
+MCP 建议钉版本，例如：
+
+```json
+{
+  "command": "npx",
+  "args": ["--yes", "--package=grokbot-control@0.1.0", "gbc-mcp"]
+}
+```
+
+OAuth 刷新仍需自行配置公开的 `GBT_OAUTH_CLIENT_ID`（本工具不内置 client_id）。
+
 ## 文件优先同步（无 SQLite）
 
 CLI：`gbc sync pull --agent-id BOT [--session-id SESSION] --dir /absolute/private/root

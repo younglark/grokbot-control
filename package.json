@@ -1,7 +1,6 @@
 {
   "name": "grokbot-control",
   "version": "0.1.0",
-  "private": true,
   "description": "Programmable control plane for Grok Bot (shared SDK + CLI gbc + MCP). Not an official product.",
   "type": "module",
   "bin": {
@@ -9,10 +8,22 @@
     "gbc-mcp": "./dist/mcp/main.js"
   },
   "exports": {
-    ".": "./dist/index.js"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
   },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "vendor/proto-gen",
+    "docs",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "prepack": "npm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --import tsx --test test/*.test.ts",
     "gbc": "node dist/cli/main.js",
@@ -22,6 +33,14 @@
   "engines": {
     "node": ">=20"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/younglark/grokbot-control.git"
+  },
+  "bugs": {
+    "url": "https://github.com/younglark/grokbot-control/issues"
+  },
+  "homepage": "https://github.com/younglark/grokbot-control#readme",
   "dependencies": {
     "@bufbuild/protobuf": "1.10.1",
     "@connectrpc/connect": "1.6.1",

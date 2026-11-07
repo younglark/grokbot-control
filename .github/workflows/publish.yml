@@ -1,0 +1,51 @@
+# Publish grokbot-control to https://registry.npmjs.org
+#
+# Triggers: push of a version tag (v*) or a GitHub Release published event.
+# Prerequisite (repo Settings → Secrets and variables → Actions):
+#   NPM_TOKEN — npm Automation granular access token with publish permission
+#   for the package (or your npm org). Do not commit the token.
+#
+# Recommended release flow:
+#   npm version patch   # or minor/major; updates package.json and creates vX.Y.Z tag
+#   git push origin main --follow-tags
+#
+# Avoid creating a GitHub Release from the same tag if the tag push already
+# published — a second publish of the same version will fail on npm.
+
+name: Publish npm
+
+on:
+  push:
+    tags:
+      - "v*"
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-npm-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - name: Install
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Publish
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
