@@ -16,3 +16,9 @@ except subprocess.TimeoutExpired: os.killpg(p.pid,signal.SIGKILL); out,err=p.com
 (outdir/f'{label}.json').write_bytes(out[:2000000]); (outdir/f'{label}.stderr.txt').write_bytes(err[:65536])
 (outdir/f'{label}.cmd.json').write_text(json.dumps({'cmd':cmd,'exit':p.returncode}))
 print('exit',p.returncode, err.decode()[:500])
+# Propagate failure: probe exit, empty output, or unparsable/empty results all fail the run.
+try:
+  d=json.loads(out); ok=bool(d.get('results')) and bool(d.get('events'))
+except Exception: ok=False
+if p.returncode!=0 or not ok:
+  print('PROBE FAILED', label, 'exit', p.returncode, 'results_ok', ok, file=sys.stderr); sys.exit(p.returncode or 2)

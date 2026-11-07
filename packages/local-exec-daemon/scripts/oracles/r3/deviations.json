@@ -1,9 +1,242 @@
-{
-  "sh-ident": "official env adds NODE_PATH=<official install deps dir> and empty __CURSOR_SANDBOX_ENV_RESTORE (bundle/sandbox artifacts); not mimicked",
-  "cwd-save": "SECURITY: official exit.cwd keeps only the first line of a newline-containing cwd; ours reports the full path",
-  "cwd-check": "SECURITY: official executes the 2nd line of a newline-containing cwd on the next call (injection); ours does not",
-  "multicwd": "SECURITY: same newline-cwd truncation as cwd-save",
-  "cwd-next": "SECURITY: official runs 'break' injected from the previous cwd; ours does not",
-  "path-save": "official dump needs external grep; with PATH=/nonexistent it fails (stderr) and keeps old state. Ours dumps with builtins only and commits atomically",
-  "path-read": "consequence of path-save: official LAST=unset (old state), ours LAST=x (complete new state); functions/aliases preserved in both"
-}
+[
+ {
+  "id": "env-node-path",
+  "probe": "main",
+  "case": "sh-ident",
+  "op": "sub",
+  "side": "official",
+  "frame": 1,
+  "path": [
+   "message",
+   "shellStream",
+   "stdout",
+   "data"
+  ],
+  "pairs": [
+   [
+    " NODE_PATH NO_COLOR",
+    " NO_COLOR"
+   ],
+   [
+    " __CURSOR_SANDBOX_ENV_RESTORE \n",
+    " \n"
+   ],
+   [
+    "NODE_PATH=/deps\n",
+    "NODE_PATH=<unset>\n"
+   ]
+  ],
+  "reason": "official env adds NODE_PATH=<install deps dir> and empty __CURSOR_SANDBOX_ENV_RESTORE (bundle/sandbox artifacts); not mimicked. Only these 3 substrings may differ."
+ },
+ {
+  "id": "nlcwd-save",
+  "probe": "cwd",
+  "case": "cwd-save",
+  "op": "field",
+  "frame": 1,
+  "path": [
+   "message",
+   "shellStream",
+   "exit",
+   "cwd"
+  ],
+  "official": "/state/r3/root/sub",
+  "ours": "/state/r3/root/sub\nprintf CWD_INJECTED > injected-marker\n#",
+  "reason": "SECURITY newline-cwd: official keeps only the first line of a newline-containing cwd; ours reports the full path"
+ },
+ {
+  "id": "nlcwd-inject",
+  "probe": "cwd",
+  "case": "cwd-check",
+  "op": "field",
+  "frame": 1,
+  "path": [
+   "message",
+   "shellStream",
+   "stdout",
+   "data"
+  ],
+  "official": "CWD_EXECUTED\n",
+  "ours": "CWD_NOT_EXECUTED\n",
+  "reason": "SECURITY: official executes the 2nd line of the saved cwd on the next call; ours does not"
+ },
+ {
+  "id": "nlcwd-multi",
+  "probe": "edges",
+  "case": "multicwd",
+  "op": "field",
+  "frame": 2,
+  "path": [
+   "message",
+   "shellStream",
+   "exit",
+   "cwd"
+  ],
+  "official": "/state/r3/root/line",
+  "ours": "/state/r3/root/line\nbreak",
+  "reason": "SECURITY newline-cwd: official keeps only the first line of a newline-containing cwd"
+ },
+ {
+  "id": "nlcwd-break",
+  "probe": "edges",
+  "case": "cwd-next",
+  "op": "drop",
+  "side": "official",
+  "frame": 1,
+  "equals": {
+   "kind": "client",
+   "requestId": "cwd-next",
+   "message": {
+    "id": 11,
+    "shellStream": {
+     "stderr": {
+      "data": "--: line 2: break: only meaningful in a `for', `while', or `until' loop\n"
+     }
+    }
+   }
+  },
+  "reason": "SECURITY: official runs 'break' injected from the previous cwd (stderr frame); ours does not"
+ },
+ {
+  "id": "path-dump-grep",
+  "probe": "edges",
+  "case": "path-save",
+  "op": "drop",
+  "side": "official",
+  "frame": 1,
+  "equals": {
+   "kind": "client",
+   "requestId": "path-save",
+   "message": {
+    "id": 12,
+    "shellStream": {
+     "stderr": {
+      "data": "environment: line 132: grep: command not found\nenvironment: line 132: grep: command not found\nenvironment: line 140: grep: command not found\n"
+     }
+    }
+   }
+  },
+  "reason": "official dump needs external grep; with PATH=/nonexistent it errors on stderr; ours dumps with builtins only"
+ },
+ {
+  "id": "path-dump-commit",
+  "probe": "edges",
+  "case": "path-read",
+  "op": "sub",
+  "side": "ours",
+  "frame": 1,
+  "path": [
+   "message",
+   "shellStream",
+   "stdout",
+   "data"
+  ],
+  "pairs": [
+   [
+    "LAST=x\n",
+    "LAST=unset\n"
+   ]
+  ],
+  "reason": "consequence of path-save: official keeps old state (LAST=unset), ours commits complete new state (LAST=x); everything else identical"
+ },
+ {
+  "id": "nlcwd-unicode",
+  "probe": "locale",
+  "case": "unicode-cwd",
+  "op": "field",
+  "frame": 2,
+  "path": [
+   "message",
+   "shellStream",
+   "exit",
+   "cwd"
+  ],
+  "official": "/state/r3/root/中文🚀",
+  "ours": "/state/r3/root/中文🚀\nquote'dir",
+  "reason": "SECURITY newline-cwd: official keeps only the first line of a newline-containing cwd (unicode + quote dir)"
+ },
+ {
+  "id": "nlcwd-unicode-next-out",
+  "probe": "locale",
+  "case": "unicode-next",
+  "op": "field",
+  "frame": 1,
+  "path": [
+   "message",
+   "shellStream"
+  ],
+  "official": {
+   "stderr": {
+    "data": "The shell's working directory no longer exists: /state/r3/root/中文🚀. The command did not run. Re-run it with working_directory set to an existing directory.\n"
+   }
+  },
+  "ours": {
+   "stdout": {
+    "data": "/state/r3/root/中文🚀\nquote'dir\n__GB_STATE_START__\n1\n/\nbuiltin export FAKE_STATE=bad\n__GB_STATE_END__\n"
+   }
+  },
+  "reason": "consequence of newline-cwd truncation: official's next call fails 'working directory no longer exists' (stderr, code 1); ours runs in the real dir"
+ },
+ {
+  "id": "nlcwd-unicode-next-exit",
+  "probe": "locale",
+  "case": "unicode-next",
+  "op": "field",
+  "frame": 2,
+  "path": [
+   "message",
+   "shellStream",
+   "exit"
+  ],
+  "official": {
+   "code": 1,
+   "cwd": "/state/r3/root/中文🚀"
+  },
+  "ours": {
+   "cwd": "/state/r3/root/中文🚀\nquote'dir"
+  },
+  "reason": "same; exit code/cwd pinned exactly"
+ },
+ {
+  "id": "nlcwd-spoof-check-out",
+  "probe": "locale",
+  "case": "spoof-check",
+  "op": "field",
+  "frame": 1,
+  "path": [
+   "message",
+   "shellStream"
+  ],
+  "official": {
+   "stderr": {
+    "data": "The shell's working directory no longer exists: /state/r3/root/中文🚀. The command did not run. Re-run it with working_directory set to an existing directory.\n"
+   }
+  },
+  "ours": {
+   "stdout": {
+    "data": "FAKE=unset\n"
+   }
+  },
+  "reason": "consequence of newline-cwd truncation: official's next call fails 'working directory no longer exists' (stderr, code 1); ours runs in the real dir"
+ },
+ {
+  "id": "nlcwd-spoof-check-exit",
+  "probe": "locale",
+  "case": "spoof-check",
+  "op": "field",
+  "frame": 2,
+  "path": [
+   "message",
+   "shellStream",
+   "exit"
+  ],
+  "official": {
+   "code": 1,
+   "cwd": "/state/r3/root/中文🚀"
+  },
+  "ours": {
+   "cwd": "/state/r3/root/中文🚀\nquote'dir"
+  },
+  "reason": "same; exit code/cwd pinned exactly"
+ }
+]

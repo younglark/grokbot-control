@@ -1,0 +1,64 @@
+{
+ "main": [
+  "ls",
+  "grep",
+  "glob",
+  "delete",
+  "write",
+  "sh-ident",
+  "sh-state1",
+  "sh-state2",
+  "sh-state3-nocwd",
+  "sh-exitcode",
+  "sh-timeout",
+  "sh-init",
+  "sh-plain1",
+  "sh-plain2",
+  "sh-exit1",
+  "sh-exit2",
+  "sh-unset2",
+  "sh-badcwd"
+ ],
+ "cancel": [
+  "cancel-init",
+  "cancel-check"
+ ],
+ "cwd": [
+  "cwd-save",
+  "cwd-harmless",
+  "cwd-check"
+ ],
+ "edges": [
+  "alias-save",
+  "alias-read",
+  "vars-save",
+  "vars-read",
+  "quoted-save",
+  "quoted-read",
+  "fd-check",
+  "func-save",
+  "func-read",
+  "multicwd",
+  "cwd-next",
+  "path-save",
+  "path-read"
+ ],
+ "options": [
+  "options-save",
+  "options-read"
+ ],
+ "rootlink": [
+  "rootlink-default"
+ ],
+ "locale": [
+  "locale-save",
+  "locale-read",
+  "unicode-cwd",
+  "unicode-next",
+  "spoof-check"
+ ],
+ "cwdpersist": [
+  "cwd-session-save",
+  "cwd-session-read"
+ ]
+}
