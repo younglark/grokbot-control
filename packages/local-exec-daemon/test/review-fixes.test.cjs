@@ -112,12 +112,22 @@ test('spawn error event produces error+close without uncaught exception',async()
 });
 test('stale supervisor exits with connected Box by default; active lease keeps it alive',async()=>{
  const cp=require('node:child_process');const streams=[];const server=http.createServer((req,res)=>{req.resume();req.on('end',()=>{if(req.method==='GET'){res.writeHead(200,{'content-type':'text/event-stream'});res.write('data: {"kind":"welcome"}\n\n');streams.push(res)}else res.end('{}')})});await new Promise(r=>server.listen(0,'127.0.0.1',r));
- const root=workspace();const children=[];
+ const root=workspace();const children=[];const logs=new Map();
+ const startChild=(leased)=>{
+  const dir=path.join(root,String(leased));fs.mkdirSync(dir);fs.writeFileSync(path.join(dir,'settings.json'),JSON.stringify({version:1,localToolPermission:'never'}));fs.writeFileSync(path.join(dir,'local-exec-supervisor.json'),JSON.stringify({pid:process.pid,at:Date.now()-1000000}));fs.writeFileSync(path.join(dir,'local-exec-daemon-connection.json'),JSON.stringify({baseUrl:`http://127.0.0.1:${server.address().port}`}));if(leased)fs.writeFileSync(path.join(dir,'local-exec-update-lease.json'),JSON.stringify({until:Date.now()+60000}));
+  const child=cp.fork(path.resolve(__dirname,'../dist/index.js'),[],{env:{...process.env,SAND_DATA_ROOT:dir,SAND_LOCAL_EXEC_ROOT:dir},stdio:['ignore','pipe','pipe','ipc']});
+  const buf={out:'',err:''};child.stdout.on('data',d=>{buf.out+=d});child.stderr.on('data',d=>{buf.err+=d});logs.set(child,buf);
+  children.push(child);child.send({type:'sand-local-exec-file-key',key:Buffer.alloc(32,7).toString('base64'),computerId:'synthetic'});
+  return child;
+ };
  try{
- for(const leased of [false,true]){
- const dir=path.join(root,String(leased));fs.mkdirSync(dir);fs.writeFileSync(path.join(dir,'settings.json'),JSON.stringify({version:1,localToolPermission:'never'}));fs.writeFileSync(path.join(dir,'local-exec-supervisor.json'),JSON.stringify({pid:process.pid,at:Date.now()-1000000}));fs.writeFileSync(path.join(dir,'local-exec-daemon-connection.json'),JSON.stringify({baseUrl:`http://127.0.0.1:${server.address().port}`}));if(leased)fs.writeFileSync(path.join(dir,'local-exec-update-lease.json'),JSON.stringify({until:Date.now()+60000}));
- const child=cp.fork(path.resolve(__dirname,'../dist/index.js'),[],{env:{...process.env,SAND_DATA_ROOT:dir,SAND_LOCAL_EXEC_ROOT:dir},stdio:['ignore','pipe','pipe','ipc']});children.push(child);child.send({type:'sand-local-exec-file-key',key:Buffer.alloc(32,7).toString('base64'),computerId:'synthetic'});await delay(2400);
- if(leased)assert.equal(child.exitCode,null);else assert.equal(child.exitCode,0);
- }
+  const stale=startChild(false);const alive=startChild(true);
+  // Condition wait: stale-supervisor path must exit on its own. Fixed 2400ms was load-sensitive (null!==0 under contention).
+  try{await until(()=>stale.exitCode!==null,15000)}catch(e){
+   const b=logs.get(stale);throw new Error(`stale supervisor did not exit within 15s: exitCode=${stale.exitCode} signal=${stale.signalCode} stderr=${JSON.stringify((b.err||'').slice(-800))} stdout=${JSON.stringify((b.out||'').slice(-400))}`);
+  }
+  assert.equal(stale.exitCode,0,`stale exit: signal=${stale.signalCode} stderr=${JSON.stringify((logs.get(stale).err||'').slice(-800))}`);
+  // Same wall-clock window already elapsed for the leased child; it must still be alive.
+  assert.equal(alive.exitCode,null,`leased child exited early: code=${alive.exitCode} signal=${alive.signalCode} stderr=${JSON.stringify((logs.get(alive).err||'').slice(-800))}`);
  }finally{for(const child of children){if(child.exitCode===null){const end=new Promise(r=>child.once('exit',r));child.kill('SIGTERM');await end}}streams.forEach(s=>s.destroy());await new Promise(r=>server.close(r));fs.rmSync(root,{recursive:true,force:true})}
 });

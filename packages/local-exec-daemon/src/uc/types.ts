@@ -35,7 +35,7 @@ export interface UserComputerTransport {
  */
 export const UC_P2_GAPS = [
   "ack/dedup persistence across restart",
-  "standing/approval/authoritative branches",
+  "approval chain beyond exec (upload/download/discover-ai-tool/messages/local-tool), standing grants (subject actions), send-mail spend; approval-record writer (not in daemon bundle)",
   "Credential renew / reject / multi-account scope switch",
   "Capability injection full parity (device/messages/mail)",
   "sendKeepAlives / keepAliveDueAt full parity (superviseBacklog 15s/5s covered)",

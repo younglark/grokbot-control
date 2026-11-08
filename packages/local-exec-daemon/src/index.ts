@@ -105,13 +105,23 @@ async function main(): Promise<void> {
     void box.start().catch(() => undefined);
   };
 
+  let ucRecreating = false;
   const tryStartUc = async () => {
-    if (shuttingDown) return;
+    if (shuttingDown || ucRecreating) return;
     const payload = await loadSealedCredential(key);
     if (!payload) return;
     const ch = pickUserComputerChannel(payload);
     if (!ch) return;
-    if (uc) { uc.updateChannel(ch); return; }
+    if (uc) {
+      // Official (D:L179352): a serverAuthoritative change in either direction closes the provider and
+      // creates a new one; it is never flipped in place.
+      if (uc.serverAuthoritative === (ch.serverAuthoritative === true)) { uc.updateChannel(ch); return; }
+      if (ucRecreating) return;
+      ucRecreating = true;
+      const old = uc;
+      try { uc = undefined; await old.stop(); } finally { ucRecreating = false; }
+      if (shuttingDown) return;
+    }
     const provider = new UserComputerProvider({
       backendUrl: ch.backendUrl,
       machineId: ch.machineId || computerId,

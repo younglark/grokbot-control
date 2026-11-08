@@ -16,8 +16,6 @@ import {
   lastAllocatedExecIdOrZero,
   cancelRequest,
   dispatchExec,
-  NEVER_MSG,
-  ASK_MSG,
   type Emit,
   type ExecFrameOut,
 } from "../exec/handlers";
@@ -30,6 +28,8 @@ import {
 } from "../exec/exec-codec";
 import type { PermissionMode } from "../settings";
 import { isSupervised } from "../state/discovery";
+import { dataRootFromEnv } from "../util";
+import { approvalsPathFor, authorizationOf, describeExec, execRefusal, retireApproval, retirementsPathFor, type Authorization } from "./approvals";
 import type { UserComputerHello, UserComputerTransport } from "./types";
 
 export type UcProviderOptions = {
@@ -48,7 +48,9 @@ export type UcProviderOptions = {
 const requestKinds = Object.fromEntries(GrokBotUserComputerRequestFrame.fields.list().map(f => [f.localName, f.no]));
 
 // Only business mapping remains here. Field numbers, oneof and int64 are runtime-owned.
-export type Queued = { id: string; requestId: string; kind: number; serverMessage: Record<string, unknown>; parseError?: string };
+export type Queued = { id: string; requestId: string; kind: number; serverMessage: Record<string, unknown>; parseError?: string;
+  /** Exec: D v9r (L178863) approvalId + c5 authorization; retire-approval: approvalId. */
+  approvalId?: string; authorization?: Authorization };
 export function parseQueued(item: GrokBotUserComputerQueuedRequest): Queued {
   const id = item.id;
   const frame = item.frame;
@@ -57,10 +59,16 @@ export function parseQueued(item: GrokBotUserComputerQueuedRequest): Queued {
     if (!id || !frame?.frame.case) throw new Error("invalid request oneof");
     const kind = GrokBotUserComputerRequestFrame.fields.list().find(f => f.localName === frame.frame.case)!.no;
     let serverMessage: Record<string, unknown> = {};
+    if (frame.frame.case === "retireApproval") {
+      return { id, requestId, kind, serverMessage, approvalId: frame.frame.value.approvalId };
+    }
     if (frame.frame.case === "exec") {
+      const value = frame.frame.value;
+      const meta = { approvalId: value.approvalId, authorization: authorizationOf(value) };
       // Official: ExecServerMessage.fromJsonString(serverMessageJson, { ignoreUnknownFields: true }).
-      const decoded = decodeExecServerMessageJson(frame.frame.value.serverMessageJson);
+      const decoded = decodeExecServerMessageJson(value.serverMessageJson);
       serverMessage = execServerMessageToRecord(decoded);
+      return { id, requestId, kind, serverMessage, ...meta };
     }
     return { id, requestId, kind, serverMessage };
   } catch (error) {
@@ -181,6 +189,15 @@ export class UserComputerProvider implements UserComputerTransport {
   /** Official lastPolledAt (monotonic in daemon; wall clock here). */
   lastPolledAt = 0;
   get blocked(): boolean { return this.admissionClosed; }
+  /**
+   * Fixed for the provider's lifetime (official keeps it in the per-scope descriptor and closes/recreates
+   * the provider when it changes, D:L179352). Taken only from the local credential record, never from a request.
+   */
+  get serverAuthoritative(): boolean { return this.opts.hello.serverAuthoritative === true; }
+  /** Official getStanding (D:L179397): undefined under serverAuthoritative → hello.standing "" (L178209). */
+  private standingFor(permission: PermissionMode): string { return this.serverAuthoritative ? "" : permission; }
+  /** In-flight retire-approval writes (no inflight slot, no reply; official startRequest without E7). */
+  private retireJobs = new Set<Promise<void>>();
   private channel: { backendUrl: string; machineId: string; credential: string } | null =
     null;
 
@@ -253,7 +270,7 @@ export class UserComputerProvider implements UserComputerTransport {
     let attempts = 0;
     while (!this.closed) {
       if (this.admissionClosed) { await new Promise(r => setTimeout(r, 100)); continue; }
-      hello.standing = (await loadSettings()).permission;
+      hello.standing = this.standingFor((await loadSettings()).permission);
       hello.serverAuthoritative = this.opts.hello.serverAuthoritative;
       this.announcedStanding = hello.standing;
       await this.watchLoop(hello);
@@ -267,11 +284,11 @@ export class UserComputerProvider implements UserComputerTransport {
   /** Same-machine, same-scope rotation resumes the SAME reply/ack/task state. */
   updateChannel(next: { backendUrl: string; machineId: string; credential: string; accountScope?: string; serverAuthoritative?: boolean }): boolean {
     if (!this.channel || this.closed || next.machineId !== this.opts.machineId || next.accountScope !== this.opts.accountScope || next.backendUrl.replace(/\/$/, "") !== this.opts.backendUrl.replace(/\/$/, "")) return false;
-    if (next.serverAuthoritative) this.opts.hello.serverAuthoritative = true;
+    // A serverAuthoritative change (either direction) is not a rotation: the caller closes this provider and
+    // creates a new one (official D:L179352). Never mutate the mode in place.
+    if ((next.serverAuthoritative === true) !== this.serverAuthoritative) return false;
     if (next.credential === this.channel.credential) return false;
     this.channel = { ...this.channel, credential: next.credential };
-    // Never relax an authoritative channel by credential file mutation.
-    if (next.serverAuthoritative) this.opts.hello.serverAuthoritative = true;
     this.proven = false;
     this.abort.abort(); this.abort = new AbortController();
     this.admissionClosed = false; this.replies?.resume(); return true;
@@ -336,7 +353,7 @@ export class UserComputerProvider implements UserComputerTransport {
     let polled = false;
     try {
       const ch = pollChannel;
-      const liveStanding = (await loadSettings()).permission;
+      const liveStanding = this.standingFor((await loadSettings()).permission);
       if (this.announcedStanding !== undefined && liveStanding !== this.announcedStanding) {
         // Re-announce policy by replacing only the Watch connection, never tasks.
         this.announcedStanding = liveStanding;
@@ -357,6 +374,12 @@ export class UserComputerProvider implements UserComputerTransport {
         // Capacity is checked before ack/admission. Cancel controls bypass backlog.
         this.seen.add(q.id); this.pendingAcks.push(q.id);
         if (q.parseError) { if (!this.storeClosingFrame({ kind: "control", requestId: q.requestId, message: { throw: { error: q.parseError } } })) this.unack(q); continue; }
+        if (q.kind === requestKinds.retireApproval) {
+          // Official (D:L178509–178555, v_.handle L135964, wUe L81351): ACKed like any item, not E7 → no keepalive,
+          // no inflight slot, no busy/backlog; persisted under the per-file lock; NO reply frame of any kind.
+          this.startRetire(q.approvalId ?? "");
+          continue;
+        }
         if (q.kind === requestKinds.cancel) {
           // Official (D:L178526–178535, Gl/Kce): each cancelled backlog entry gets a closing error.
           const dropped = this.backlog.filter(x => x.requestId === q.requestId);
@@ -563,6 +586,15 @@ export class UserComputerProvider implements UserComputerTransport {
       this.activeJobs.add(job);
     }
   }
+  private startRetire(approvalId: string): void {
+    const root = dataRootFromEnv();
+    const job = retireApproval(approvalId, approvalsPathFor(root), retirementsPathFor(root))
+      .catch(() => console.error("[user-computer-provider] failed to retire approval"))
+      .finally(() => { this.retireJobs.delete(job); });
+    this.retireJobs.add(job);
+  }
+  /** Test hook: wait for pending retire-approval writes. */
+  async settleRetirements(): Promise<void> { await Promise.all([...this.retireJobs]); }
   private async handleQueued(q: Queued): Promise<void> {
     if (q.kind !== requestKinds.exec) {
       // Frozen oracle dispatch maps unimplemented outer variants to an error.
@@ -572,26 +604,37 @@ export class UserComputerProvider implements UserComputerTransport {
       while (!this.closed && !this.storeClosing(q, error)) await new Promise(r => setTimeout(r, UC_KEEPALIVE_INTERVAL_MS));
       return;
     }
-    // Authoritative / approval / scope grants are NOT implemented. Fail closed.
+    // t117u: exec approval chain (src/uc/approvals.ts) — server flags only on a serverAuthoritative channel,
+    // local approvals file + retirements + 1h recordedAtMs expiry + Yce. Other request kinds stay unimplemented.
     // Official re() (D:L179276–179288) calls N.getLocalToolPermission() → load() → readFileSync (L82881/L82271/pue)
     // synchronously inside startRequest, before its first await (v_.handle L135963 → withInflight L136032 →
     // handleExecRequest L136309–136318 have no earlier await). Same here: one synchronous read per request, so execs
     // reach allocateExecId in admission order without any chain, cache or shared promise (t108u).
     const live = loadSettingsSync();
-    const permission = this.opts.hello.serverAuthoritative ? "ask" : live.permission;
+    const dataRoot = dataRootFromEnv();
+    const terminalsFolder = this.opts.hello.terminalsFolder;
     // t110u: official `let i = await this.options.isLocalUseBlocked?.(...)` (D:L136318) — every request of a Poll
     // batch reads its permission synchronously first; exec id + heartbeat arm follow only after this await
     // (nextExecId++ L136332 → wE.handle h() L98140). Then `if (r.cancelled) { n(O6r(s)); return; }` (L136328–136331,
     // O6r L136419 = streamClose{id:0}): a cancel that landed meanwhile never starts the exec.
-    await undefined;
+    // t117u: the await is now the AUe decision itself (official awaits isLocalUseBlocked → AUe → Qce).
+    const refusal = await execRefusal({
+      permission: live.permission,
+      ceiling: live.settings.localToolPermissionCeiling,
+      serverAuthoritative: this.serverAuthoritative,
+      accountScope: this.opts.accountScope,
+      approvalId: q.approvalId,
+      authorization: q.authorization ?? { kind: "none" },
+      describes: describeExec(q.serverMessage, terminalsFolder),
+      terminalsFolder,
+      approvalsPath: approvalsPathFor(dataRoot),
+      retirementsPath: retirementsPathFor(dataRoot),
+    });
     // t112u: official order after that await (D:L136324–136332): (1) blocked → `n(x9({requestId, error}))`, x9
     // (L136410) = control throw{id:0,error}, no exec id consumed; (2) cancelled → O6r; (3) nextExecId++.
-    // AUe (L81503) / Qce (L81473) for a non-serverAuthoritative exec (global action): effective never → Xh,
-    // ask → i5 (approval grants are not implemented here: fail closed); serverAuthoritative without an
-    // authorization check here → i5. Text: NEVER_MSG = Xh (L81193), ASK_MSG = i5 (L81199).
-    if (permission !== "always") {
-      const error = permission === "never" && !this.opts.hello.serverAuthoritative ? NEVER_MSG : ASK_MSG;
-      await this.emit({ kind: "control", requestId: q.requestId, message: { throw: { id: 0, error } } });
+    // AUe (L81503) / Qce (L81473): see approvals.ts. Text: NEVER_MSG = Xh (L81193), ASK_MSG = i5 (L81199).
+    if (refusal !== undefined) {
+      await this.emit({ kind: "control", requestId: q.requestId, message: { throw: { id: 0, error: refusal } } });
       return;
     }
     // Our guard (official stop path not mapped): stop() cancels only registered shells, so a stop landing in this
@@ -601,7 +644,9 @@ export class UserComputerProvider implements UserComputerTransport {
       return;
     }
     await dispatchExec({ root: this.opts.root, requestId: q.requestId,
-      serverMessage: q.serverMessage, permission, emit: this.emit });
+      // Authorised once above (as official: no second permission gate inside the exec handlers).
+      // Approval does not reach back: a later retire/revoke never stops an exec already running (official).
+      serverMessage: q.serverMessage, permission: "always", emit: this.emit });
   }
 
   private async watchLoop(hello: UserComputerHello): Promise<void> {
