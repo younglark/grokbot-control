@@ -1,6 +1,6 @@
 # local-exec 场景验收矩阵（0.79.3 Linux，2026-11-08 Asia/Singapore）
 
-> t103u 新批次（UC keepalive，d8b1d87/5bb3443 被审查阻塞 4×P2+P3，本轮修复）：执行方自测，**待独立再审**；上一批 t101u 已独立验收并于 56ee14c push。
+> t103u 新批次（UC keepalive，d8b1d87/5bb3443 被审查阻塞 4×P2+P3 修正后，fa46d0f 再被阻塞 P2-1/P2-2/P3，本轮修正）：执行方自测，**待独立再审**；上一批 t101u 已独立验收并于 56ee14c push。
 > 前批状态：t101u 第一批（e984310）独立验收未通过；d75f9f0/2ee10eb 修正后第二轮再审又提出 P2×5、P3×1，已在 10d37df（代码+回归）/5993cfa（门禁）修正；第三轮再审（eb79982）余 P2 init 进程组残留、P3 runner 未查 step 状态，已修复；第四轮 P2 PGID 复用误认领已以所有权句柄修正；第五轮 init timeout 回退已修正，**修正待独立复验**。npm test 98 pass；差分 46/36/10 不变。不宣称 drop-in。
 
 证据等级：**实测** = 未修改的官方 `dist/local-exec-daemon/main.cjs`（asar 内 sha256 `5c1424ed…be`，与分析快照一致）在 bwrap 隔离 + 假 box SSE peer 下运行的帧；**静态** = 源码行号；**推断**；**未验证**。只覆盖已检查的 0.79.3 Linux 快照，不外推 macOS/Windows/其他版本。
@@ -74,7 +74,7 @@
 | Hello `standing` 字段 | 差异（实测）| 我们多发 `standing`，官方 box Hello 无；未改 |
 | UC keepalive（t103u，待独立再审）| 仅 keepalive 子集曾对比 4 场景；本轮 7 场景（+pressure/rotation/stall-cancel）含数据语义对比，自测一致，已知偏差：exec heartbeat 未实现 | `scripts/oracles/uc-keepalive.cjs` + `keepalive-diff.py`：backlog（仅 backlog id 收 messagesAccepted，入队后约 1.47s 首次、+3.0s 再次；运行中请求不保活）、cancel（取消后停止保活，并发 "Cancelled before it started on the user's computer." throw）、stall（数据 submit 慢 7s 时 submitting id 保活）、exhausted（keepalive 429 resource_exhausted 后暂停 5s）。偏移容差 300ms |
 | UC 数据 submit 超时 | 自测一致（与 keepalive stall 同证）| 原 2s 超时会每约 2.4s 重复提交同一帧；改为官方 E0=120s |
-| UC 取消中断 submit / 凭据轮换隔离 / closing 背压 | 自测一致（stall-cancel、rotation、pressure）| replies.drop+submitAbort；rejectCredential 校验当前 channel；closing 帧异步失败有界延迟重试；死亡门：daemon 中途死亡则场景/runner/比较器均非零 |
+| UC 取消中断 submit / 凭据轮换隔离 / closing 背压 | 自测一致（stall-cancel、rotation、pressure、overflow 200 busy 全部 ACK=终帧）| replies.drop+submitAbort；rejectCredential 与 reply 失败点均按 channel 身份隔离；closing 帧同步入 lane 或有界延迟，否则不 ACK 留待重投；死亡门：daemon 中途死亡则场景/runner/比较器均非零 |
 | UC 响应批处理 | **差异（未修）** | 官方一次 submit 可批多帧（stall 后 3 帧一批），我们每帧一次 submit |
 | 审批 Ask/standing/scope、ack 持久、多账户 | 未实现/未验证 | 下一阶段 |
 | headless/Docker | 未具备 | 需镜像自带 bash、可选 rg；无官方先例 |
