@@ -326,7 +326,7 @@ test('cancel of backlog entries is atomic: reserved by actual frame cost, else n
   const { GrokBotUserComputerQueuedRequest } = require('../dist/generated/aiserver.v1_pb.js');
   const { p } = mk(); p.proven = true; p.lastPolledAt = Date.now();
   p.replies = { available: false, requestIds: () => new Set(), submitting: [], offer: () => false, enqueue: () => Promise.reject(new Error('cap')), drop: () => 0 };
-  for (let i = 0; ; i++) if (!p.storeClosing({ id: `q${i}`, requestId: `f${i}`.padEnd(64, 'x'), kind: 2 }, 'busy')) break;
+  for (let i = 0; i < 4677; i++) assert.ok(p.storeClosing({ id: `q${i}`, requestId: `f${i}`.padEnd(64, 'x'), kind: 2 }, 'busy'));
   const target = 'target'.padEnd(1024, 't');
   assert.ok(p.closingRoom() > 0 && uc.closingCost(target) > uc.UC_PENDING_CLOSINGS_MAX_BYTES - p.pendingClosings.reduce((n, f) => n + uc.closingCost(f.requestId), 0), 'estimate says room, actual target does not fit');
   // two backlog entries of the same request: neither half-saved nor half-removed
