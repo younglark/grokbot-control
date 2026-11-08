@@ -116,8 +116,20 @@ export const UC_KEEPALIVE_MAX_IDS = 256;
 /** Official S9r: safety poll cadence while the Watch is connected. */
 export const UC_SAFETY_POLL_MS = 30_000;
 export const UC_DATA_SUBMIT_DEADLINE_MS = 120_000;
-/** Bound for deferred closing replies: backlog (64) plus one poll's worth of busy rejections (64). */
-export const UC_PENDING_CLOSINGS_MAX = 128;
+/**
+ * Bound for deferred closing replies (busy / cancelled-before-start / drained / parse error).
+ * Official holds every closing reply in per-request reply lanes with no cap (oee.push, D:L177276ff)
+ * and therefore ACKs every polled item. With a FIFO queue whose head only advances on ACK, a control
+ * message (cancel) behind K polled-but-unACKable items is reachable only once those K closing replies
+ * are held: no-ACK-then-drop + bounded memory ⇒ some K beyond which a control waits for the reply lane
+ * to recover. A closing reply is small and fixed-shape (requestId + a shared constant text), so it is
+ * held compactly and budgeted by bytes (1/8 of the 8 MiB lane) and count, instead of by a small count.
+ */
+export const UC_PENDING_CLOSINGS_MAX = 8192;
+export const UC_PENDING_CLOSINGS_MAX_BYTES = 1 << 20;
+/** Accounted cost of one deferred closing reply: requestId (UTF-16) + fixed object overhead. */
+export function closingCost(requestId: string): number { return 96 + 2 * requestId.length; }
+
 /** Official Kce (daemon.formatted.cjs L81192). */
 export const UC_CANCELLED_BEFORE_START = "Cancelled before it started on the user's computer.";
 
@@ -156,6 +168,7 @@ export class UserComputerProvider implements UserComputerTransport {
   private keepAliveSending = false;
   private proven = false;
   private pendingClosings: ExecFrameOut[] = [];
+  private pendingClosingBytes = 0;
   /** Some polled item was left unacknowledged because its closing reply could not be held. */
   private unackedWaiting = false;
   private announcedStanding?: string;
@@ -484,11 +497,17 @@ export class UserComputerProvider implements UserComputerTransport {
   private storeClosingFrame(frame: ExecFrameOut): boolean {
     if (this.closed) return false;
     if (!this.pendingClosings.length && this.offerFrame(frame)) return true;
-    if (this.pendingClosings.length >= UC_PENDING_CLOSINGS_MAX) return false;
-    this.pendingClosings.push(frame); return true;
+    if (this.closingRoom() <= 0 || this.pendingClosingBytes + closingCost(frame.requestId) > UC_PENDING_CLOSINGS_MAX_BYTES) return false;
+    this.deferClosing(frame); return true;
   }
+  private deferClosing(frame: ExecFrameOut): void { this.pendingClosings.push(frame); this.pendingClosingBytes += closingCost(frame.requestId); }
   /** Free deferral slots (the lane itself may hold more; this is the guaranteed part). */
-  private closingRoom(): number { return UC_PENDING_CLOSINGS_MAX - this.pendingClosings.length; }
+  private closingRoom(): number {
+    // Recomputed from the list so tests/probes that replace it stay consistent.
+    this.pendingClosingBytes = this.pendingClosings.reduce((n, f) => n + closingCost(f.requestId), 0);
+    return Math.max(0, Math.min(UC_PENDING_CLOSINGS_MAX - this.pendingClosings.length,
+      Math.floor((UC_PENDING_CLOSINGS_MAX_BYTES - this.pendingClosingBytes) / closingCost("x".repeat(64)))));
+  }
   private offerFrame(frame: ExecFrameOut): boolean {
     const ch = this.channel; const r = this.replies;
     if (!ch || !r) return false;
@@ -497,7 +516,7 @@ export class UserComputerProvider implements UserComputerTransport {
     // Minimal stubs without offer(): fall back to emit; a rejection re-defers (bounded).
     let p: Promise<void>;
     try { p = Promise.resolve(this.emit(frame)); } catch (e) { p = Promise.reject(e); }
-    p.catch(() => { if (!this.closed && this.pendingClosings.length < UC_PENDING_CLOSINGS_MAX) this.pendingClosings.push(frame); });
+    p.catch(() => { if (!this.closed && this.closingRoom() > 0) this.deferClosing(frame); });
     return true;
   }
   /** Leave a polled queue item unacknowledged so the server redelivers it. */
@@ -508,7 +527,7 @@ export class UserComputerProvider implements UserComputerTransport {
   }
   /** Retry deferred closing replies in order while the lane accepts them. */
   private flushClosings(): void {
-    while (this.pendingClosings.length && !this.closed && this.offerFrame(this.pendingClosings[0])) this.pendingClosings.shift();
+    while (this.pendingClosings.length && !this.closed && this.offerFrame(this.pendingClosings[0])) { const f = this.pendingClosings.shift()!; this.pendingClosingBytes -= closingCost(f.requestId); }
     // Items left unacknowledged for lack of room are fetched again by one poll as soon as room exists
     // (event-driven; there is no fast poll timer, official polls on Watch events + 30 s safety poll).
     if (this.unackedWaiting && this.closingRoom() > 0 && !this.closed) { this.unackedWaiting = false; void this.pollOnce().catch(() => undefined); }

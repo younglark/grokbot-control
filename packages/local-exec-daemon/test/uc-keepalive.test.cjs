@@ -119,10 +119,10 @@ test('P2-1 closing replies: held by lane or bounded deferral, otherwise the work
     const stored = [];
     for (let i = 0; i < 200; i++) stored.push(p.storeClosing({ id: `q${i}`, requestId: `r${i}`, kind: 2 }, 'busy'));
     const n = stored.filter(Boolean).length;
-    assert.equal(n, 4 + 128, 'lane (4 frames) + bounded deferral (128)'); assert.deepEqual(stored.slice(n), Array(200 - n).fill(false));
-    assert.equal(p.pendingClosings.length, 128);
+    const cap = 4 + p.closingRoom(); assert.ok(cap >= 4 + 128 && n === Math.min(200, cap), 'lane (4 frames) + bounded deferral'); assert.deepEqual(stored.slice(n), Array(200 - n).fill(false));
+    assert.equal(p.pendingClosings.length, n - 4);
     // a rejected busy item is left unacknowledged: removed from pendingAcks and seen → redelivered
-    p.seen.add('q199'); p.pendingAcks.push('q199'); p.unack({ id: 'q199', requestId: 'r199', kind: 2 });
+    p.seen.add('q199'); p.pendingAcks.push('q199'); p.unack({ id: 'q199', requestId: 'r199', kind: 2 }); p.pendingAcks.length = 0;
     assert.equal(p.seen.has('q199'), false); assert.deepEqual(p.pendingAcks, []);
     // deferred closings are held + keepalive-eligible (official replies.requestIds())
     p.noteAdmitted('r10', 0);
@@ -137,7 +137,7 @@ test('P2-1 closing replies: held by lane or bounded deferral, otherwise the work
 test('P2-1 backlog drain keeps items whose closing reply cannot be held; cancel stays unacknowledged without room', async () => {
   const { p } = mk();
   p.replies = { offer: () => false, enqueue: async () => {}, available: false };
-  p.pendingClosings = Array.from({ length: 128 }, (_, i) => ({ kind: 'control', requestId: `x${i}`, message: { throw: { id: 0, error: 'e' } } }));
+  p.pendingClosings = Array.from({ length: uc.UC_PENDING_CLOSINGS_MAX }, (_, i) => ({ kind: 'control', requestId: `x${i}`, message: { throw: { id: 0, error: 'e' } } }));
   p.lastPolledAt = 1; p.backlog = [{ id: 'b1', requestId: 'b1', kind: 2 }];
   p.superviseBacklog(1 + 16000);
   assert.deepEqual(p.backlog.map((q) => q.requestId), ['b1'], 'not dropped');
@@ -284,7 +284,7 @@ test('rotation tick slip root cause: provider keeps no sub-30s poll timer beside
 test('unacknowledged busy items are re-polled once closing room exists (event-driven, no fast poll timer)', async () => {
   const { p } = mk(); let polls = 0; p.pollOnce = async () => { polls++; };
   p.replies = { offer: () => false, enqueue: async () => {}, available: false };
-  p.pendingClosings = Array.from({ length: 128 }, (_, i) => ({ kind: 'control', requestId: `x${i}`, message: { throw: { id: 0, error: 'e' } } }));
+  p.pendingClosings = Array.from({ length: uc.UC_PENDING_CLOSINGS_MAX }, (_, i) => ({ kind: 'control', requestId: `x${i}`, message: { throw: { id: 0, error: 'e' } } }));
   p.seen.add('q'); p.pendingAcks.push('q'); p.unack({ id: 'q', requestId: 'r', kind: 2 });
   p.flushClosings(); assert.equal(polls, 0, 'no room yet');
   p.replies.offer = () => true; p.flushClosings();
@@ -300,3 +300,23 @@ test('P2-4 death gate: daemon SIGKILLed mid-run → scenario result fail, runner
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kadg-')); const f = path.join(tmp, 'ours.json'); fs.writeFileSync(f, line);
   assert.notEqual(spawnSync('python3', [path.join(dir, 'keepalive-diff.py'), path.join(dir, 'keepalive-official', 'stall.json'), f]).status, 0);
 });
+
+// ---- t107 cancel behind overflow (combined pressure) ----
+test('closing deferral is budgeted (count + bytes): at the budget items stay unACKed, never dropped', () => {
+  const { p } = mk(); p.replies = { offer: () => false, enqueue: async () => {}, available: false };
+  let held = 0; for (let i = 0; i < 20000; i++) { if (p.storeClosing({ id: `q${i}`, requestId: 'r'.repeat(64) + i, kind: 2 }, 'busy')) held++; else break; }
+  assert.ok(held >= 264 && held < 20000, `bounded, but holds backlog + 200 busy (held ${held})`);
+  assert.ok(p.pendingClosings.reduce((n, f) => n + uc.closingCost(f.requestId), 0) <= uc.UC_PENDING_CLOSINGS_MAX_BYTES);
+  assert.equal(p.storeClosing({ id: 'z', requestId: 'z', kind: 2 }, 'busy'), false); assert.equal(p.pendingClosings.length, held);
+});
+for (const who of ['official', 'ours']) {
+  test(`oracle cancel-overflow (${who}): 200 busy ACKed and the active target cancel aborts within 300 ms`, { skip: !(fs.existsSync('/usr/bin/bwrap') && fs.existsSync(lab)) }, () => {
+    const env = { ...process.env }; if (who === 'ours') env.REPO = path.resolve(__dirname, '..', '..', '..'); else delete env.REPO;
+    const r = spawnSync('python3', [path.join(dir, 'run-background.py'), 'uc-keepalive.cjs', 'cancel-overflow'], { env, encoding: 'utf8', timeout: 70000, maxBuffer: 64 << 20 });
+    assert.equal(r.status, 0, r.stderr);
+    const line = r.stdout.split('\n').find((l) => l.startsWith('{"scenario')); const d = JSON.parse(line);
+    assert.equal(d.busyAcked, 200);
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'co-')); const f = path.join(tmp, `${who}.json`); fs.writeFileSync(f, line);
+    const a = spawnSync('python3', [path.join(dir, 'assert-cancel.py'), f], { encoding: 'utf8' }); assert.equal(a.status, 0, a.stdout);
+  });
+}

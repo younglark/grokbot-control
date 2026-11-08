@@ -24,7 +24,7 @@ except subprocess.TimeoutExpired:
 manifest = dict(exit=p.returncode, hard_timeout=timed_out, runner_pid=p.pid, cleaned=p.poll() is not None,
                 original_sha256=hashlib.sha256((lab/'input/main.cjs').read_bytes()).hexdigest())
 print(json.dumps(manifest))
-print(out[:65536].decode())
+print(out.decode())
 print(err[:4096].decode())
 # Gate: probe exit, hard timeout, or (for JSON-emitting probes) any non-pass result fails the run.
 bad = bool(p.returncode or timed_out)
