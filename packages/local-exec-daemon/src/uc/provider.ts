@@ -584,7 +584,13 @@ export class UserComputerProvider implements UserComputerTransport {
         hello: GrokBotUserComputerHello.fromJsonString(JSON.stringify(hello)),
       }, {signal: this.abort.signal});
       for await (const event of events) {
-        if (event.event.case === "connected") this.proven = true;
+        if (event.event.case === "connected") {
+          // Official (L178388–178403): proven, requestPoll, flush — flush wakes replies held across a
+          // credential rejection once the new Watch is up (resume from updateChannel may have raced
+          // the previous flush's mutex; flushRequested keeps that wake).
+          this.proven = true;
+          this.replies?.resume();
+        }
         if (["connected", "notify", "heartbeat"].includes(event.event.case || "")) {
           void this.pollOnce().catch(() => undefined);
         }

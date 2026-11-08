@@ -91,7 +91,11 @@ export class UcReplyLanes {
   private closingSince = new WeakMap<Frame, number>();
   private closingRetryAttempt = 0;
   private closingRetryWait?: Promise<void>;
-  private flushing = false;
+  private flushing_ = false;
+  /** True while a flush loop owns the mutex (probes / drain). */
+  get flushing(): boolean { return this.flushing_; }
+  /** Set by resume/connected (and any flush caller) while a flush is in progress; honored when it ends. */
+  private flushRequested = false;
   private stopped = false;
   private stopSignal = new AbortController();
   private submitAbort?: AbortController;
@@ -158,23 +162,37 @@ export class UcReplyLanes {
     return n;
   }
 
+  /**
+   * Official flush (L178671): one owner (`if (!this.flushing)`). A resume/connected that lands while
+   * the owner is still unwinding (e.g. after a 401 requeue, before `finally`) must not be dropped —
+   * record `flushRequested` and start another flush once the mutex is released (mirrors official
+   * `requestPoll` while `polling`, and connected→flush after the previous flush has cleared).
+   */
   async flush(): Promise<void> {
-    if (this.flushing) return;
-    this.flushing = true;
+    this.flushRequested = true;
+    if (this.flushing_) return;
+    this.flushing_ = true;
     try {
-      while (!this.stopped && !this.failure) {
-        const frames = this.take();
-        if (frames.length === 0) return;
-        const ac = new AbortController();
-        this.submitAbort = ac; this.submittingFrames = frames;
-        this.submitting = [...new Set(frames.map(f => f.requestId))]; this.submittingSince = this.now();
-        const kept = await this.submit(frames, ac.signal);
-        this.submittingFrames = []; this.submitting = []; this.submitAbort = undefined;
-        if (kept < 0) return; // credential failure on the current channel: paused until resume()
-        if (kept > 0 && this.readyCount === kept) { this.closingRetryWait ??= this.flushAfterClosingBackoff(); return; }
+      while (this.flushRequested && !this.stopped && !this.failure) {
+        this.flushRequested = false;
+        for (;;) {
+          if (this.stopped || this.failure) break;
+          const frames = this.take();
+          if (frames.length === 0) break;
+          const ac = new AbortController();
+          this.submitAbort = ac; this.submittingFrames = frames;
+          this.submitting = [...new Set(frames.map(f => f.requestId))]; this.submittingSince = this.now();
+          const kept = await this.submit(frames, ac.signal);
+          this.submittingFrames = []; this.submitting = []; this.submitAbort = undefined;
+          // credential failure on the current channel: paused until resume() (which sets flushRequested)
+          if (kept < 0) break;
+          if (kept > 0 && this.readyCount === kept) { this.closingRetryWait ??= this.flushAfterClosingBackoff(); break; }
+        }
       }
     } finally {
-      this.submittingFrames = []; this.submitting = []; this.submitAbort = undefined; this.flushing = false;
+      this.submittingFrames = []; this.submitting = []; this.submitAbort = undefined; this.flushing_ = false;
+      // resume/connected during finally after the loop check: one more turn
+      if (this.flushRequested && !this.stopped && !this.failure) void this.flush();
     }
   }
   private async flushAfterClosingBackoff(): Promise<void> {
@@ -227,6 +245,7 @@ export class UcReplyLanes {
     return keep.length;
   }
 
+  /** Clear a credential pause and request a flush (honored even if one is in progress). */
   resume(): void { if (this.stopped) return; this.failure = undefined; void this.flush(); }
   async drain(ms = 1500): Promise<boolean> {
     const end = Date.now() + ms;

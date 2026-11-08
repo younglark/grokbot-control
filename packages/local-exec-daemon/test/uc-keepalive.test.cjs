@@ -409,3 +409,67 @@ for (const [sc, mode] of [['retry-probe', 'retry'], ['retry-expiry', 'expiry'], 
     assert.equal(c.status, 0, c.stdout);
   });
 }
+
+
+// ---- t110 resume wake across flush mutex (P2) + mechanism comparator negatives (P3) ----
+test('resume during an in-flight 401 flush is honored after the mutex clears (two microtasks, real start/stop)', { timeout: 15000 }, async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'uc-')); fs.mkdirSync(path.join(root, 'terminals'));
+  const old = process.env.SAND_DATA_ROOT; process.env.SAND_DATA_ROOT = root;
+  const { ConnectError, Code } = require('@connectrpc/connect');
+  const turn = () => new Promise((r) => setImmediate(r));
+  const schedule = (n, f) => (n ? queueMicrotask(() => schedule(n - 1, f)) : f());
+  try {
+    for (let run = 0; run < 3; run++) {
+      const p = new uc.UserComputerProvider({ backendUrl: 'http://127.0.0.1:9', machineId: 'm', credential: 'old', root, permission: 'always',
+        hello: { label: 'lab', localRoot: root, terminalsFolder: path.join(root, 'terminals'), standing: 'always', variant: 'lab', supervised: true, serverAuthoritative: false } });
+      let rejectRPC; const creds = []; const sent = [];
+      p.client = {
+        submitGrokBotUserComputerResponses: (req) => { creds.push(req.credential); sent.push(req.frames.map((f) => f.requestId)); return creds.length === 1 ? new Promise((_, r) => { rejectRPC = r; }) : Promise.resolve({ acceptedCount: req.frames.length }); },
+        pollGrokBotUserComputerRequests: async () => ({ requests: [] }),
+        withdrawGrokBotUserComputerPresence: async () => ({}),
+        watchGrokBotUserComputerRequests: async function* (_, { signal }) { yield { event: { case: 'connected', value: {} } }; await new Promise((r) => { if (signal.aborted) r(); else signal.addEventListener('abort', r, { once: true }); }); },
+      };
+      const running = p.start(); while (!p.proven) await turn();
+      await p.emit({ kind: 'control', requestId: 'q', message: { throw: { error: 'synthetic' } } });
+      rejectRPC(new ConnectError('synthetic', Code.Unauthenticated));
+      schedule(2, () => p.updateChannel({ backendUrl: 'http://127.0.0.1:9', machineId: 'm', credential: 'new' }));
+      const drained = await p.replies.drain(1200);
+      assert.equal(drained, true, `run ${run}: retained frame must flush on the new channel without a nudge`);
+      assert.deepEqual(creds, ['old', 'new']);
+      assert.deepEqual(sent, [['q'], ['q']]);
+      assert.equal(p.replies.readyCount, 0);
+      assert.equal(p.replies.failure, undefined);
+      await p.stop(); await running;
+    }
+  } finally { process.env.SAND_DATA_ROOT = old; fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('check-mechanism rejects empty attempts, retargeted accepted ids, and fair batches with a truncated tail', () => {
+  const dir = path.join(__dirname, '..', 'scripts', 'oracles');
+  const py = path.join(dir, 'check-mechanism.py');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mech-neg-'));
+  const gold = (name) => path.join(dir, 'keepalive-official', name);
+  // empty attempts
+  {
+    const bad = JSON.parse(fs.readFileSync(gold('retry-probe.json'), 'utf8')); bad.attempts = [];
+    const f = path.join(tmp, 'empty.json'); fs.writeFileSync(f, JSON.stringify(bad));
+    const r = spawnSync('python3', [py, 'retry', gold('retry-probe.json'), f], { encoding: 'utf8' });
+    assert.notEqual(r.status, 0, r.stdout); assert.match(r.stdout, /attempts missing|FAIL/);
+  }
+  // retargeted accepted requestId
+  {
+    const bad = JSON.parse(fs.readFileSync(gold('retry-probe.json'), 'utf8'));
+    bad.accepted = bad.accepted.map((x) => ({ ...x, requestId: 'other' }));
+    const f = path.join(tmp, 'retarget.json'); fs.writeFileSync(f, JSON.stringify(bad));
+    const r = spawnSync('python3', [py, 'retry', gold('retry-probe.json'), f], { encoding: 'utf8' });
+    assert.notEqual(r.status, 0, r.stdout);
+  }
+  // fair: drop last two batches — busyLane256 still first in batch 2, but totals/batch-count fail
+  {
+    const bad = JSON.parse(fs.readFileSync(gold('fairness-native.json'), 'utf8'));
+    bad.busyBatches = bad.busyBatches.slice(0, 2);
+    const f = path.join(tmp, 'fair-trunc.json'); fs.writeFileSync(f, JSON.stringify(bad));
+    const r = spawnSync('python3', [py, 'fair', gold('fairness-native.json'), f], { encoding: 'utf8' });
+    assert.notEqual(r.status, 0, r.stdout);
+  }
+});

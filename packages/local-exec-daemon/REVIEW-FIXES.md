@@ -353,3 +353,32 @@ After (final code):
 - Rotation: 5 fresh strict pairs → 4 SAME, **1 FAIL** (ours keepalives 1063/3570/6577 ms after enqueue vs official 1453/3957/6961, the whole ours schedule ~390 ms early; cause not determined). 10 further ours runs: first keepalive 1467–1484 ms after enqueue (normal). Reported as an unexplained 1/15, not rerun to green.
 
 Not done (later): file 1 MiB / UC file streams, heartbeat, approvals. Real backend untested.
+
+
+## Round 7 (t110, on d7828f9) — resume wake across flush mutex; mechanism comparator tightened
+
+Independent review closed Round 6 retry/fair P2s. New P2: after Submit 401, `updateChannel→resume` two microtasks later was swallowed by the flush mutex — reply stalled (not dropped) until a later enqueue. New P3: `check-mechanism.py` passed after deleting all attempts, retargeting accepted requestIds, or truncating fair batches to the first two (busyLane256 still in batch 2).
+
+P2 reproduce (reviewer probe, 3/3 before fix): `beforeNudge` creds=["old"], drained=false, ready=1, flushing=false; only after emitting a wake frame did the new credential appear. assert-rotation.py exit 1.
+
+Official semantics (daemon.formatted.cjs): flush is one-owner (`if (!this.flushing)` L178674); Unauthenticated requeues and `rejectCredential` (proven=false) then submit returns 0; the flush loop exits on `!proven` and `finally` clears flushing; a later Watch `connected` (L178388–178403) sets proven and calls `flush()` — i.e. the wake is a *later* flush after the mutex is free, not a nested call. Our `resume()` from `updateChannel` can land while the 401 flush is still between `return -1` and `finally`, so a bare `if (flushing) return` drops the wake.
+
+Fix (UC only):
+- `UcReplyLanes.flush` records `flushRequested=true` on every call; if the mutex is held it returns; the owner clears the flag per turn and, in `finally`, starts another flush when the flag is set again (same shape as official `requestPoll` while `polling`).
+- `resume()` still clears `failure` then `flush()` (so the request is recorded even mid-flight).
+- Watch `connected` also `resume()`s (official connected→flush), covering wakes that arrive after the previous flush finished.
+- Regression: real `start`/`stop` + fake client, Submit 401, two `queueMicrotask`s then `updateChannel`; 3/3 must drain on the new channel without a nudge (ported from the reviewer probe).
+
+P3: `check-mechanism.py` now requires non-empty attempts with status/frames/t, matching accepted (requestId, kind) sets, matching per-attempt frame sets and status sequences, retry recovered set exactly start/exit/streamClose on `retry-target`; fair requires ≥4 batches, first-three sizes 256, total busyLane frames 257×3, first-batch index equal for busyLane0/128/255/256 (256 must be batch 2), and busyLane0 batch sequence equal. Negatives that previously passed now FAIL (empty attempts / retargeted ids / truncated fair). Original 22 timing/data negatives untouched; 300 ms keepalive gate unchanged.
+
+Author's Round 6 rotation pair-4 FAIL (~390 ms early) kept as recorded — this round's 5 fresh pairs reported as-is, not rerun-to-green. Watch 15 s reconnect extra flush noted with evidence, not backfilled into Round 6.
+
+After (final code):
+- Reviewer race probe 3/3: beforeNudge drained=true, creds=["old","new"], ready=0 (was drained=false, creds=["old"], ready=1). assert-rotation.py exit 0.
+- Unit: 3× real start/stop two-microtask rotation drain; check-mechanism negatives FAIL as required.
+- Mechanism oracles vs golden: retry-probe PASS, fairness-native PASS (1 each this round + covered in npm test).
+- npm test 141/141 (139 + resume race + comparator negatives).
+- r3 46/36/10/0, lifecycle PASS; overflow 2 fresh pairs 200/200.
+- Rotation this round: 5/5 fresh strict SAME (TICK-BOUNDARY=0). Author Round 6 pair-4 FAIL (~390 ms early) remains on record; not erased, gate not loosened. Cumulative fresh pairs this agent since that FAIL: 5 SAME + prior 4 SAME + 1 FAIL = 1 FAIL / 10 in the post-FAIL window (Round 6 reported 1/15 including the 10 solo ours runs).
+
+file 1 MiB / UC file streams / heartbeat / approvals out of scope. Real backend untested. No drop-in claim.
