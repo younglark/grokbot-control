@@ -113,6 +113,8 @@ export const UC_KEEPALIVE_EXHAUSTED_PAUSE_MS = 5_000;
 export const UC_KEEPALIVE_WINDOW_MS = 1_500;
 export const UC_KEEPALIVE_STUCK_SUBMIT_MS = 120_000;
 export const UC_KEEPALIVE_MAX_IDS = 256;
+/** Official S9r: safety poll cadence while the Watch is connected. */
+export const UC_SAFETY_POLL_MS = 30_000;
 export const UC_DATA_SUBMIT_DEADLINE_MS = 120_000;
 /** Bound for deferred closing replies: backlog (64) plus one poll's worth of busy rejections (64). */
 export const UC_PENDING_CLOSINGS_MAX = 128;
@@ -154,6 +156,8 @@ export class UserComputerProvider implements UserComputerTransport {
   private keepAliveSending = false;
   private proven = false;
   private pendingClosings: ExecFrameOut[] = [];
+  /** Some polled item was left unacknowledged because its closing reply could not be held. */
+  private unackedWaiting = false;
   private announcedStanding?: string;
   /** Official lastPolledAt (monotonic in daemon; wall clock here). */
   lastPolledAt = 0;
@@ -215,7 +219,12 @@ export class UserComputerProvider implements UserComputerTransport {
     // merge by concatenation (repeated `frames`; machineId/credential are reset per submit above).
     undefined, undefined, bodies => Buffer.concat(bodies));
     this.lastPolledAt = Date.now();
-    this.pollTimer = setInterval(() => { void this.pollOnce().catch(() => undefined); }, 250);
+    // Official polls on Watch connected / notify / heartbeat plus a 30 s safety poll (S9r, D:L177858,
+    // L177943, L178389–178403). A former 250 ms poll setInterval here put extra timer wake-ups next
+    // to the 500 ms keepalive tick: instrumented offline runs showed ours' tick timers firing earlier
+    // (mean +0.30 ms vs official +0.47…0.57 ms per tick), so the 6th tick after a heard keepalive
+    // (due exactly +3000 ms) sometimes missed by <1 ms and slipped one tick (+500 ms).
+    this.pollTimer = setInterval(() => { void this.pollOnce().catch(() => undefined); }, UC_SAFETY_POLL_MS);
     // Official keepAliveTick (~500ms) runs superviseBacklog then sendKeepAlives.
     // Official hc/yre tick is serial: the next tick is scheduled UC_KEEPALIVE_INTERVAL_MS after the
     // previous tick (including its keepalive submit) completes, not on a fixed grid.
@@ -378,7 +387,7 @@ export class UserComputerProvider implements UserComputerTransport {
       this.pollBusy = false;
       // Official pollOnce loops at once while acks are pending or the page was full
       // (D:L178459–178557), so a burst (e.g. 64 cancels) is drained in back-to-back polls, not one
-      // page per 250ms tick. Only once the provider loop is running (pollTimer).
+      // page per safety-poll tick. Only once the provider loop is running (pollTimer).
       const drain = polled && this.pollTimer !== undefined && !this.closed && this.pendingAcks.length > 0;
       if (this.pollAgain || drain) { this.pollAgain = false; setTimeout(() => void this.pollOnce().catch(() => undefined), drain ? 0 : 25); }
     }
@@ -493,12 +502,16 @@ export class UserComputerProvider implements UserComputerTransport {
   }
   /** Leave a polled queue item unacknowledged so the server redelivers it. */
   private unack(q: Queued): void {
+    this.unackedWaiting = true;
     this.seen.delete(q.id);
     const i = this.pendingAcks.lastIndexOf(q.id); if (i >= 0) this.pendingAcks.splice(i, 1);
   }
   /** Retry deferred closing replies in order while the lane accepts them. */
   private flushClosings(): void {
     while (this.pendingClosings.length && !this.closed && this.offerFrame(this.pendingClosings[0])) this.pendingClosings.shift();
+    // Items left unacknowledged for lack of room are fetched again by one poll as soon as room exists
+    // (event-driven; there is no fast poll timer, official polls on Watch events + 30 s safety poll).
+    if (this.unackedWaiting && this.closingRoom() > 0 && !this.closed) { this.unackedWaiting = false; void this.pollOnce().catch(() => undefined); }
   }
   /** Official rejectCredential(e): only the channel that is still current may be closed. */
   private rejectCredential(ch: { credential: string } | null): void {

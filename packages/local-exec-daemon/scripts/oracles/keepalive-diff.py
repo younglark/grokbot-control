@@ -21,13 +21,8 @@ Semantic data evidence (P3; replaces "ignore all data submits"):
   * named rule EXEC-ID: the inner exec `id` is a local sequence assigned at admission (it differs
     between fresh official runs when admissions in one poll race). Each side must use exactly one
     id per request and distinct ids across requests; the value itself is then replaced by '#'.
-  * named rule TICK-BOUNDARY: a keepalive due exactly 3000 ms after the previous one is heard is
-    picked by the 6th 500 ms serial tick after it, so both daemons sit on a sub-millisecond tie:
-    Node timers fire against libuv's integer-ms clock while due times use performance.now(). Measured in
-    ours (instrumented run, 20 runs): per-tick gaps 499.1–501.6 ms, 6th-tick margin +0.2…+5.7 ms; a
-    negative margin skips to the next tick (+500 ms). Official uses the same mechanism (D:yre/qr.schedule
-    setTimeout + monotonicNow, c9r 500, u9r 3000). One such shift of exactly one tick (±50 ms) per run,
-    never on the first keepalive, is accepted and counted; any other lateness still fails.
+  * TICK-BOUNDARY is NOT an allowed difference: a keepalive exactly one 500 ms tick off is reported as
+    'UNRESOLVED tick-boundary' and fails (exit 1) like any offset beyond the 300 ms tolerance.
 Overflow (8 active + 64 backlog + 200 busy, first submit stalled 10 s): all 200 busy items acknowledged
   and terminal on both sides, same error text, none started; keepalives/data not compared.
 Keepalives:
@@ -148,14 +143,14 @@ def main(argv):
     else:
         if [k['ids'] for k in ko] != [k['ids'] for k in ku]: bad.append(f'keepalive ids differ: {[k["ids"] for k in ko]} vs {[k["ids"] for k in ku]}')
         else:
-            shift = 0
             for i, (x, y) in enumerate(zip(ko, ku)):
-                d = (y['t'] - mu) - (x['t'] - mo) - shift
+                d = (y['t'] - mu) - (x['t'] - mo)
                 if abs(d) <= tol: continue
-                # TICK-BOUNDARY: see module doc. Exactly one 500 ms tick (±50 ms), not the first
-                # keepalive, at most once per run; later keepalives must keep the shifted cadence.
-                if i > 0 and shift == 0 and abs(abs(d) - TICK_MS) <= TICK_BAND_MS:
-                    shift = TICK_MS if d > 0 else -TICK_MS; tick_boundary += 1; continue
+                # One tick (500 ms ±50) off is labelled UNRESOLVED tick-boundary and still fails.
+                if i > 0 and abs(abs(d) - TICK_MS) <= TICK_BAND_MS:
+                    tick_boundary += 1
+                    bad.append(f'UNRESOLVED tick-boundary: keepalive #{i} offset {x["t"] - mo} vs {y["t"] - mu} (one {TICK_MS} ms tick)')
+                    continue
                 bad.append(f'keepalive offset {x["t"] - mo} vs {y["t"] - mu} > {tol}ms')
     if sc == 'cancel' and o.get('sh8') != u.get('sh8'): bad.append('cancelled backlog frames differ')
     if sc == 'stall-cancel':

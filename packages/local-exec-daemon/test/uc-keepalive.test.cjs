@@ -240,7 +240,7 @@ test('P3 keepalive-diff semantic data rules (negative + allowed-difference cases
   no(run('pressure', (u) => { u.keepalives.push({ t: u.marks.cancel + 1000, ids: ['sh9'] }); })); // cancelled id still keepalived
 });
 
-test('TICK-BOUNDARY / overflow comparator rules: deliberate lateness and dropped busy terminals fail', () => {
+test('strict keepalive gate (one-tick late = UNRESOLVED fail) / overflow rules: deliberate lateness and dropped busy terminals fail', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kad4-'));
   const run = (s, mut) => { const o = JSON.parse(fs.readFileSync(path.join(dir, 'keepalive-official', `${s}.json`)));
     const u = JSON.parse(JSON.stringify(o)); mut(u);
@@ -248,18 +248,47 @@ test('TICK-BOUNDARY / overflow comparator rules: deliberate lateness and dropped
     return spawnSync('python3', [path.join(dir, 'keepalive-diff.py'), a, b], { encoding: 'utf8' }); };
   const ok = (r) => assert.equal(r.status, 0, r.stdout); const no = (r) => assert.notEqual(r.status, 0, r.stdout);
   const ka = (u, i, dt) => { u.keepalives[i].t += dt; };
-  const r = run('rotation', (u) => ka(u, 2, 508)); ok(r); assert.match(r.stdout, /TICK-BOUNDARY=1/);
+  const r = run('rotation', (u) => ka(u, 2, 508)); no(r); assert.match(r.stdout, /UNRESOLVED tick-boundary/);  // one-tick late is never green
+  no(run('rotation', (u) => ka(u, 2, 500)));
   no(run('rotation', (u) => ka(u, 2, 400)));                 // late but not one tick
   no(run('rotation', (u) => ka(u, 2, 620)));                 // more than one tick ±50
   no(run('rotation', (u) => ka(u, 2, 1000)));                // two ticks
   no(run('rotation', (u) => { ka(u, 0, 500); ka(u, 1, 500); ka(u, 2, 500); }));  // first keepalive never
   no(run('rotation', (u) => { ka(u, 1, 500); ka(u, 2, 1000); }));                 // a second shift
-  ok(run('rotation', (u) => { ka(u, 1, 500); ka(u, 2, 500); }));                  // one shift, cadence kept
+  no(run('rotation', (u) => { ka(u, 1, 500); ka(u, 2, 500); }));                  // shifted cadence also fails
   ok(run('overflow', () => {}));
   no(run('overflow', (u) => { u.terminal = u.terminal.slice(0, 184); }));       // acked but no terminal (t104 finding)
   no(run('overflow', (u) => { u.acked = u.acked.slice(0, 150); u.terminal = u.terminal.filter((t) => u.acked.includes(t.requestId)); }));
   no(run('overflow', (u) => { u.busyStarted = ['busy3']; }));
   no(run('overflow', (u) => { u.terminal[0].error = 'other'; }));
+});
+
+test('rotation tick slip root cause: provider keeps no sub-30s poll timer beside the 500 ms keepalive tick (official S9r)', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'uc-cad-')); const old = process.env.SAND_DATA_ROOT; process.env.SAND_DATA_ROOT = root;
+  const oSI = global.setInterval, oST = global.setTimeout; const intervals = [], timeouts = [];
+  global.setInterval = (fn, ms, ...a) => { intervals.push(ms); return oSI(fn, ms, ...a); };
+  global.setTimeout = (fn, ms, ...a) => { timeouts.push(ms); return oST(fn, ms, ...a); };
+  try {
+    const p = new UserComputerProvider({ backendUrl: 'http://127.0.0.1:9', machineId: 'm', credential: 'c', root, permission: 'always',
+      hello: { label: 'lab', localRoot: root, terminalsFolder: root, standing: 'always', variant: 'lab', supervised: true, serverAuthoritative: false } });
+    p.client = { pollGrokBotUserComputerRequests: async () => ({ requests: [] }), submitGrokBotUserComputerResponses: async (r) => ({ acceptedCount: r.frames.length }), withdrawGrokBotUserComputerPresence: async () => ({}),
+      watchGrokBotUserComputerRequests: async function* (_, { signal }) { yield { event: { case: 'connected', value: {} } }; await new Promise((r) => { if (signal.aborted) r(); else signal.addEventListener('abort', r, { once: true }); }); } };
+    const running = p.start(); while (!p.proven) await new Promise((r) => setImmediate(r));
+    global.setInterval = oSI; global.setTimeout = oST;
+    assert.deepEqual(intervals, [uc.UC_SAFETY_POLL_MS]); assert.equal(uc.UC_SAFETY_POLL_MS, 30000);
+    assert.ok(timeouts.includes(500), 'keepalive tick 500 ms');
+    await p.stop(); await running;
+  } finally { global.setInterval = oSI; global.setTimeout = oST; process.env.SAND_DATA_ROOT = old; fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('unacknowledged busy items are re-polled once closing room exists (event-driven, no fast poll timer)', async () => {
+  const { p } = mk(); let polls = 0; p.pollOnce = async () => { polls++; };
+  p.replies = { offer: () => false, enqueue: async () => {}, available: false };
+  p.pendingClosings = Array.from({ length: 128 }, (_, i) => ({ kind: 'control', requestId: `x${i}`, message: { throw: { id: 0, error: 'e' } } }));
+  p.seen.add('q'); p.pendingAcks.push('q'); p.unack({ id: 'q', requestId: 'r', kind: 2 });
+  p.flushClosings(); assert.equal(polls, 0, 'no room yet');
+  p.replies.offer = () => true; p.flushClosings();
+  assert.equal(p.pendingClosings.length, 0); assert.equal(polls, 1); p.flushClosings(); assert.equal(polls, 1, 'once');
 });
 
 const labOk = fs.existsSync('/usr/bin/bwrap') && fs.existsSync('/workspace/local-exec-offline-lab-0793/input/main.cjs');
