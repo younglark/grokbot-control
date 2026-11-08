@@ -299,7 +299,7 @@ Constraint analysis: with no-ACK-then-drop and a FIFO queue that only advances o
 Fix (provider.ts): closing replies are small and fixed-shape (requestId + shared constant text). The deferral is now budgeted by accounted bytes (`closingCost` = 96 + 2·len(requestId), total ≤ 1 MiB = 1/8 of the 8 MiB lane) and count (≤ 8192) instead of 128 entries: ≥ 4681 closings even with 64-char ids. Beyond the budget behaviour is unchanged (unACK, redelivered, never dropped). Not changed: poll limit (an earlier closed test pins it), queue semantics, fake peer, pressure, timing, comparator.
 
 After fix:
-- cancel-overflow probe (scenario added to scripts/oracles/uc-keepalive.cjs as in the reviewer's probe; assert-cancel.py added; runner no longer truncates stdout at 64 KiB): 6 independent ours runs (3 + 3) all PASS, busyAcked 200, abort 5–7 ms after cancel, USER_ABORT exit; 3 official runs PASS (abort 4–6 ms).
+- cancel-overflow probe (scenario added to scripts/oracles/uc-keepalive.cjs as in the reviewer's probe; assert-cancel.py added; runner no longer truncates stdout at 64 KiB): final code: 4 independent ours runs (3 probe + 1 in npm test) all PASS, busyAcked 200, abort 5–6 ms after cancel (3 earlier runs of a discarded poll-limit-64 variant also passed, not counted), USER_ABORT exit; 3 official runs PASS (abort 4–6 ms) + 1 in npm test.
 - npm test 127/127 (124 + budget regression + cancel-overflow oracle official + ours).
 - r3 46/36/10/0, lifecycle PASS; 8 scenarios vs golden in npm test; overflow 3 fresh pairs SAME 200/200; rotation 5 fresh strict pairs SAME, TICK-BOUNDARY=0.
 
