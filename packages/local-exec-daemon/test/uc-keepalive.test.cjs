@@ -309,18 +309,29 @@ test('closing deferral is budgeted (count + bytes): at the budget items stay unA
   assert.ok(p.pendingClosings.reduce((n, f) => n + uc.closingCost(f.requestId), 0) <= uc.UC_PENDING_CLOSINGS_MAX_BYTES);
   assert.equal(p.storeClosing({ id: 'z', requestId: 'z', kind: 2 }, 'busy'), false); assert.equal(p.pendingClosings.length, held);
 });
-for (const who of ['official', 'ours']) {
-  test(`oracle cancel-overflow (${who}): 200 busy ACKed and the active target cancel aborts within 300 ms`, { skip: !(fs.existsSync('/usr/bin/bwrap') && fs.existsSync(lab)) }, () => {
+const coCases = { 'cancel-overflow': { busy: 200, check: 'assert-cancel.py' }, 'cancel-overflow-long': { busy: 520, check: 'assert-cancel.py' }, 'cancel-overflow-backlog': { busy: 488, check: 'assert-terminal.py' } };
+for (const [sc, c] of Object.entries(coCases)) for (const who of ['official', 'ours']) {
+  test(`oracle ${sc} (${who}): every busy ACKed and the cancel is reachable / its terminal retained`, { skip: !(fs.existsSync('/usr/bin/bwrap') && fs.existsSync(lab)) }, () => {
     const env = { ...process.env }; if (who === 'ours') env.REPO = path.resolve(__dirname, '..', '..', '..'); else delete env.REPO;
-    const r = spawnSync('python3', [path.join(dir, 'run-background.py'), 'uc-keepalive.cjs', 'cancel-overflow'], { env, encoding: 'utf8', timeout: 70000, maxBuffer: 64 << 20 });
+    const r = spawnSync('python3', [path.join(dir, 'run-background.py'), 'uc-keepalive.cjs', sc], { env, encoding: 'utf8', timeout: 70000, maxBuffer: 256 << 20 });
     assert.equal(r.status, 0, r.stderr);
     const line = r.stdout.split('\n').find((l) => l.startsWith('{"scenario')); const d = JSON.parse(line);
-    assert.equal(d.busyAcked, 200);
+    assert.equal(d.busyAcked, c.busy);
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'co-')); const f = path.join(tmp, `${who}.json`); fs.writeFileSync(f, line);
-    const a = spawnSync('python3', [path.join(dir, 'assert-cancel.py'), f], { encoding: 'utf8' }); assert.equal(a.status, 0, a.stdout);
+    const a = spawnSync('python3', [path.join(dir, c.check), f], { encoding: 'utf8' }); assert.equal(a.status, 0, a.stdout);
   });
 }
-
+test('UC reply lane matches official oee: unbounded storage (producers never wait), take limited to 256 frames, one frame per request per round', async () => {
+  const sent = []; let release; const q = new ReplyQueue(async (b) => { sent.push(b); if (sent.length === 1) await new Promise((r) => { release = r; }); }, () => {}, Infinity, Infinity, (b) => b, { frames: 256, bytes: 8 << 20 });
+  await q.enqueue(Buffer.from('first'), ['s']);
+  for (let i = 0; i < 2000; i++) await q.enqueue(Buffer.from('o' + i), ['out']);
+  for (let i = 0; i < 600; i++) assert.equal(q.offer(Buffer.from('c' + i), ['busy' + i]), true);
+  assert.equal(q.available, true);
+  release(); await new Promise((r) => setTimeout(r, 20));
+  const second = sent[1]; assert.equal(second.length, 256);
+  assert.deepEqual(second.slice(0, 3).map(String), ['o0', 'c0', 'c1'], 'round-robin across request lanes');
+  assert.equal(second.filter((b) => String(b).startsWith('o')).length, 1, 'one frame of a lane per round');
+});
 // ---- t108 atomic cancel of backlog entries (reserve actual frames before removal/ACK) ----
 test('cancel of backlog entries is atomic: reserved by actual frame cost, else nothing removed and cancel stays unACKed', async () => {
   const { GrokBotUserComputerQueuedRequest } = require('../dist/generated/aiserver.v1_pb.js');

@@ -126,6 +126,8 @@ export const UC_DATA_SUBMIT_DEADLINE_MS = 120_000;
  * held compactly and budgeted by bytes (1/8 of the 8 MiB lane) and count, instead of by a small count.
  */
 export const UC_PENDING_CLOSINGS_MAX = 8192;
+/** Official tgt (D:L177848). */
+export const UC_POLL_LIMIT = 64;
 export const UC_PENDING_CLOSINGS_MAX_BYTES = 1 << 20;
 /** Accounted cost of one deferred closing reply: requestId (UTF-16) + fixed object overhead. */
 export function closingCost(requestId: string): number { return 96 + 2 * requestId.length; }
@@ -230,7 +232,9 @@ export class UserComputerProvider implements UserComputerTransport {
     },
     // Official replies.take() submits every ready frame in one batch; encoded protobuf requests
     // merge by concatenation (repeated `frames`; machineId/credential are reset per submit above).
-    undefined, undefined, bodies => Buffer.concat(bodies));
+    // Official reply lanes (oee) have no storage cap: every frame is held in memory until submitted,
+    // producers never wait, and every polled item is ACKed. Only one submit is limited (256 / 8 MiB).
+    Infinity, Infinity, bodies => Buffer.concat(bodies), { frames: 256, bytes: 8 * 1024 * 1024 });
     this.lastPolledAt = Date.now();
     // Official polls on Watch connected / notify / heartbeat plus a 30 s safety poll (S9r, D:L177858,
     // L177943, L178389–178403). A former 250 ms poll setInterval here put extra timer wake-ups next
@@ -339,11 +343,11 @@ export class UserComputerProvider implements UserComputerTransport {
         this.announcedStanding = liveStanding;
         this.abort.abort(); this.abort = new AbortController();
       }
-      const slots = Math.max(0, UC_INFLIGHT_MAX + UC_BACKLOG_MAX - this.active.size - this.backlog.length);
       // Continue polling at capacity: cancel controls must remain reachable.
       const res = await this.client.pollGrokBotUserComputerRequests({
         machineId: ch.machineId, credential: ch.credential, ackIds: acks,
-        limit: Math.min(this.opts.pollLimit ?? UC_BACKLOG_MAX, Math.max(1, slots)),
+        // Official tgt=64 on every poll regardless of local capacity (D:L177848, L178474).
+        limit: this.opts.pollLimit ?? UC_POLL_LIMIT,
       }, {timeoutMs: 2000});
       const queued = res.requests.map(parseQueued).filter(q => q.id);
       // Only forget queue ids after the peer confirms receipt of prior acks.

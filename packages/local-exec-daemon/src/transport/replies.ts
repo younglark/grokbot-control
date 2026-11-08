@@ -26,7 +26,10 @@ export class ReplyQueue {
    * (repeated `frames`); lanes without it (Box JSON) keep one body per submit.
    */
   constructor(private send: (body: Buffer, signal: AbortSignal) => Promise<void>, private reject: (e: HttpStatusError) => boolean | void,
-    readonly maxBytes = 8 * 1024 * 1024, readonly maxFrames = 256, private merge?: (bodies: Buffer[]) => Buffer) {}
+    readonly maxBytes = 8 * 1024 * 1024, readonly maxFrames = 256, private merge?: (bodies: Buffer[]) => Buffer,
+    /** Per-submit batch limits (official oee.take: X7e=256 frames, K_=8 MiB). Storage itself is
+     * bounded by maxBytes/maxFrames, which the UC lane sets to Infinity like official (unbounded lanes). */
+    readonly batch: { frames: number; bytes: number } = { frames: maxFrames, bytes: maxBytes }) {}
   // Reserve capacity for already-admitted requests (start/exit/control frames).
   get available(): boolean { return !this.stopped && !this.failure && this.waiters.length === 0 && this.items.length < Math.max(1, this.maxFrames - 32) && this.bytes < this.maxBytes * 0.75; }
   enqueue(body: Buffer, ids: string[] = []): Promise<void> {
@@ -59,7 +62,7 @@ export class ReplyQueue {
     if (this.running || this.stopped || this.failure) return;
     this.running = true;
     while (this.items.length && !this.stopped && !this.failure) {
-      const batch = this.merge ? this.items.slice(0, this.maxFrames) : [this.items[0]];
+      const batch = this.merge ? this.takeBatch() : [this.items[0]];
       const ids = [...new Set(batch.flatMap(b => b.ids))];
       if (this.inflight.length !== batch.length || this.inflight.some((b, i) => b !== batch[i]) || !this.submitting.length) { this.submittingSince = performance.now(); }
       this.inflight = batch; this.submitting = ids;
@@ -88,6 +91,24 @@ export class ReplyQueue {
       }
     }
     this.running = false;
+  }
+  /**
+   * Official oee.take(): fill one submit by rounds, one frame per request lane per round (lanes in
+   * order of first queued frame), until 256 frames / 8 MiB; a lane's frames stay in their own order.
+   */
+  private takeBatch(): { body: Buffer; attempts: number; ids: string[] }[] {
+    const lanes = new Map<string, { body: Buffer; attempts: number; ids: string[] }[]>();
+    for (const it of this.items) { const k = it.ids.join("\u0000"); const l = lanes.get(k); if (l) l.push(it); else lanes.set(k, [it]); }
+    const out: { body: Buffer; attempts: number; ids: string[] }[] = []; let bytes = 0;
+    for (let more = true; more;) {
+      more = false;
+      for (const l of lanes.values()) {
+        const it = l[0]; if (!it) continue;
+        if (out.length > 0 && (out.length >= this.batch.frames || bytes + it.body.length > this.batch.bytes)) continue;
+        l.shift(); out.push(it); bytes += it.body.length; more = true;
+      }
+    }
+    return out;
   }
   /** Request ids holding queued (not currently submitting) replies (official replies.requestIds()). */
   requestIds(): Set<string> {

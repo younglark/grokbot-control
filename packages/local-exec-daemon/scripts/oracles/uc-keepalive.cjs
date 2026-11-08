@@ -244,7 +244,7 @@ function startUcServer(){
 (async()=>{
  assert(!fs.existsSync('/home/box')&&!fs.existsSync('/workspace'),'isolation');
  const scenario=process.argv[2]||'backlog';
- if(scenario==='cancel-overflow'||scenario==='overflow'||scenario==='pressure')ctl.submitDelayMs=10000;else if(scenario==='stall'||scenario==='exhausted'||scenario==='stall-cancel') ctl.submitDelayMs=7000;
+ if(scenario.startsWith('cancel-overflow')||scenario==='overflow'||scenario==='pressure')ctl.submitDelayMs=10000;else if(scenario==='stall'||scenario==='exhausted'||scenario==='stall-cancel') ctl.submitDelayMs=7000;
  if(scenario==='rotation') ctl.rotation=true;
  if(scenario==='exhausted') ctl.keepaliveError=true;
  const uc=startUcServer();await uc.listen();const base=mkBase('ka-'+scenario);
@@ -258,16 +258,19 @@ function startUcServer(){
  const killAt=(process.argv.find(a=>a.startsWith('--kill-at='))||'').slice(10);if(killAt)setTimeout(()=>child.kill('SIGKILL'),Number(killAt));
  try{
   child.send({type:'sand-local-exec-file-key',key,computerId:SYN_MACHINE});await until(()=>uc.log.some(x=>x.kind==='watch'));
-  if(scenario==='cancel-overflow'){
+  // cancel-overflow: 200 busy (t106 review); -long: 520 busy with 1024-char ids, active cancel (t107 over-budget);
+  // -backlog: 488 long busy, cancel of a 2000-char-id backlog entry, its terminal must survive (t107 terminal loss).
+  const CO=scenario==='cancel-overflow-long'?{n:520,id:i=>'busy'+String(i).padStart(4,'0')+'x'.repeat(1016),target:'target',obs:3000}:scenario==='cancel-overflow-backlog'?{n:488,id:i=>'busy'+String(i).padStart(4,'0')+'x'.repeat(1016),target:'backlogTarget'.padEnd(2000,'z'),obs:9000}:{n:200,id:i=>'busy'+i,target:'target',obs:3000};
+  if(scenario.startsWith('cancel-overflow')){
     const command=`/usr/bin/python3 -c 'import os,time
 for _ in range(1000): os.write(1,b"x"*4096); time.sleep(.003)
 time.sleep(20)'`;
     uc.enqueueExec('target',{id:1,shellStreamArgs:{command,timeout:25000}});marks.enqueued=Date.now()-T0;
     await until(()=>uc.log.some(x=>x.kind==='submit'&&!x.keepalive));
     for(let i=1;i<8;i++)uc.enqueueExec('active'+i,{id:1,shellStreamArgs:{command,timeout:25000}});await delay(1000);
-    for(let i=0;i<64;i++)uc.enqueueExec('bk'+i,{id:1,shellStreamArgs:{command:'echo BACKLOG',timeout:5000}});await delay(1500);
-    for(let i=0;i<200;i++)uc.enqueueExec('busy'+i,{id:1,shellStreamArgs:{command:'echo SHOULD_NOT_START',timeout:5000}});await delay(1000);
-    ctl.submitDelayMs=0;marks.cancel=Date.now()-T0;uc.enqueueCancel('target');await delay(3000);
+    for(let i=0;i<64;i++)uc.enqueueExec(i===0&&CO.target!=='target'?CO.target:'bk'+i,{id:1,shellStreamArgs:{command:'echo BACKLOG',timeout:5000}});await delay(1500);
+    for(let i=0;i<CO.n;i++)uc.enqueueExec(CO.id(i),{id:1,shellStreamArgs:{command:'echo SHOULD_NOT_START',timeout:5000}});await delay(1000);
+    ctl.submitDelayMs=0;marks.cancel=Date.now()-T0;uc.enqueueCancel(CO.target);await delay(CO.obs);
   }else if(scenario==='overflow'){
     // Independent review t104 probe: 8 active + 64 backlog + 200 busy while the first submit stalls 10s.
     for(let i=0;i<8;i++)uc.enqueueExec('sh'+i,{id:1,shellStreamArgs:{command:`/usr/bin/python3 -c 'import os,time
@@ -322,7 +325,7 @@ time.sleep(10)'`,timeout:20000}});marks.enqueued=Date.now()-T0;await delay(1000)
     const acked=[...new Set(uc.log.filter(x=>x.kind==='poll').flatMap(x=>x.acks||[]).filter(x=>x.startsWith('busy')))];
     const started=Object.keys(data).filter(k=>k.startsWith('busy')&&(data[k]||[]).some(m=>m&&m.shellStream&&m.shellStream.start));
     console.log(JSON.stringify({scenario,marks,acked,terminal,busyStarted:started,keepalives,daemonAlive:alive,results}));
-  } else if(scenario==='cancel-overflow'){const acked=[...new Set(uc.log.filter(x=>x.kind==='poll').flatMap(x=>x.acks||[]))];const targetData=subs.flatMap(s=>s.rawFrames).filter(f=>f.requestId==='target');console.log(JSON.stringify({scenario,marks,firstSubmit:subs.find(s=>!s.keepalive),pollItemsAfterCancel:uc.log.filter(x=>x.kind==='poll-items'&&x.t>=marks.cancel),busyAcked:acked.filter(x=>x.startsWith('busy')).length,cancelAcked:acked.includes('cancel-target'),targetExit:targetData.filter(f=>f.message?.shellStream?.exit).map(f=>f.message),closes,polls,daemonAlive:alive,results}));}else console.log(JSON.stringify({scenario,marks,keepalives,firstNonKeepalive,dataSubmits,dataSeq,sh8,data,watches,closes,polls,daemonAlive:alive,results}));
+  } else if(scenario.startsWith('cancel-overflow')){const acked=[...new Set(uc.log.filter(x=>x.kind==='poll').flatMap(x=>x.acks||[]))];const targetData=subs.flatMap(s=>s.rawFrames).filter(f=>f.requestId===CO.target);console.log(JSON.stringify({scenario,marks,firstSubmit:subs.find(s=>!s.keepalive),busyCount:CO.n,queuedTargetTerminal:targetData.map(f=>f.message),targetStarted:targetData.some(f=>f.message?.shellStream?.start),pollItemsAfterCancel:uc.log.filter(x=>x.kind==='poll-items'&&x.t>=marks.cancel),busyAcked:acked.filter(x=>x.startsWith('busy')).length,cancelAcked:acked.includes('cancel-'+CO.target),targetExit:targetData.filter(f=>f.message?.shellStream?.exit).map(f=>f.message),closes,polls,daemonAlive:alive,results}));}else console.log(JSON.stringify({scenario,marks,keepalives,firstNonKeepalive,dataSubmits,dataSeq,sh8,data,watches,closes,polls,daemonAlive:alive,results}));
   if(!alive)process.exitCode=3;
  }finally{killedByProbe=true;child.kill('SIGTERM');await Promise.race([ended,delay(2500)]);if(child.exitCode===null)child.kill('SIGKILL');uc.closeWatch();await uc.close();if(process.env.DEBUG_OUT)console.error(out)}
 })().catch(e=>{console.error(e);process.exitCode=1});
