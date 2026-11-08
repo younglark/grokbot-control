@@ -1,0 +1,368 @@
+{
+ "scenario": "rotation",
+ "marks": {
+  "enqueued": 375,
+  "rotate": 1849,
+  "newWatch": 2394,
+  "old401": 3849,
+  "post": 4050
+ },
+ "keepalives": [
+  {
+   "t": 1840,
+   "ids": [
+    "sh8"
+   ]
+  },
+  {
+   "t": 4345,
+   "ids": [
+    "sh8",
+    "post"
+   ]
+  },
+  {
+   "t": 7352,
+   "ids": [
+    "sh8",
+    "post"
+   ]
+  }
+ ],
+ "firstNonKeepalive": {
+  "sh0": 407,
+  "sh1": 460,
+  "sh2": 460,
+  "sh3": 460,
+  "sh4": 460,
+  "sh5": 460,
+  "sh6": 460,
+  "sh7": 460
+ },
+ "dataSubmits": {
+  "sh0": 3,
+  "sh1": 3,
+  "sh2": 3,
+  "sh3": 3,
+  "sh4": 3,
+  "sh5": 3,
+  "sh6": 3,
+  "sh7": 3
+ },
+ "dataSeq": [
+  [
+   407,
+   1
+  ],
+  [
+   460,
+   7
+  ],
+  [
+   3388,
+   1
+  ],
+  [
+   3390,
+   7
+  ],
+  [
+   6389,
+   1
+  ],
+  [
+   6391,
+   7
+  ]
+ ],
+ "sh8": [],
+ "data": {
+  "sh0": [
+   {
+    "id": 1,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 17
+   },
+   {
+    "heartbeat": {
+     "id": 1
+    }
+   },
+   {
+    "heartbeat": {
+     "id": 1
+    }
+   }
+  ],
+  "sh1": [
+   {
+    "id": 2,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 17
+   },
+   {
+    "heartbeat": {
+     "id": 2
+    }
+   },
+   {
+    "heartbeat": {
+     "id": 2
+    }
+   }
+  ],
+  "sh2": [
+   {
+    "id": 3,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 17
+   },
+   {
+    "heartbeat": {
+     "id": 3
+    }
+   },
+   {
+    "heartbeat": {
+     "id": 3
+    }
+   }
+  ],
+  "sh3": [
+   {
+    "id": 4,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 17
+   },
+   {
+    "heartbeat": {
+     "id": 4
+    }
+   },
+   {
+    "heartbeat": {
+     "id": 4
+    }
+   }
+  ],
+  "sh4": [
+   {
+    "id": 5,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 17
+   },
+   {
+    "heartbeat": {
+     "id": 5
+    }
+   },
+   {
+    "heartbeat": {
+     "id": 5
+    }
+   }
+  ],
+  "sh5": [
+   {
+    "id": 6,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 17
+   },
+   {
+    "heartbeat": {
+     "id": 6
+    }
+   },
+   {
+    "heartbeat": {
+     "id": 6
+    }
+   }
+  ],
+  "sh6": [
+   {
+    "id": 7,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 17
+   },
+   {
+    "heartbeat": {
+     "id": 7
+    }
+   },
+   {
+    "heartbeat": {
+     "id": 7
+    }
+   }
+  ],
+  "sh7": [
+   {
+    "id": 8,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 17
+   },
+   {
+    "heartbeat": {
+     "id": 8
+    }
+   },
+   {
+    "heartbeat": {
+     "id": 8
+    }
+   }
+  ]
+ },
+ "watches": [
+  {
+   "t": 372,
+   "label": "old"
+  },
+  {
+   "t": 2391,
+   "label": "new"
+  }
+ ],
+ "closes": [
+  {
+   "t": 407,
+   "ids": [
+    "sh0"
+   ],
+   "ended": true
+  },
+  {
+   "t": 460,
+   "ids": [
+    "sh1",
+    "sh2",
+    "sh3",
+    "sh4",
+    "sh5",
+    "sh6",
+    "sh7"
+   ],
+   "ended": true
+  },
+  {
+   "t": 3388,
+   "ids": [
+    "sh0"
+   ],
+   "ended": true
+  },
+  {
+   "t": 3390,
+   "ids": [
+    "sh1",
+    "sh2",
+    "sh3",
+    "sh4",
+    "sh5",
+    "sh6",
+    "sh7"
+   ],
+   "ended": true
+  },
+  {
+   "t": 3841,
+   "ids": [
+    "sh8"
+   ],
+   "ended": true
+  },
+  {
+   "t": 4346,
+   "ids": [
+    "sh8",
+    "post"
+   ],
+   "ended": true
+  },
+  {
+   "t": 6389,
+   "ids": [
+    "sh0"
+   ],
+   "ended": true
+  },
+  {
+   "t": 6391,
+   "ids": [
+    "sh1",
+    "sh2",
+    "sh3",
+    "sh4",
+    "sh5",
+    "sh6",
+    "sh7"
+   ],
+   "ended": true
+  },
+  {
+   "t": 7352,
+   "ids": [
+    "sh8",
+    "post"
+   ],
+   "ended": true
+  }
+ ],
+ "polls": 8,
+ "daemonAlive": true,
+ "results": [
+  {
+   "name": "rotation",
+   "status": "pass"
+  }
+ ]
+}

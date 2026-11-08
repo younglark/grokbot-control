@@ -16,8 +16,16 @@ export class ReplyQueue {
   private waiters: { body: Buffer; ids: string[]; resolve: () => void; reject: (e: Error) => void }[] = [];
   private waiterBytes = 0;
   failure?: Error;
-  constructor(private send: (body: Buffer) => Promise<void>, private reject: () => void,
-    readonly maxBytes = 8 * 1024 * 1024, readonly maxFrames = 256) {}
+  private submitAbort?: AbortController;
+  /** Items in the submit currently in flight (a prefix of `items`). */
+  private inflight: { body: Buffer; attempts: number; ids: string[] }[] = [];
+  /**
+   * `merge`, when given, coalesces every queued item into one submit, like official
+   * `replies.take()` (daemon.formatted.cjs L178680). UC protobuf bodies merge by concatenation
+   * (repeated `frames`); lanes without it (Box JSON) keep one body per submit.
+   */
+  constructor(private send: (body: Buffer, signal: AbortSignal) => Promise<void>, private reject: () => void,
+    readonly maxBytes = 8 * 1024 * 1024, readonly maxFrames = 256, private merge?: (bodies: Buffer[]) => Buffer) {}
   // Reserve capacity for already-admitted requests (start/exit/control frames).
   get available(): boolean { return !this.stopped && !this.failure && this.waiters.length === 0 && this.items.length < Math.max(1, this.maxFrames - 32) && this.bytes < this.maxBytes * 0.75; }
   enqueue(body: Buffer, ids: string[] = []): Promise<void> {
@@ -41,15 +49,27 @@ export class ReplyQueue {
     if (this.running || this.stopped || this.failure) return;
     this.running = true;
     while (this.items.length && !this.stopped && !this.failure) {
-      const item = this.items[0];
-      if (this.submitting !== item.ids) { this.submitting = item.ids; this.submittingSince = performance.now(); }
-      try { await this.send(item.body); this.submitting = []; this.items.shift(); this.bytes -= item.body.length; this.admitWaiters(); }
+      const batch = this.merge ? this.items.slice(0, this.maxFrames) : [this.items[0]];
+      const ids = [...new Set(batch.flatMap(b => b.ids))];
+      if (this.inflight.length !== batch.length || this.inflight.some((b, i) => b !== batch[i]) || !this.submitting.length) { this.submittingSince = performance.now(); }
+      this.inflight = batch; this.submitting = ids;
+      const body = this.merge && batch.length > 1 ? this.merge(batch.map(b => b.body)) : batch[0].body;
+      const ac = new AbortController(); this.submitAbort = ac;
+      try {
+        await this.send(body, ac.signal); this.submitting = []; this.submitAbort = undefined; this.inflight = [];
+        for (const b of batch) { const i = this.items.indexOf(b); if (i >= 0) { this.items.splice(i, 1); this.bytes -= b.body.length; } }
+        this.admitWaiters();
+      }
       catch (e) {
-        item.attempts++; this.submitting = [];
+        this.submitAbort = undefined; this.submitting = []; this.inflight = [];
+        // Aborted because every request in this batch was cancelled (drop): it is already gone.
+        if (ac.signal.aborted && !batch.some(b => this.items.includes(b))) continue;
+        if (this.stopped) break;
+        batch.forEach(b => b.attempts++);
         if (e instanceof HttpStatusError && (e.status === 401 || e.status === 403)) {
           this.failure = e; this.reject(); break;
         }
-        this.timer = setTimeout(() => { this.running = false; void this.pump(); }, Math.min(2000, 100 * 2 ** Math.min(item.attempts, 5)));
+        this.timer = setTimeout(() => { this.running = false; void this.pump(); }, Math.min(2000, 100 * 2 ** Math.min(batch[0].attempts, 5)));
         return;
       }
     }
@@ -58,9 +78,35 @@ export class ReplyQueue {
   /** Request ids holding queued (not currently submitting) replies (official replies.requestIds()). */
   requestIds(): Set<string> {
     const out = new Set<string>();
-    this.items.forEach((it, i) => { if (i === 0 && this.submitting === it.ids && this.submitting.length) return; it.ids.forEach(id => out.add(id)); });
+    this.items.forEach(it => { if (this.inflight.includes(it)) return; it.ids.forEach(id => out.add(id)); });
     this.waiters.forEach(w => w.ids.forEach(id => out.add(id)));
     return out;
+  }
+  /**
+   * Official replies.drop(requestId) + submitAbort: remove queued replies that belong only to
+   * cancelled requests, and abort the in-flight submit when every id in it is cancelled. Batches
+   * that also carry other requests' frames are kept (their slow submit keeps the 120s deadline).
+   */
+  drop(isCancelled: (id: string) => boolean): number {
+    const only = (ids: string[]) => ids.length > 0 && ids.every(isCancelled);
+    let n = 0;
+    // The in-flight submit is aborted (and its items dropped) only when every item in it is cancelled;
+    // a mixed batch keeps going under the 120s deadline.
+    const abortInflight = this.inflight.length > 0 && this.inflight.every(it => only(it.ids));
+    for (let i = this.items.length - 1; i >= 0; i--) {
+      const it = this.items[i];
+      if (!only(it.ids)) continue;
+      if (this.inflight.includes(it) && !abortInflight) continue;
+      this.items.splice(i, 1); this.bytes -= it.body.length; n++;
+    }
+    if (abortInflight) this.submitAbort?.abort();
+    for (let i = this.waiters.length - 1; i >= 0; i--) {
+      const w = this.waiters[i];
+      if (!only(w.ids)) continue;
+      this.waiters.splice(i, 1); this.waiterBytes -= w.body.length; w.resolve(); n++;
+    }
+    if (n) this.admitWaiters();
+    return n;
   }
   resume(): void { if (this.stopped) return; this.failure=undefined; void this.pump(); }
   async drain(ms = 1500): Promise<boolean> {
@@ -69,7 +115,7 @@ export class ReplyQueue {
     return this.items.length === 0 && this.waiters.length === 0;
   }
   stop(): void {
-    this.stopped = true; clearTimeout(this.timer);
+    this.stopped = true; clearTimeout(this.timer); this.submitAbort?.abort();
     this.waiters.splice(0).forEach(w=>w.reject(new Error("reply shutdown deadline"))); this.waiterBytes=0;
   }
 }

@@ -1,1 +1,113 @@
-{"scenario":"exhausted","marks":{"enqueued":312},"keepalives":[{"t":1781,"ids":["one"]},{"t":6787,"ids":["one"]}],"firstNonKeepalive":{"one":332},"dataSubmits":{"one":2},"dataSeq":[[332,1],[7334,1]],"sh8":[],"polls":38,"results":[{"name":"exhausted","status":"pass"}]}
+{
+ "scenario": "exhausted",
+ "marks": {
+  "enqueued": 339
+ },
+ "keepalives": [
+  {
+   "t": 1812,
+   "ids": [
+    "one"
+   ]
+  },
+  {
+   "t": 6820,
+   "ids": [
+    "one"
+   ]
+  }
+ ],
+ "firstNonKeepalive": {
+  "one": 365
+ },
+ "dataSubmits": {
+  "one": 4
+ },
+ "dataSeq": [
+  [
+   365,
+   1
+  ],
+  [
+   7369,
+   3
+  ]
+ ],
+ "sh8": [],
+ "data": {
+  "one": [
+   {
+    "id": 1,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 1
+   },
+   {
+    "id": 1,
+    "shellStream": {
+     "stdout": {
+      "data": "hi\n"
+     }
+    },
+    "localExecutionTimeMs": 18
+   },
+   {
+    "id": 1,
+    "shellStream": {
+     "exit": {
+      "cwd": "/state/ka-exhausted/root",
+      "localExecutionTimeMs": 23
+     }
+    },
+    "localExecutionTimeMs": 23
+   },
+   {
+    "streamClose": {
+     "id": 1
+    }
+   }
+  ]
+ },
+ "watches": [
+  {
+   "t": 335,
+   "label": "old"
+  }
+ ],
+ "closes": [
+  {
+   "t": 1812,
+   "ids": [
+    "one"
+   ],
+   "ended": true
+  },
+  {
+   "t": 6820,
+   "ids": [
+    "one"
+   ],
+   "ended": true
+  },
+  {
+   "t": 7367,
+   "ids": [
+    "one"
+   ],
+   "ended": true
+  }
+ ],
+ "polls": 38,
+ "daemonAlive": true,
+ "results": [
+  {
+   "name": "exhausted",
+   "status": "pass"
+  }
+ ]
+}

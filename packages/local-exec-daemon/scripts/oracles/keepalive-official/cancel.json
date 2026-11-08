@@ -1,1 +1,633 @@
-{"scenario":"cancel","marks":{"enqueued":316,"cancel":3317},"keepalives":[{"t":1781,"ids":["sh8"]}],"firstNonKeepalive":{"sh0":346,"sh1":406,"sh2":406,"sh3":406,"sh4":406,"sh5":406,"sh6":406,"sh7":406,"sh8":3324},"dataSubmits":{"sh0":6,"sh1":6,"sh2":6,"sh3":6,"sh4":6,"sh5":6,"sh6":6,"sh7":6,"sh8":1},"dataSeq":[[346,1],[406,7],[3324,1],[3326,1],[3328,7],[6327,1],[6329,7],[6412,1],[6415,6],[6417,1],[6421,1],[6423,9],[6424,2],[6427,4]],"sh8":[{"throw":{"error":"Cancelled before it started on the user's computer."}}],"polls":10,"results":[{"name":"cancel","status":"pass"}]}
+{
+ "scenario": "cancel",
+ "marks": {
+  "enqueued": 275,
+  "cancel": 3276
+ },
+ "keepalives": [
+  {
+   "t": 1745,
+   "ids": [
+    "sh8"
+   ]
+  }
+ ],
+ "firstNonKeepalive": {
+  "sh0": 304,
+  "sh1": 353,
+  "sh2": 353,
+  "sh3": 353,
+  "sh4": 353,
+  "sh5": 353,
+  "sh6": 353,
+  "sh7": 353,
+  "sh8": 3283
+ },
+ "dataSubmits": {
+  "sh0": 6,
+  "sh1": 6,
+  "sh2": 6,
+  "sh3": 6,
+  "sh4": 6,
+  "sh5": 6,
+  "sh6": 6,
+  "sh7": 6,
+  "sh8": 1
+ },
+ "dataSeq": [
+  [
+   304,
+   1
+  ],
+  [
+   353,
+   7
+  ],
+  [
+   3283,
+   1
+  ],
+  [
+   3286,
+   1
+  ],
+  [
+   3288,
+   7
+  ],
+  [
+   6287,
+   1
+  ],
+  [
+   6289,
+   7
+  ],
+  [
+   6358,
+   1
+  ],
+  [
+   6362,
+   5
+  ],
+  [
+   6365,
+   2
+  ],
+  [
+   6370,
+   6
+  ],
+  [
+   6373,
+   1
+  ],
+  [
+   6376,
+   9
+  ]
+ ],
+ "sh8": [
+  {
+   "throw": {
+    "error": "Cancelled before it started on the user's computer."
+   }
+  }
+ ],
+ "data": {
+  "sh0": [
+   {
+    "id": 1,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 15
+   },
+   {
+    "heartbeat": {
+     "id": 1
+    }
+   },
+   {
+    "heartbeat": {
+     "id": 1
+    }
+   },
+   {
+    "id": 1,
+    "shellStream": {
+     "stdout": {
+      "data": "done0\n"
+     }
+    },
+    "localExecutionTimeMs": 6073
+   },
+   {
+    "id": 1,
+    "shellStream": {
+     "exit": {
+      "cwd": "/state/ka-cancel/root",
+      "localExecutionTimeMs": 6071
+     }
+    },
+    "localExecutionTimeMs": 6088
+   },
+   {
+    "streamClose": {
+     "id": 1
+    }
+   }
+  ],
+  "sh1": [
+   {
+    "id": 2,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 15
+   },
+   {
+    "heartbeat": {
+     "id": 2
+    }
+   },
+   {
+    "heartbeat": {
+     "id": 2
+    }
+   },
+   {
+    "id": 2,
+    "shellStream": {
+     "stdout": {
+      "data": "done1\n"
+     }
+    },
+    "localExecutionTimeMs": 6073
+   },
+   {
+    "id": 2,
+    "shellStream": {
+     "exit": {
+      "cwd": "/state/ka-cancel/root",
+      "localExecutionTimeMs": 6071
+     }
+    },
+    "localExecutionTimeMs": 6088
+   },
+   {
+    "streamClose": {
+     "id": 2
+    }
+   }
+  ],
+  "sh2": [
+   {
+    "id": 3,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 15
+   },
+   {
+    "heartbeat": {
+     "id": 3
+    }
+   },
+   {
+    "heartbeat": {
+     "id": 3
+    }
+   },
+   {
+    "id": 3,
+    "shellStream": {
+     "stdout": {
+      "data": "done2\n"
+     }
+    },
+    "localExecutionTimeMs": 6073
+   },
+   {
+    "id": 3,
+    "shellStream": {
+     "exit": {
+      "cwd": "/state/ka-cancel/root",
+      "localExecutionTimeMs": 6066
+     }
+    },
+    "localExecutionTimeMs": 6084
+   },
+   {
+    "streamClose": {
+     "id": 3
+    }
+   }
+  ],
+  "sh3": [
+   {
+    "id": 4,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 15
+   },
+   {
+    "heartbeat": {
+     "id": 4
+    }
+   },
+   {
+    "heartbeat": {
+     "id": 4
+    }
+   },
+   {
+    "id": 4,
+    "shellStream": {
+     "stdout": {
+      "data": "done3\n"
+     }
+    },
+    "localExecutionTimeMs": 6071
+   },
+   {
+    "id": 4,
+    "shellStream": {
+     "exit": {
+      "cwd": "/state/ka-cancel/root",
+      "localExecutionTimeMs": 6064
+     }
+    },
+    "localExecutionTimeMs": 6081
+   },
+   {
+    "streamClose": {
+     "id": 4
+    }
+   }
+  ],
+  "sh4": [
+   {
+    "id": 5,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 15
+   },
+   {
+    "heartbeat": {
+     "id": 5
+    }
+   },
+   {
+    "heartbeat": {
+     "id": 5
+    }
+   },
+   {
+    "id": 5,
+    "shellStream": {
+     "stdout": {
+      "data": "done4\n"
+     }
+    },
+    "localExecutionTimeMs": 6072
+   },
+   {
+    "id": 5,
+    "shellStream": {
+     "exit": {
+      "cwd": "/state/ka-cancel/root",
+      "localExecutionTimeMs": 6069
+     }
+    },
+    "localExecutionTimeMs": 6087
+   },
+   {
+    "streamClose": {
+     "id": 5
+    }
+   }
+  ],
+  "sh5": [
+   {
+    "id": 6,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 15
+   },
+   {
+    "heartbeat": {
+     "id": 6
+    }
+   },
+   {
+    "heartbeat": {
+     "id": 6
+    }
+   },
+   {
+    "id": 6,
+    "shellStream": {
+     "stdout": {
+      "data": "done5\n"
+     }
+    },
+    "localExecutionTimeMs": 6073
+   },
+   {
+    "id": 6,
+    "shellStream": {
+     "exit": {
+      "cwd": "/state/ka-cancel/root",
+      "localExecutionTimeMs": 6066
+     }
+    },
+    "localExecutionTimeMs": 6083
+   },
+   {
+    "streamClose": {
+     "id": 6
+    }
+   }
+  ],
+  "sh6": [
+   {
+    "id": 7,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 15
+   },
+   {
+    "heartbeat": {
+     "id": 7
+    }
+   },
+   {
+    "heartbeat": {
+     "id": 7
+    }
+   },
+   {
+    "id": 7,
+    "shellStream": {
+     "stdout": {
+      "data": "done6\n"
+     }
+    },
+    "localExecutionTimeMs": 6077
+   },
+   {
+    "id": 7,
+    "shellStream": {
+     "exit": {
+      "cwd": "/state/ka-cancel/root",
+      "localExecutionTimeMs": 6070
+     }
+    },
+    "localExecutionTimeMs": 6088
+   },
+   {
+    "streamClose": {
+     "id": 7
+    }
+   }
+  ],
+  "sh7": [
+   {
+    "id": 8,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 15
+   },
+   {
+    "heartbeat": {
+     "id": 8
+    }
+   },
+   {
+    "heartbeat": {
+     "id": 8
+    }
+   },
+   {
+    "id": 8,
+    "shellStream": {
+     "stdout": {
+      "data": "done7\n"
+     }
+    },
+    "localExecutionTimeMs": 6077
+   },
+   {
+    "id": 8,
+    "shellStream": {
+     "exit": {
+      "cwd": "/state/ka-cancel/root",
+      "localExecutionTimeMs": 6071
+     }
+    },
+    "localExecutionTimeMs": 6088
+   },
+   {
+    "streamClose": {
+     "id": 8
+    }
+   }
+  ],
+  "sh8": [
+   {
+    "throw": {
+     "error": "Cancelled before it started on the user's computer."
+    }
+   }
+  ]
+ },
+ "watches": [
+  {
+   "t": 271,
+   "label": "old"
+  }
+ ],
+ "closes": [
+  {
+   "t": 304,
+   "ids": [
+    "sh0"
+   ],
+   "ended": true
+  },
+  {
+   "t": 354,
+   "ids": [
+    "sh1",
+    "sh2",
+    "sh3",
+    "sh4",
+    "sh5",
+    "sh6",
+    "sh7"
+   ],
+   "ended": true
+  },
+  {
+   "t": 1745,
+   "ids": [
+    "sh8"
+   ],
+   "ended": true
+  },
+  {
+   "t": 3283,
+   "ids": [
+    "sh8"
+   ],
+   "ended": true
+  },
+  {
+   "t": 3286,
+   "ids": [
+    "sh0"
+   ],
+   "ended": true
+  },
+  {
+   "t": 3288,
+   "ids": [
+    "sh1",
+    "sh2",
+    "sh3",
+    "sh4",
+    "sh5",
+    "sh6",
+    "sh7"
+   ],
+   "ended": true
+  },
+  {
+   "t": 6288,
+   "ids": [
+    "sh0"
+   ],
+   "ended": true
+  },
+  {
+   "t": 6290,
+   "ids": [
+    "sh1",
+    "sh2",
+    "sh3",
+    "sh4",
+    "sh5",
+    "sh6",
+    "sh7"
+   ],
+   "ended": true
+  },
+  {
+   "t": 6358,
+   "ids": [
+    "sh3"
+   ],
+   "ended": true
+  },
+  {
+   "t": 6363,
+   "ids": [
+    "sh4",
+    "sh0",
+    "sh1",
+    "sh2",
+    "sh5"
+   ],
+   "ended": true
+  },
+  {
+   "t": 6365,
+   "ids": [
+    "sh6",
+    "sh7"
+   ],
+   "ended": true
+  },
+  {
+   "t": 6371,
+   "ids": [
+    "sh3",
+    "sh5",
+    "sh2",
+    "sh3",
+    "sh5",
+    "sh2"
+   ],
+   "ended": true
+  },
+  {
+   "t": 6373,
+   "ids": [
+    "sh4"
+   ],
+   "ended": true
+  },
+  {
+   "t": 6376,
+   "ids": [
+    "sh4",
+    "sh6",
+    "sh1",
+    "sh0",
+    "sh7",
+    "sh6",
+    "sh1",
+    "sh0",
+    "sh7"
+   ],
+   "ended": true
+  }
+ ],
+ "polls": 9,
+ "daemonAlive": true,
+ "results": [
+  {
+   "name": "cancel",
+   "status": "pass"
+  }
+ ]
+}

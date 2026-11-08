@@ -26,4 +26,12 @@ manifest = dict(exit=p.returncode, hard_timeout=timed_out, runner_pid=p.pid, cle
 print(json.dumps(manifest))
 print(out[:65536].decode())
 print(err[:4096].decode())
-raise SystemExit(1 if p.returncode or timed_out else 0)
+# Gate: probe exit, hard timeout, or (for JSON-emitting probes) any non-pass result fails the run.
+bad = bool(p.returncode or timed_out)
+if probe == 'uc-keepalive.cjs':
+    try:
+        d = json.loads(out.decode().splitlines()[0]); res = d.get('results') or []
+        bad = bad or not res or any(r.get('status') != 'pass' for r in res)
+    except Exception:
+        bad = True
+raise SystemExit(1 if bad else 0)

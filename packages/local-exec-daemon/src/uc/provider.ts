@@ -114,6 +114,8 @@ export const UC_KEEPALIVE_WINDOW_MS = 1_500;
 export const UC_KEEPALIVE_STUCK_SUBMIT_MS = 120_000;
 export const UC_KEEPALIVE_MAX_IDS = 256;
 export const UC_DATA_SUBMIT_DEADLINE_MS = 120_000;
+/** Bound for deferred closing replies: backlog (64) plus one poll's worth of busy rejections (64). */
+export const UC_PENDING_CLOSINGS_MAX = 128;
 /** Official Kce (daemon.formatted.cjs L81192). */
 export const UC_CANCELLED_BEFORE_START = "Cancelled before it started on the user's computer.";
 
@@ -151,6 +153,7 @@ export class UserComputerProvider implements UserComputerTransport {
   private keepAlivePausedUntil = 0;
   private keepAliveSending = false;
   private proven = false;
+  private pendingClosings: ExecFrameOut[] = [];
   private announcedStanding?: string;
   /** Official lastPolledAt (monotonic in daemon; wall clock here). */
   lastPolledAt = 0;
@@ -179,7 +182,7 @@ export class UserComputerProvider implements UserComputerTransport {
       machineId: this.opts.machineId,
       credential: this.opts.credential,
     };
-    this.replies = new ReplyQueue(async body => {
+    this.replies = new ReplyQueue(async (body, signal) => {
       const ch = this.channel!;
       // Queue bodies retain response payloads, not the authority of expired creds.
       const request = SubmitGrokBotUserComputerResponsesRequest.fromBinary(body);
@@ -187,8 +190,13 @@ export class UserComputerProvider implements UserComputerTransport {
       let res;
       // Official dataDeadline E0 = 120s (daemon.formatted.cjs L97389, L177954). A 2s cap re-submitted the
       // same frames every ~2.4s while the peer was slow (oracle uc-keepalive stall).
-      try { res = await this.client.submitGrokBotUserComputerResponses(request, {timeoutMs: UC_DATA_SUBMIT_DEADLINE_MS}); }
-      catch (error) { if (authError(error)) throw new HttpStatusError(401); throw error; }
+      try { res = await this.client.submitGrokBotUserComputerResponses(request, {timeoutMs: UC_DATA_SUBMIT_DEADLINE_MS, signal}); }
+      catch (error) {
+        // Channel fencing: a rejection of a credential that has since been rotated is retried on the
+        // current channel instead of closing it (official rejectCredential checks channel identity).
+        if (authError(error) && this.channel === ch) throw new HttpStatusError(401);
+        throw error;
+      }
       this.noteHeard(request.frames.map(f => f.requestId));
       const accepted = res.acceptedCount;
       const submitted = request.frames.length;
@@ -197,7 +205,10 @@ export class UserComputerProvider implements UserComputerTransport {
       if (accepted < submitted) console.error(
         `[user-computer-provider] server accepted ${accepted} of ${submitted} response frames; the rest were not queued for this machine`,
       );
-    }, () => { this.admissionClosed = true; this.abort.abort(); });
+    }, () => { this.admissionClosed = true; this.abort.abort(); },
+    // Official replies.take() submits every ready frame in one batch; encoded protobuf requests
+    // merge by concatenation (repeated `frames`; machineId/credential are reset per submit above).
+    undefined, undefined, bodies => Buffer.concat(bodies));
     this.lastPolledAt = Date.now();
     this.pollTimer = setInterval(() => { void this.pollOnce().catch(() => undefined); }, 250);
     // Official keepAliveTick (~500ms) runs superviseBacklog then sendKeepAlives.
@@ -205,7 +216,7 @@ export class UserComputerProvider implements UserComputerTransport {
     // previous tick (including its keepalive submit) completes, not on a fixed grid.
     const tick = async (): Promise<void> => {
       if (this.closed) return;
-      try { this.superviseBacklog(); await this.sendKeepAlives(); } catch { /* tick failures never stop the loop */ }
+      try { this.flushClosings(); this.superviseBacklog(); await this.sendKeepAlives(); } catch { /* tick failures never stop the loop */ }
       if (!this.closed) this.keepAliveTimer = setTimeout(() => void tick(), UC_KEEPALIVE_INTERVAL_MS);
     };
     this.keepAliveTimer = setTimeout(() => void tick(), UC_KEEPALIVE_INTERVAL_MS);
@@ -291,8 +302,10 @@ export class UserComputerProvider implements UserComputerTransport {
     if (this.closed || this.admissionClosed || !this.channel) return;
     this.pollBusy = true;
     const acks = this.pendingAcks.splice(0);
+    const pollChannel = this.channel;
+    let polled = false;
     try {
-      const ch = this.channel;
+      const ch = pollChannel;
       const liveStanding = (await loadSettings()).permission;
       if (this.announcedStanding !== undefined && liveStanding !== this.announcedStanding) {
         // Re-announce policy by replacing only the Watch connection, never tasks.
@@ -318,7 +331,9 @@ export class UserComputerProvider implements UserComputerTransport {
           // Official (D:L178526–178535, Gl/Kce): each cancelled backlog entry gets a closing error.
           const dropped = this.backlog.filter(x => x.requestId === q.requestId);
           this.backlog = this.backlog.filter(x => x.requestId !== q.requestId);
+          // Official replies.drop(requestId) + submitAbort when the in-flight batch is all cancelled.
           cancelRequest(q.requestId);
+          if (typeof this.replies?.drop === 'function') this.replies.drop(id => this.cancelledIds.has(id));
           for (const d of dropped) this.emitClosing(d, UC_CANCELLED_BEFORE_START);
           continue;
         }
@@ -344,16 +359,18 @@ export class UserComputerProvider implements UserComputerTransport {
       }
       // A previously saturated reply lane may have recovered with no new jobs.
       this.runBacklog();
-      this.lastPolledAt = Date.now();
+      this.lastPolledAt = Date.now(); polled = true;
     } catch (e) {
       this.pendingAcks.unshift(...acks);
-      if (authError(e)) {
-        this.admissionClosed = true; this.abort.abort();
-      }
+      if (authError(e)) this.rejectCredential(pollChannel);
       // Failed poll never re-executes an admitted request.
     } finally {
       this.pollBusy = false;
-      if (this.pollAgain) { this.pollAgain = false; setTimeout(() => void this.pollOnce(), 25); }
+      // Official pollOnce loops at once while acks are pending or the page was full
+      // (D:L178459–178557), so a burst (e.g. 64 cancels) is drained in back-to-back polls, not one
+      // page per 250ms tick. Only once the provider loop is running (pollTimer).
+      const drain = polled && this.pollTimer !== undefined && !this.closed && this.pendingAcks.length > 0;
+      if (this.pollAgain || drain) { this.pollAgain = false; setTimeout(() => void this.pollOnce().catch(() => undefined), drain ? 0 : 25); }
     }
   }
   /**
@@ -367,16 +384,7 @@ export class UserComputerProvider implements UserComputerTransport {
     const age = nowMs - this.lastPolledAt;
     if (age > UC_BACKLOG_STALE_MS) {
       const drained = this.backlog.splice(0, this.backlog.length);
-      for (const q of drained) {
-        const error = UC_BACKLOG_CLOSED_BEFORE_START;
-        if ([requestKinds.upload, requestKinds.download, requestKinds.discoverAiTool].includes(q.kind)) {
-          void this.emit({ kind: "file-error", requestId: q.requestId, error });
-        } else if (q.kind === requestKinds.messagesOp) {
-          void this.emit({ kind: "messages-error", requestId: q.requestId, error });
-        } else {
-          void this.emit({ kind: "control", requestId: q.requestId, message: { throw: { id: 0, error } } });
-        }
-      }
+      for (const q of drained) this.emitClosing(q, UC_BACKLOG_CLOSED_BEFORE_START);
     } else if (age >= UC_BACKLOG_NUDGE_MS) {
       void this.pollOnce().catch(() => undefined);
     }
@@ -426,7 +434,7 @@ export class UserComputerProvider implements UserComputerTransport {
       }), { timeoutMs: UC_KEEPALIVE_SUBMIT_DEADLINE_MS });
       this.noteHeard(ids);
     } catch (error) {
-      if (authError(error)) { this.admissionClosed = true; this.abort.abort(); }
+      if (authError(error)) this.rejectCredential(ch);
       else if (error instanceof ConnectError && error.code === Code.ResourceExhausted) {
         this.keepAlivePausedUntil = performance.now() + UC_KEEPALIVE_EXHAUSTED_PAUSE_MS;
       }
@@ -435,18 +443,46 @@ export class UserComputerProvider implements UserComputerTransport {
   }
 
   private emitBusy(q: Queued): void { this.emitClosing(q, UC_BUSY_TEXT); }
+  /**
+   * Closing replies (busy / cancelled-before-start / backlog drained / unsupported) never block the
+   * poll loop and never become unhandled rejections. When the reply lane is saturated they are
+   * deferred (bounded by the admitted-but-unstarted set, ≤ UC_PENDING_CLOSINGS_MAX) and retried from
+   * the keepalive tick; overflow is logged explicitly, never silently swallowed.
+   */
   private emitClosing(q: Queued, error: string): void {
-    // A closing reply must never break the poll loop (ack bookkeeping); delivery failures are the lane's.
-    try { this.emitClosingFrame(q, error); } catch { console.error("[user-computer-provider] closing reply failed"); }
+    let frame: ExecFrameOut;
+    if ([requestKinds.upload, requestKinds.download, requestKinds.discoverAiTool].includes(q.kind)) frame = { kind: "file-error", requestId: q.requestId, error };
+    else if (q.kind === requestKinds.messagesOp) frame = { kind: "messages-error", requestId: q.requestId, error };
+    else frame = { kind: "control", requestId: q.requestId, message: { throw: { id: 0, error } } };
+    this.sendClosing(frame);
   }
-  private emitClosingFrame(q: Queued, error: string): void {
-    if ([requestKinds.upload, requestKinds.download, requestKinds.discoverAiTool].includes(q.kind)) {
-      void this.emit({ kind: "file-error", requestId: q.requestId, error });
-    } else if (q.kind === requestKinds.messagesOp) {
-      void this.emit({ kind: "messages-error", requestId: q.requestId, error });
-    } else {
-      void this.emit({ kind: "control", requestId: q.requestId, message: { throw: { id: 0, error } } });
+  private sendClosing(frame: ExecFrameOut): void {
+    if (this.pendingClosings.length) { this.deferClosing(frame); return; }
+    let p: Promise<void>;
+    try { p = Promise.resolve(this.emit(frame)); } catch (e) { p = Promise.reject(e); }
+    p.catch(() => this.deferClosing(frame));
+  }
+  private deferClosing(frame: ExecFrameOut): void {
+    if (this.closed) return;
+    if (this.pendingClosings.length >= UC_PENDING_CLOSINGS_MAX) {
+      console.error(`[user-computer-provider] closing reply for ${frame.requestId} dropped: ${UC_PENDING_CLOSINGS_MAX} closing replies already waiting for the reply lane`);
+      return;
     }
+    this.pendingClosings.push(frame);
+  }
+  /** Retry deferred closing replies in order while the lane accepts them. */
+  private flushClosings(): void {
+    while (this.pendingClosings.length && this.replies?.available && !this.closed) {
+      const frame = this.pendingClosings.shift()!;
+      let p: Promise<void>;
+      try { p = Promise.resolve(this.emit(frame)); } catch (e) { p = Promise.reject(e); }
+      p.catch(() => this.deferClosing(frame));
+    }
+  }
+  /** Official rejectCredential(e): only the channel that is still current may be closed. */
+  private rejectCredential(ch: { credential: string } | null): void {
+    if (!ch || this.channel !== ch) return;
+    this.admissionClosed = true; this.abort.abort();
   }
 
   private runBacklog(): void {
@@ -465,9 +501,7 @@ export class UserComputerProvider implements UserComputerTransport {
       // Frozen oracle dispatch maps unimplemented outer variants to an error.
       // Full variant-specific payloads remain a documented gap (not silent success).
       const error = "This computer's local-exec daemon does not understand that request frame; update the desktop app.";
-      if (q.kind === requestKinds.discoverAiTool) this.emit({ kind: "file-error", requestId: q.requestId, error });
-      else if (q.kind === requestKinds.messagesOp) this.emit({ kind: "messages-error", requestId: q.requestId, error });
-      else this.emit({ kind: "control", requestId: q.requestId, message: { throw: { id: 0, error } } });
+      this.emitClosing(q, error);
       return;
     }
     // Authoritative / approval / scope grants are NOT implemented. Fail closed.
@@ -492,7 +526,7 @@ export class UserComputerProvider implements UserComputerTransport {
         }
       }
     } catch (error) {
-      if (authError(error)) { this.admissionClosed = true; this.abort.abort(); }
+      if (authError(error)) this.rejectCredential(ch);
       // One Watch connection ending never closes reply, task or acknowledgment state.
     }
   }

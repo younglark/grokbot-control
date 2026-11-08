@@ -1,0 +1,232 @@
+{
+ "scenario": "rotation",
+ "marks": {
+  "enqueued": 338,
+  "rotate": 1832,
+  "newWatch": 2418,
+  "old401": 3830,
+  "post": 4030
+ },
+ "keepalives": [
+  {
+   "t": 1817,
+   "ids": [
+    "sh8"
+   ]
+  },
+  {
+   "t": 4322,
+   "ids": [
+    "sh8",
+    "post"
+   ]
+  },
+  {
+   "t": 7326,
+   "ids": [
+    "sh8",
+    "post"
+   ]
+  }
+ ],
+ "firstNonKeepalive": {
+  "sh0": 380,
+  "sh1": 382,
+  "sh2": 382,
+  "sh3": 382,
+  "sh4": 382,
+  "sh5": 382,
+  "sh6": 382,
+  "sh7": 382
+ },
+ "dataSubmits": {
+  "sh0": 1,
+  "sh1": 1,
+  "sh2": 1,
+  "sh3": 1,
+  "sh4": 1,
+  "sh5": 1,
+  "sh6": 1,
+  "sh7": 1
+ },
+ "dataSeq": [
+  [
+   380,
+   1
+  ],
+  [
+   382,
+   7
+  ]
+ ],
+ "sh8": [],
+ "data": {
+  "sh0": [
+   {
+    "id": 1,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 1
+   }
+  ],
+  "sh1": [
+   {
+    "id": 2,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 1
+   }
+  ],
+  "sh2": [
+   {
+    "id": 3,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 1
+   }
+  ],
+  "sh3": [
+   {
+    "id": 4,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 1
+   }
+  ],
+  "sh4": [
+   {
+    "id": 5,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 1
+   }
+  ],
+  "sh5": [
+   {
+    "id": 6,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 1
+   }
+  ],
+  "sh6": [
+   {
+    "id": 7,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 1
+   }
+  ],
+  "sh7": [
+   {
+    "id": 8,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 1
+   }
+  ]
+ },
+ "watches": [
+  {
+   "t": 334,
+   "label": "old"
+  },
+  {
+   "t": 2417,
+   "label": "new"
+  }
+ ],
+ "closes": [
+  {
+   "t": 381,
+   "ids": [
+    "sh0"
+   ],
+   "ended": true
+  },
+  {
+   "t": 382,
+   "ids": [
+    "sh1",
+    "sh2",
+    "sh3",
+    "sh4",
+    "sh5",
+    "sh6",
+    "sh7"
+   ],
+   "ended": true
+  },
+  {
+   "t": 3819,
+   "ids": [
+    "sh8"
+   ],
+   "ended": true
+  },
+  {
+   "t": 4322,
+   "ids": [
+    "sh8",
+    "post"
+   ],
+   "ended": true
+  },
+  {
+   "t": 7326,
+   "ids": [
+    "sh8",
+    "post"
+   ],
+   "ended": true
+  }
+ ],
+ "polls": 36,
+ "daemonAlive": true,
+ "results": [
+  {
+   "name": "rotation",
+   "status": "pass"
+  }
+ ]
+}

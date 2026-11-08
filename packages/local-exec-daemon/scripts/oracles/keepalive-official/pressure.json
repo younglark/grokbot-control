@@ -1,0 +1,236 @@
+{
+ "scenario": "pressure",
+ "marks": {
+  "enqueued": 336,
+  "cancel": 4340,
+  "after": 7342
+ },
+ "keepalives": [
+  {
+   "t": 1790,
+   "ids": [
+    "sh0",
+    "sh1",
+    "sh2",
+    "sh3",
+    "sh4",
+    "sh5",
+    "sh6",
+    "sh7",
+    "sh8",
+    "sh9",
+    "sh10",
+    "sh11",
+    "sh12",
+    "sh13",
+    "sh14",
+    "sh15",
+    "sh16",
+    "sh17",
+    "sh18",
+    "sh19",
+    "sh20",
+    "sh21",
+    "sh22",
+    "sh23",
+    "sh24",
+    "sh25",
+    "sh26",
+    "sh27",
+    "sh28",
+    "sh29",
+    "sh30",
+    "sh31",
+    "sh32",
+    "sh33",
+    "sh34",
+    "sh35",
+    "sh36",
+    "sh37",
+    "sh38",
+    "sh39",
+    "sh40",
+    "sh41",
+    "sh42",
+    "sh43",
+    "sh44",
+    "sh45",
+    "sh46",
+    "sh47",
+    "sh48",
+    "sh49",
+    "sh50",
+    "sh51",
+    "sh52",
+    "sh53",
+    "sh54",
+    "sh55",
+    "sh56",
+    "sh57",
+    "sh58",
+    "sh59",
+    "sh60",
+    "sh61",
+    "sh62",
+    "sh63",
+    "sh64",
+    "sh65",
+    "sh66",
+    "sh67",
+    "sh68",
+    "sh69",
+    "sh70",
+    "sh71"
+   ]
+  },
+  {
+   "t": 4798,
+   "ids": [
+    "sh0",
+    "sh1",
+    "sh2",
+    "sh3",
+    "sh4",
+    "sh5",
+    "sh6",
+    "sh7"
+   ]
+  }
+ ],
+ "firstNonKeepalive": {
+  "sh0": 366
+ },
+ "dataSubmits": {
+  "sh0": 1
+ },
+ "dataSeq": [
+  [
+   366,
+   1
+  ]
+ ],
+ "sh8": [],
+ "data": {
+  "sh0": [
+   {
+    "id": 1,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 19
+   }
+  ]
+ },
+ "watches": [
+  {
+   "t": 320,
+   "label": "old"
+  }
+ ],
+ "closes": [
+  {
+   "t": 1790,
+   "ids": [
+    "sh0",
+    "sh1",
+    "sh2",
+    "sh3",
+    "sh4",
+    "sh5",
+    "sh6",
+    "sh7",
+    "sh8",
+    "sh9",
+    "sh10",
+    "sh11",
+    "sh12",
+    "sh13",
+    "sh14",
+    "sh15",
+    "sh16",
+    "sh17",
+    "sh18",
+    "sh19",
+    "sh20",
+    "sh21",
+    "sh22",
+    "sh23",
+    "sh24",
+    "sh25",
+    "sh26",
+    "sh27",
+    "sh28",
+    "sh29",
+    "sh30",
+    "sh31",
+    "sh32",
+    "sh33",
+    "sh34",
+    "sh35",
+    "sh36",
+    "sh37",
+    "sh38",
+    "sh39",
+    "sh40",
+    "sh41",
+    "sh42",
+    "sh43",
+    "sh44",
+    "sh45",
+    "sh46",
+    "sh47",
+    "sh48",
+    "sh49",
+    "sh50",
+    "sh51",
+    "sh52",
+    "sh53",
+    "sh54",
+    "sh55",
+    "sh56",
+    "sh57",
+    "sh58",
+    "sh59",
+    "sh60",
+    "sh61",
+    "sh62",
+    "sh63",
+    "sh64",
+    "sh65",
+    "sh66",
+    "sh67",
+    "sh68",
+    "sh69",
+    "sh70",
+    "sh71"
+   ],
+   "ended": true
+  },
+  {
+   "t": 4798,
+   "ids": [
+    "sh0",
+    "sh1",
+    "sh2",
+    "sh3",
+    "sh4",
+    "sh5",
+    "sh6",
+    "sh7"
+   ],
+   "ended": true
+  }
+ ],
+ "polls": 25,
+ "daemonAlive": true,
+ "results": [
+  {
+   "name": "pressure",
+   "status": "pass"
+  }
+ ]
+}

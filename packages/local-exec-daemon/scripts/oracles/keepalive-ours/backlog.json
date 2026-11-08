@@ -1,1 +1,511 @@
-{"scenario":"backlog","marks":{"enqueued":271},"keepalives":[{"t":1751,"ids":["sh8"]},{"t":4755,"ids":["sh8"]}],"firstNonKeepalive":{"sh0":313,"sh1":315,"sh2":317,"sh3":318,"sh4":319,"sh5":320,"sh6":322,"sh7":323,"sh8":6345},"dataSubmits":{"sh0":4,"sh1":4,"sh2":4,"sh3":4,"sh4":4,"sh5":4,"sh6":4,"sh7":4,"sh8":1},"dataSeq":[[313,1],[315,1],[317,1],[318,1],[319,1],[320,1],[322,1],[323,1],[6318,1],[6320,1],[6322,1],[6323,1],[6325,1],[6326,1],[6330,1],[6331,1],[6332,1],[6333,1],[6334,1],[6335,1],[6336,1],[6337,1],[6338,1],[6338,1],[6339,1],[6340,1],[6341,1],[6341,1],[6342,1],[6343,1],[6344,1],[6345,1],[6345,1]],"sh8":[{"id":9,"shellStream":{"start":{"sandboxPolicy":{"type":"TYPE_INSECURE_NONE"}}},"localExecutionTimeMs":1}],"polls":36,"results":[{"name":"backlog","status":"pass"}]}
+{
+ "scenario": "backlog",
+ "marks": {
+  "enqueued": 315
+ },
+ "keepalives": [
+  {
+   "t": 1793,
+   "ids": [
+    "sh8"
+   ]
+  },
+  {
+   "t": 4797,
+   "ids": [
+    "sh8"
+   ]
+  }
+ ],
+ "firstNonKeepalive": {
+  "sh0": 356,
+  "sh1": 358,
+  "sh2": 358,
+  "sh3": 358,
+  "sh4": 358,
+  "sh5": 358,
+  "sh7": 358,
+  "sh6": 358,
+  "sh8": 6372
+ },
+ "dataSubmits": {
+  "sh0": 4,
+  "sh1": 4,
+  "sh2": 4,
+  "sh3": 4,
+  "sh4": 4,
+  "sh5": 4,
+  "sh7": 4,
+  "sh6": 4,
+  "sh8": 1
+ },
+ "dataSeq": [
+  [
+   356,
+   1
+  ],
+  [
+   358,
+   7
+  ],
+  [
+   6357,
+   1
+  ],
+  [
+   6361,
+   7
+  ],
+  [
+   6364,
+   1
+  ],
+  [
+   6366,
+   9
+  ],
+  [
+   6367,
+   6
+  ],
+  [
+   6372,
+   1
+  ]
+ ],
+ "sh8": [
+  {
+   "id": 9,
+   "shellStream": {
+    "start": {
+     "sandboxPolicy": {
+      "type": "TYPE_INSECURE_NONE"
+     }
+    }
+   },
+   "localExecutionTimeMs": 1
+  }
+ ],
+ "data": {
+  "sh0": [
+   {
+    "id": 1,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 1
+   },
+   {
+    "id": 1,
+    "shellStream": {
+     "stdout": {
+      "data": "done0\n"
+     }
+    },
+    "localExecutionTimeMs": 6038
+   },
+   {
+    "id": 1,
+    "shellStream": {
+     "exit": {
+      "cwd": "/state/ka-backlog/root",
+      "localExecutionTimeMs": 6046
+     }
+    },
+    "localExecutionTimeMs": 6046
+   },
+   {
+    "streamClose": {
+     "id": 1
+    }
+   }
+  ],
+  "sh1": [
+   {
+    "id": 2,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 1
+   },
+   {
+    "id": 2,
+    "shellStream": {
+     "stdout": {
+      "data": "done1\n"
+     }
+    },
+    "localExecutionTimeMs": 6036
+   },
+   {
+    "id": 2,
+    "shellStream": {
+     "exit": {
+      "cwd": "/state/ka-backlog/root",
+      "localExecutionTimeMs": 6043
+     }
+    },
+    "localExecutionTimeMs": 6043
+   },
+   {
+    "streamClose": {
+     "id": 2
+    }
+   }
+  ],
+  "sh2": [
+   {
+    "id": 3,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 1
+   },
+   {
+    "id": 3,
+    "shellStream": {
+     "stdout": {
+      "data": "done2\n"
+     }
+    },
+    "localExecutionTimeMs": 6036
+   },
+   {
+    "id": 3,
+    "shellStream": {
+     "exit": {
+      "cwd": "/state/ka-backlog/root",
+      "localExecutionTimeMs": 6041
+     }
+    },
+    "localExecutionTimeMs": 6041
+   },
+   {
+    "streamClose": {
+     "id": 3
+    }
+   }
+  ],
+  "sh3": [
+   {
+    "id": 4,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 1
+   },
+   {
+    "id": 4,
+    "shellStream": {
+     "stdout": {
+      "data": "done3\n"
+     }
+    },
+    "localExecutionTimeMs": 6035
+   },
+   {
+    "id": 4,
+    "shellStream": {
+     "exit": {
+      "cwd": "/state/ka-backlog/root",
+      "localExecutionTimeMs": 6043
+     }
+    },
+    "localExecutionTimeMs": 6043
+   },
+   {
+    "streamClose": {
+     "id": 4
+    }
+   }
+  ],
+  "sh4": [
+   {
+    "id": 5,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 1
+   },
+   {
+    "id": 5,
+    "shellStream": {
+     "stdout": {
+      "data": "done4\n"
+     }
+    },
+    "localExecutionTimeMs": 6036
+   },
+   {
+    "id": 5,
+    "shellStream": {
+     "exit": {
+      "cwd": "/state/ka-backlog/root",
+      "localExecutionTimeMs": 6043
+     }
+    },
+    "localExecutionTimeMs": 6043
+   },
+   {
+    "streamClose": {
+     "id": 5
+    }
+   }
+  ],
+  "sh5": [
+   {
+    "id": 6,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 1
+   },
+   {
+    "id": 6,
+    "shellStream": {
+     "stdout": {
+      "data": "done5\n"
+     }
+    },
+    "localExecutionTimeMs": 6037
+   },
+   {
+    "id": 6,
+    "shellStream": {
+     "exit": {
+      "cwd": "/state/ka-backlog/root",
+      "localExecutionTimeMs": 6045
+     }
+    },
+    "localExecutionTimeMs": 6045
+   },
+   {
+    "streamClose": {
+     "id": 6
+    }
+   }
+  ],
+  "sh7": [
+   {
+    "id": 7,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 1
+   },
+   {
+    "id": 7,
+    "shellStream": {
+     "stdout": {
+      "data": "done7\n"
+     }
+    },
+    "localExecutionTimeMs": 6037
+   },
+   {
+    "id": 7,
+    "shellStream": {
+     "exit": {
+      "cwd": "/state/ka-backlog/root",
+      "localExecutionTimeMs": 6043
+     }
+    },
+    "localExecutionTimeMs": 6043
+   },
+   {
+    "streamClose": {
+     "id": 7
+    }
+   }
+  ],
+  "sh6": [
+   {
+    "id": 8,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 1
+   },
+   {
+    "id": 8,
+    "shellStream": {
+     "stdout": {
+      "data": "done6\n"
+     }
+    },
+    "localExecutionTimeMs": 6037
+   },
+   {
+    "id": 8,
+    "shellStream": {
+     "exit": {
+      "cwd": "/state/ka-backlog/root",
+      "localExecutionTimeMs": 6044
+     }
+    },
+    "localExecutionTimeMs": 6044
+   },
+   {
+    "streamClose": {
+     "id": 8
+    }
+   }
+  ],
+  "sh8": [
+   {
+    "id": 9,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 1
+   }
+  ]
+ },
+ "watches": [
+  {
+   "t": 309,
+   "label": "old"
+  }
+ ],
+ "closes": [
+  {
+   "t": 356,
+   "ids": [
+    "sh0"
+   ],
+   "ended": true
+  },
+  {
+   "t": 358,
+   "ids": [
+    "sh1",
+    "sh2",
+    "sh3",
+    "sh4",
+    "sh5",
+    "sh7",
+    "sh6"
+   ],
+   "ended": true
+  },
+  {
+   "t": 1793,
+   "ids": [
+    "sh8"
+   ],
+   "ended": true
+  },
+  {
+   "t": 4797,
+   "ids": [
+    "sh8"
+   ],
+   "ended": true
+  },
+  {
+   "t": 6357,
+   "ids": [
+    "sh3"
+   ],
+   "ended": true
+  },
+  {
+   "t": 6361,
+   "ids": [
+    "sh2",
+    "sh4",
+    "sh1",
+    "sh5",
+    "sh7",
+    "sh0",
+    "sh6"
+   ],
+   "ended": true
+  },
+  {
+   "t": 6364,
+   "ids": [
+    "sh2"
+   ],
+   "ended": true
+  },
+  {
+   "t": 6366,
+   "ids": [
+    "sh2",
+    "sh7",
+    "sh7",
+    "sh1",
+    "sh1",
+    "sh3",
+    "sh3",
+    "sh4",
+    "sh4"
+   ],
+   "ended": true
+  },
+  {
+   "t": 6367,
+   "ids": [
+    "sh6",
+    "sh6",
+    "sh5",
+    "sh5",
+    "sh0",
+    "sh0"
+   ],
+   "ended": true
+  },
+  {
+   "t": 6372,
+   "ids": [
+    "sh8"
+   ],
+   "ended": true
+  }
+ ],
+ "polls": 37,
+ "daemonAlive": true,
+ "results": [
+  {
+   "name": "backlog",
+   "status": "pass"
+  }
+ ]
+}

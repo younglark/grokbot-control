@@ -1,1 +1,113 @@
-{"scenario":"stall","marks":{"enqueued":314},"keepalives":[{"t":1782,"ids":["one"]},{"t":4787,"ids":["one"]}],"firstNonKeepalive":{"one":334},"dataSubmits":{"one":2},"dataSeq":[[334,1],[7335,1]],"sh8":[],"polls":38,"results":[{"name":"stall","status":"pass"}]}
+{
+ "scenario": "stall",
+ "marks": {
+  "enqueued": 315
+ },
+ "keepalives": [
+  {
+   "t": 1793,
+   "ids": [
+    "one"
+   ]
+  },
+  {
+   "t": 4797,
+   "ids": [
+    "one"
+   ]
+  }
+ ],
+ "firstNonKeepalive": {
+  "one": 336
+ },
+ "dataSubmits": {
+  "one": 4
+ },
+ "dataSeq": [
+  [
+   336,
+   1
+  ],
+  [
+   7338,
+   3
+  ]
+ ],
+ "sh8": [],
+ "data": {
+  "one": [
+   {
+    "id": 1,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 1
+   },
+   {
+    "id": 1,
+    "shellStream": {
+     "stdout": {
+      "data": "hi\n"
+     }
+    },
+    "localExecutionTimeMs": 16
+   },
+   {
+    "id": 1,
+    "shellStream": {
+     "exit": {
+      "cwd": "/state/ka-stall/root",
+      "localExecutionTimeMs": 20
+     }
+    },
+    "localExecutionTimeMs": 20
+   },
+   {
+    "streamClose": {
+     "id": 1
+    }
+   }
+  ]
+ },
+ "watches": [
+  {
+   "t": 309,
+   "label": "old"
+  }
+ ],
+ "closes": [
+  {
+   "t": 1793,
+   "ids": [
+    "one"
+   ],
+   "ended": true
+  },
+  {
+   "t": 4797,
+   "ids": [
+    "one"
+   ],
+   "ended": true
+  },
+  {
+   "t": 7336,
+   "ids": [
+    "one"
+   ],
+   "ended": true
+  }
+ ],
+ "polls": 38,
+ "daemonAlive": true,
+ "results": [
+  {
+   "name": "stall",
+   "status": "pass"
+  }
+ ]
+}

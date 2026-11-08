@@ -1,0 +1,172 @@
+{
+ "scenario": "stall-cancel",
+ "marks": {
+  "enqueued": 274,
+  "cancel": 294
+ },
+ "keepalives": [],
+ "firstNonKeepalive": {
+  "one": 293,
+  "two": 305
+ },
+ "dataSubmits": {
+  "one": 3,
+  "two": 4
+ },
+ "dataSeq": [
+  [
+   293,
+   1
+  ],
+  [
+   300,
+   1
+  ],
+  [
+   305,
+   2
+  ],
+  [
+   307,
+   1
+  ],
+  [
+   310,
+   1
+  ],
+  [
+   311,
+   1
+  ]
+ ],
+ "sh8": [],
+ "data": {
+  "one": [
+   {
+    "id": 1,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 1
+   },
+   {
+    "id": 1,
+    "shellStream": {
+     "exit": {
+      "code": 4294967295,
+      "cwd": "/state/ka-stall-cancel/root",
+      "aborted": true,
+      "abortReason": "SHELL_ABORT_REASON_USER_ABORT",
+      "localExecutionTimeMs": 20
+     }
+    },
+    "localExecutionTimeMs": 20
+   },
+   {
+    "streamClose": {
+     "id": 1
+    }
+   }
+  ],
+  "two": [
+   {
+    "id": 2,
+    "shellStream": {
+     "start": {
+      "sandboxPolicy": {
+       "type": "TYPE_INSECURE_NONE"
+      }
+     }
+    },
+    "localExecutionTimeMs": 1
+   },
+   {
+    "id": 2,
+    "shellStream": {
+     "stdout": {
+      "data": "AFTER_CANCEL\n"
+     }
+    },
+    "localExecutionTimeMs": 5
+   },
+   {
+    "id": 2,
+    "shellStream": {
+     "exit": {
+      "cwd": "/state/ka-stall-cancel/root",
+      "localExecutionTimeMs": 9
+     }
+    },
+    "localExecutionTimeMs": 9
+   },
+   {
+    "streamClose": {
+     "id": 2
+    }
+   }
+  ]
+ },
+ "watches": [
+  {
+   "t": 259,
+   "label": "old"
+  }
+ ],
+ "closes": [
+  {
+   "t": 299,
+   "ids": [
+    "one"
+   ],
+   "ended": false
+  },
+  {
+   "t": 300,
+   "ids": [
+    "one"
+   ],
+   "ended": true
+  },
+  {
+   "t": 305,
+   "ids": [
+    "one",
+    "two"
+   ],
+   "ended": true
+  },
+  {
+   "t": 307,
+   "ids": [
+    "two"
+   ],
+   "ended": true
+  },
+  {
+   "t": 310,
+   "ids": [
+    "two"
+   ],
+   "ended": true
+  },
+  {
+   "t": 311,
+   "ids": [
+    "two"
+   ],
+   "ended": true
+  }
+ ],
+ "polls": 29,
+ "daemonAlive": true,
+ "results": [
+  {
+   "name": "stall-cancel",
+   "status": "pass"
+  }
+ ]
+}

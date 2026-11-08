@@ -1,24 +1,143 @@
 #!/usr/bin/env python3
 """Compare uc-keepalive.cjs results: official golden vs ours.
+
 Usage: keepalive-diff.py OFFICIAL.json OURS.json [--tol-ms 300]
-Exact: scenario, results all pass, keepalive count and id lists in order, cancelled-backlog (sh8) messages.
-Timed: each keepalive offset (t - enqueued) within tolerance (official tick 500ms; jitter is scheduling).
-Not compared (documented deviation): data-submit batching (dataSeq shapes).
+
+Always (every scenario):
+  * both runs: non-empty results, every result 'pass' (includes the death gate: daemon alive until cleanup);
+  * same scenario.
+Semantic data evidence (P3; replaces "ignore all data submits"):
+  * per request id, the ordered decoded data messages after normalization must be equal:
+    localExecutionTimeMs removed, consecutive stdout/stderr chunks of one id merged. Submit
+    batching and chunking are the ONLY differences tolerated; the set of ids with data must match
+    and must be non-empty where official has data.
+  * exception 'pressure': streaming content is cut at a timing-dependent point and which identical
+    shell lands in the first delayed submit races, so only the number of ids with data and their
+    first message kinds are compared (must be non-empty iff official is).
+  * named deviation EXEC-HEARTBEAT: official writes an inner control {"heartbeat":{"id":N}} periodically
+    while an exec runs (D:L98140–98153, zHt); ours does not implement it yet. Only messages that are
+    exactly {"heartbeat":{"id":<that request's exec id>}} are removed from the official side, and the
+    count is printed; any other difference still fails.
+  * named rule EXEC-ID: the inner exec `id` is a local sequence assigned at admission (it differs
+    between fresh official runs when admissions in one poll race). Each side must use exactly one
+    id per request and distinct ids across requests; the value itself is then replaced by '#'.
+Keepalives:
+  * backlog/cancel/stall/exhausted/rotation: id lists in order exactly, offsets within tolerance;
+  * pressure: ids keepalived before the cancel mark must be equal as sets; no cancelled id may be
+    keepalived later than cancel + tolerance in ours;
+  * stall-cancel: none on either side.
+Lifecycle:
+  * cancel: cancelled backlog frame (sh8) equal;
+  * stall-cancel: the stalled submit for the cancelled id is aborted (response closed, not ended)
+    within tolerance of the cancel mark, and the next request's first data arrives no later than
+    official + tolerance;
+  * rotation: keepalives continue after the old credential's late 401 (new channel not blocked).
 """
 import json, sys
-a = sys.argv[1:]; tol = 300
-if '--tol-ms' in a: i = a.index('--tol-ms'); tol = int(a[i + 1]); del a[i:i + 2]
-o, u = (json.load(open(f)) for f in a)
-bad = []
-for side, d in (('official', o), ('ours', u)):
-    if not d.get('results') or any(r.get('status') != 'pass' for r in d['results']): bad.append(f'{side} results not pass')
-if o['scenario'] != u['scenario']: bad.append('scenario mismatch')
-ko, ku = o['keepalives'], u['keepalives']
-if [k['ids'] for k in ko] != [k['ids'] for k in ku]: bad.append(f'keepalive ids differ: {[k["ids"] for k in ko]} vs {[k["ids"] for k in ku]}')
-else:
-    for x, y in zip(ko, ku):
-        dx, dy = x['t'] - o['marks']['enqueued'], y['t'] - u['marks']['enqueued']
-        if abs(dx - dy) > tol: bad.append(f'keepalive offset {dx} vs {dy} > {tol}ms')
-if o['scenario'] == 'cancel' and o.get('sh8') != u.get('sh8'): bad.append(f'cancelled backlog frames differ: {o.get("sh8")} vs {u.get("sh8")}')
-print(('FAIL ' + '; '.join(bad)) if bad else f'SAME {o["scenario"]} keepalives={len(ko)}')
-sys.exit(1 if bad else 0)
+
+def norm_msgs(msgs):
+    out = []
+    for m in msgs:
+        if m is None: out.append(None); continue
+        m = json.loads(json.dumps(m))
+        m.pop('localExecutionTimeMs', None)
+        ss = m.get('shellStream') or {}
+        for v in ss.values():
+            if isinstance(v, dict): v.pop('localExecutionTimeMs', None)
+        k = next((x for x in ('stdout', 'stderr') if x in ss), None)
+        if k and out and isinstance(out[-1], dict) and k in (out[-1].get('shellStream') or {}):
+            out[-1]['shellStream'][k]['data'] += ss[k]['data']; continue
+        out.append(m)
+    return out
+
+def strip_heartbeats(msgs):
+    ids = {m.get('id') for m in msgs if isinstance(m, dict) and 'shellStream' in m}
+    kept = [m for m in msgs if not (isinstance(m, dict) and list(m) == ['heartbeat'] and m['heartbeat'] == {'id': next(iter(ids))} and len(ids) == 1)]
+    return kept, len(msgs) - len(kept)
+
+def exec_ids(msgs):
+    out = set()
+    for m in msgs:
+        if not isinstance(m, dict): continue
+        if 'id' in m: out.add(m['id'])
+        for v in m.values():
+            if isinstance(v, dict) and set(v) == {'id'}: out.add(v['id'])
+    return out
+
+def anon(msgs):
+    def f(x):
+        if isinstance(x, dict): return {k: ('#' if k == 'id' else f(v)) for k, v in x.items()}
+        if isinstance(x, list): return [f(v) for v in x]
+        return x
+    return f(msgs)
+
+def kind(m):
+    if not m: return None
+    ss = m.get('shellStream')
+    return ('shellStream', sorted(ss)[0]) if ss else sorted(m)[0]
+
+def main(argv):
+    a = list(argv); tol = 300
+    if '--tol-ms' in a: i = a.index('--tol-ms'); tol = int(a[i + 1]); del a[i:i + 2]
+    o, u = (json.load(open(f)) for f in a)
+    bad = []
+    for side, d in (('official', o), ('ours', u)):
+        res = d.get('results') or []
+        if not res or any(r.get('status') != 'pass' for r in res): bad.append(f'{side} results not pass: {res}')
+    sc = o.get('scenario')
+    if sc != u.get('scenario'): bad.append('scenario mismatch')
+    do, du = dict(o.get('data') or {}), dict(u.get('data') or {})
+    hb = hbu = 0
+    for k in list(do):
+        do[k], n = strip_heartbeats(do[k]); hb += n
+    for k in list(du):
+        du[k], n = strip_heartbeats(du[k]); hbu += n
+    for side, d in (('official', do), ('ours', du)):
+        seen = {}
+        for k, msgs in d.items():
+            ids = exec_ids(msgs)
+            if len(ids) > 1: bad.append(f'{side} {k}: several exec ids {sorted(ids)}')
+            for i in ids:
+                if i in seen: bad.append(f'{side}: exec id {i} reused by {seen[i]} and {k}')
+                seen[i] = k
+    if sc != 'pressure' and set(do) != set(du): bad.append(f'data ids differ: {sorted(do)} vs {sorted(du)}')
+    elif sc == 'pressure':
+        # Which of the 8 identical streaming shells reaches the first (10s-delayed) submit is a race in
+        # both daemons; compare the count of ids with data and each one's first message kind.
+        if len(do) != len(du) or sorted(kind((v or [None])[0]) for v in do.values()) != sorted(kind((v or [None])[0]) for v in du.values()): bad.append(f'pressure data shape differs')
+    else:
+        for k in do:
+            if anon(norm_msgs(do[k])) != anon(norm_msgs(du[k])): bad.append(f'{k}: data differs: {json.dumps(norm_msgs(do[k]))[:300]} vs {json.dumps(norm_msgs(du[k]))[:300]}')
+    if not do: bad.append('official golden has no data evidence (re-record it)')
+    if not du: bad.append('ours has no data evidence')
+    ko, ku = o.get('keepalives') or [], u.get('keepalives') or []
+    mo, mu = o['marks']['enqueued'], u['marks']['enqueued']
+    if sc == 'pressure':
+        co, cu = o['marks']['cancel'], u['marks']['cancel']
+        so = {i for k in ko if k['t'] < co for i in k['ids']}; su = {i for k in ku if k['t'] < cu for i in k['ids']}
+        if so != su: bad.append(f'pre-cancel keepalive ids differ: only-official {sorted(so - su)[:8]} only-ours {sorted(su - so)[:8]}')
+        cancelled = {f'sh{i}' for i in range(8, 72)}
+        late = [k['t'] - cu for k in ku if k['t'] > cu + tol and cancelled & set(k['ids'])]
+        if late: bad.append(f'cancelled ids keepalived after cancel: {late}')
+    elif sc == 'stall-cancel':
+        if ko or ku: bad.append(f'unexpected keepalives {ko} / {ku}')
+    else:
+        if [k['ids'] for k in ko] != [k['ids'] for k in ku]: bad.append(f'keepalive ids differ: {[k["ids"] for k in ko]} vs {[k["ids"] for k in ku]}')
+        else:
+            for x, y in zip(ko, ku):
+                if abs((x['t'] - mo) - (y['t'] - mu)) > tol: bad.append(f'keepalive offset {x["t"] - mo} vs {y["t"] - mu} > {tol}ms')
+    if sc == 'cancel' and o.get('sh8') != u.get('sh8'): bad.append('cancelled backlog frames differ')
+    if sc == 'stall-cancel':
+        for side, d in (('official', o), ('ours', u)):
+            c = d['marks']['cancel']
+            ab = [x for x in d.get('closes') or [] if 'one' in x['ids'] and not x['ended'] and x['t'] - c <= tol]
+            if not ab: bad.append(f'{side}: stalled submit for cancelled id not aborted within {tol}ms')
+        fo = (o.get('firstNonKeepalive') or {}).get('two'); fu = (u.get('firstNonKeepalive') or {}).get('two')
+        if fu is None or fo is None or (fu - u['marks']['cancel']) > (fo - o['marks']['cancel']) + tol: bad.append(f'next request first data late: official {fo} ours {fu}')
+    if sc == 'rotation':
+        for side, d in (('official', o), ('ours', u)):
+            if not any(k['t'] > d['marks']['old401'] for k in d.get('keepalives') or []): bad.append(f'{side}: no keepalive after old-credential 401 (channel blocked)')
+    print(('FAIL ' + '; '.join(bad)) if bad else f'SAME {sc} keepalives={len(ko)} dataIds={len(do)} EXEC-HEARTBEAT official={hb} ours={hbu}')
+    return 1 if bad else 0
+
+if __name__ == '__main__': sys.exit(main(sys.argv[1:]))
