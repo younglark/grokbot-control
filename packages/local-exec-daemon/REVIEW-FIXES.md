@@ -209,7 +209,7 @@ Official oracle (unchanged 0.79.3 main.cjs in bwrap, synthetic credential, fake 
 
 | Behavior | Official (measured) | Ours before | Ours now |
 |---|---|---|---|
-| keepalive frames | messagesAccepted for backlog / queued-reply / submitting ids; not for running requests with nothing queued; first ≈1.47 s after enqueue, then +3.0 s | none | same (4/4 scenarios SAME) |
+| keepalive frames | messagesAccepted for backlog / queued-reply / submitting ids; not for running requests with nothing queued; first ≈1.47 s after enqueue, then +3.0 s | none | same **for the keepalive subset only** (4/4 scenarios: keepalive ids/offsets, sh8 frame, step status; data submits were NOT compared — corrected in t104 review round) |
 | ResourceExhausted on keepalive | next keepalive +5 s | n/a | same |
 | cancel of backlog item | keepalives stop; throw "Cancelled before it started on the user's computer." | silently removed | same |
 | slow data submit (7 s) | single submit waits (deadline 120 s) | re-submitted the same frame every ≈2.4 s (2 s timeout) | 120 s deadline, single submit |
@@ -217,3 +217,27 @@ Official oracle (unchanged 0.79.3 main.cjs in bwrap, synthetic credential, fake 
 
 Tick is serial like official hc/yre (next tick 500 ms after the previous completes). Auth error on a keepalive closes admission like other UC calls. Not verified against official: keepalive under Watch reconnect/credential rotation, stuck-submit ≥120 s cutoff (unit-tested only), more than 256 due ids.
 Counts: `npm test` 107 pass / 0 fail (99 + 8 new: 6 unit, 2 bwrap oracle runs); r3 strict differential unchanged 46 / 36 / 10 / 0 diff, lifecycle PASS, RC=0.
+
+## t103u review round (reviewer blocked 5bb3443: 4×P2 + 1×P3) — **执行方自测，待独立再审**
+
+Not pushed, no amend/rebase, no real backend. Each item was first reproduced against 5bb3443 with the reviewer's evidence (/tmp/independent-uc-keepalive-103/review/evidence.json), then fixed. The reviewer's original probe scripts (/tmp/independent-uc-ka-{pressure,rotation,cancel}) were re-run unchanged against the new build.
+
+| Item | Reproduced on 5bb3443 | Official (0.79.3 oracle) | Fix | Measured now |
+|---|---|---|---|---|
+| P2-1 closing frames under reply pressure | `pressure`: daemon exit 1 at 5.8 s, unhandled "reply producer capacity exceeded" | survives | closing replies (busy / cancelled-before-start / backlog drained / unsupported) go through `emitClosing`→`sendClosing`; async rejection is caught and deferred to a bounded queue (128, overflow logged), retried in order from the keepalive tick | `pressure` daemon alive, death gate pass; reviewer's probe: childExit null; unit test: 200 rejections → 0 unhandled, 128 kept, overflow logged, flushed in order |
+| P2-2 stale credential 401 | `rotation`: old keepalive 401 closed the new channel (no events after old401) | channel-identity check in `rejectCredential` | `rejectCredential(ch)` acts only if `this.channel === ch` (poll, keepalive, watch); reply lane raises 401 only for the current channel | keepalives with new credential continue after old401 (official and ours: 3 keepalives, `sh8`+`post`); reviewer's probe: keepalive at old401+504 ms |
+| P2-3 non-cancellable 120 s submit | `stall-cancel`: request `two` got no data in window | `replies.drop` + `submitAbort`: old submit closed +4 ms, `two` first frame +7 ms | per-submit AbortController; `ReplyQueue.drop(isCancelled)` drops queued replies of cancelled ids and aborts the in-flight submit only if every item in it is cancelled; `stop()` aborts too. Non-cancelled slow submits keep the 120 s deadline. Also: queued frames now merge into one submit (official `replies.take()`), and poll drains back-to-back while acks are pending (official pollOnce loop) | reviewer's probe: abort +5 ms, `two` first frame +11 ms (official same run +4 / +7); comparator `stall-cancel` SAME |
+| P2-4 death gate | daemon SIGKILL mid-run still produced pass | n/a | scenario marks fail if daemon dies before cleanup (exit code 3); `run-background.py` exits non-zero on missing/failed results; comparator requires all results pass | `--kill-at=3000` negative test: scenario fail, runner ≠0, comparator ≠0 |
+| P3 comparator | deleting all data submits still SAME | n/a | per request id: presence, same id set, ordered decoded messages (start…exit/streamClose) must match after the explicit rules below | negative tests: all data deleted / one id missing / no exit / no streamClose / changed stdout / inconsistent exec id / no abort / late next request / no keepalive after stale 401 / dead daemon / cancelled id still keepalived → all non-zero |
+
+Explicit allowed differences in `keepalive-diff.py` (anything else fails):
+- chunking/batching: consecutive stdout/stderr chunks of one id are concatenated; submit batch boundaries are ignored (data is compared per request id); `localExecutionTimeMs` removed.
+- EXEC-ID: inner exec id is a local admission sequence (differs between fresh official runs); each side must use one id per request and distinct ids across requests.
+- EXEC-HEARTBEAT (**open deviation, newly surfaced**): official writes `{"heartbeat":{"id":N}}` while an exec runs (D:L98140–98153); ours does not. Only that exact message is removed and its count printed (backlog/cancel/rotation: official 16, ours 0).
+- pressure: which of 8 identical streaming shells reaches the first 10 s-delayed submit races in both daemons; only count and first message kind of ids with data are compared; pre-cancel keepalive id sets must be equal and no cancelled id may be keepalived after cancel+300 ms.
+
+Goldens: official re-recorded fresh for all 7 scenarios (old 4 had no data fields); fresh official keepalive ids/offsets consistent with the previous official goldens (backlog differs only in `localExecutionTimeMs`). Official main.cjs SHA256 5c1424ed… equals `dist/local-exec-daemon/main.cjs` extracted from the 0.79.3 app.asar. Tests compare ours only against official goldens; `keepalive-ours/` is reference only.
+
+Counts: `npm test` 118 pass / 0 fail (107 + 11: 7-scenario bwrap oracle instead of 2, P2-1/P2-2/P2-3/merge/P3/death-gate tests); r3 strict differential 46 / 36 / 10 / 0 diff, lifecycle PASS, RC=0.
+
+Unverified / open: exec heartbeat not implemented; rotation keepalive is a ±1 tick (500 ms) boundary race (ours was one tick late in 1 of 7 rotation runs, official 0 of 4); batching limit 256 frames per submit is our choice (official take() limit not measured); closing-frame retry budget (official `closingSince`/x9r) not reproduced; >256 due ids, stuck ≥120 s cutoff and real backend behavior not tested. Not drop-in.
