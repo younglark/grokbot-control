@@ -294,9 +294,9 @@ Reproduced locally on cd72af6 (1/1 FAIL, same signature).
 
 Root cause: the reply lane is full of stdout during the stall, so busy closing replies went to the deferral list capped at 128. Busy #128+ were left unACKed (correct: no ACK-then-drop), but the peer queue is FIFO and only advances on ACK, so the unACKed busy items sat at its head and the cancel behind them was never delivered. Official ACKs everything because its reply lanes (oee.push) hold closings without a cap.
 
-Constraint analysis: with no-ACK-then-drop and a FIFO queue that only advances on ACK, a control behind K unACKable items needs K held closing replies. So bounded memory cannot guarantee control reachability for an arbitrarily long flood during a reply stall; any bound has a K beyond which the cancel waits for the lane to recover (then it is delivered — nothing is dropped). Official avoids this only by being unbounded. No new fields/endpoints exist in the frozen proto to bypass FIFO (Poll has ack_ids/limit only), and official uses no persistence for replies, so no SQLite was added.
+Constraint analysis: with no-ACK-then-drop and a FIFO queue that only advances on ACK, a control behind K unACKable items needs K held closing replies. So bounded memory cannot guarantee control reachability for an arbitrarily long flood during a reply stall; any bound has a K beyond which the cancel waits for the lane to recover (then it is delivered — nothing is dropped). Official avoids this only by being unbounded. No new fields/endpoints exist in the frozen proto to bypass FIFO (Poll has ack_ids/limit only), and official uses no persistence for replies, so no SQLite was added. **[Superseded t108: "nothing is dropped" refuted (atomic-cancel loss); the bounded-memory constraint was self-imposed — per user direction t104u the queue now matches the original (unbounded), see Round 5.]**
 
-Fix (provider.ts): closing replies are small and fixed-shape (requestId + shared constant text). The deferral is now budgeted by accounted bytes (`closingCost` = 96 + 2·len(requestId), total ≤ 1 MiB = 1/8 of the 8 MiB lane) and count (≤ 8192) instead of 128 entries: ≥ 4681 closings even with 64-char ids. Beyond the budget behaviour is unchanged (unACK, redelivered, never dropped). Not changed: poll limit (an earlier closed test pins it), queue semantics, fake peer, pressure, timing, comparator.
+Fix (provider.ts): closing replies are small and fixed-shape (requestId + shared constant text). The deferral is now budgeted by accounted bytes (`closingCost` = 96 + 2·len(requestId), total ≤ 1 MiB = 1/8 of the 8 MiB lane) and count (≤ 8192) instead of 128 entries: ≥ 4681 closings even with 64-char ids. Beyond the budget behaviour is unchanged (unACK, redelivered). **[Correction t108] "never dropped" was refuted by the reviewer: the cancel path estimated room at 224 B/entry and ignored storeClosing()==false, so a 2000-char backlog target was removed and its cancel ACKed with no terminal (atomic-cancel component; backlog-terminal-loss probe, ours terminal 0/official 1). Also the original P2 was NOT closed: 520 busy × 1024-char ids exceeded the budget (ours ACK 489, cancel blocked; official ACK 520, +4 ms). Round 4 was a 200-case capacity mitigation only.** Not changed: poll limit (an earlier closed test pins it), queue semantics, fake peer, pressure, timing, comparator.
 
 After fix:
 - cancel-overflow probe (scenario added to scripts/oracles/uc-keepalive.cjs as in the reviewer's probe; assert-cancel.py added; runner no longer truncates stdout at 64 KiB): final code: 4 independent ours runs (3 probe + 1 in npm test) all PASS, busyAcked 200, abort 5–6 ms after cancel (3 earlier runs of a discarded poll-limit-64 variant also passed, not counted), USER_ABORT exit; 3 official runs PASS (abort 4–6 ms) + 1 in npm test.
@@ -304,3 +304,29 @@ After fix:
 - r3 46/36/10/0, lifecycle PASS; 8 scenarios vs golden in npm test; overflow 3 fresh pairs SAME 200/200; rotation 5 fresh strict pairs SAME, TICK-BOUNDARY=0.
 
 Risks: bounded ⇒ a flood larger than the budget (~4.7k+ busy during one reply stall) still delays control until recovery (documented limit, not equivalent to official); real backend redelivery/order not tested; up to ~1 MiB extra memory.
+
+
+## Round 5 (t108, on 16ca778) — atomic cancel fix, then queue aligned with the original (t104u direction)
+
+1. Atomic backlog cancel (dfac2f9, 0e8beb3): the cancel now builds the actual closing frames, reserves them by real requestId cost (all or nothing) before removing backlog entries and ACKing; on failure nothing is removed and the cancel stays unACKed. Reviewer component: before backlog 0/cancelled/ACKed/no terminal → after backlog 1, not cancelled, no ACK. Regression with the reviewer's exact prefill (4677×64 + 1024-char target, two entries, no half-save).
+
+2. The user then directed (t104u): match the original daemon instead of our self-imposed bounded-memory design (no disk outbox). Original mechanism (daemon.formatted.cjs):
+   - Reply storage `oee` (L177276–177400): `lanes = Map<requestId,{frames}>`, `push` appends with **no cap**; `take()` builds ONE submit by rounds, one frame per lane per round, limit X7e=256 frames / K_=8 MiB / j2=1 MiB file bytes; taken lanes rotate to the end; `requeue` puts frames back at the front; `drop(requestId)` deletes the lane.
+   - Producers: `enqueue(e)` = `replies.push` + `flush()`, synchronous — executors are never backpressured.
+   - `flush()` (L178671) serial, one submit at a time; `submit` retries (submitRetry) then keeps only closing frames past budget rules and drops the rest (L178707–178760).
+   - Poll (L178457–178557): limit tgt=64 always; **every** polled id goes to pendingAcks immediately (ACKed on next poll); cancel: cancelledIds + `replies.drop` + submitAbort when the submitting batch is all cancelled + closing (Gl) for each cancelled backlog entry; busy (inflight≥8 && backlog≥64) → closing F5e enqueued; loop while page full or acks pending.
+   So the original's reply queue is unbounded in memory; it ACKs everything, which is why a cancel behind 520 long busy ids is reachable.
+
+   Our deviation sources: ReplyQueue storage cap 256 frames / 8 MiB with producer waiters (shared with the Box lane), closing deferral list + unACK fallback, runBacklog gated by `replies.available`, poll limit min(64, free slots), FIFO batch order.
+
+   Change (this commit): the UC lane is constructed with unbounded storage (Infinity) and a separate per-submit batch limit 256 frames / 8 MiB; batches are filled round-robin per request lane; poll limit is tgt=64. Consequently offer() always succeeds, busy/cancel closings are always held, every polled item is ACKed, producers never wait. Box lane unchanged. Deferral/unACK code remains only as a fallback when the lane is stopped (not reached in normal operation).
+
+   Remaining deviations (documented, not changed): ours retries a failed submit indefinitely instead of the original's retry budget + drop of non-closing frames; cross-batch lane rotation is approximated by first-queued order; file-byte (j2) limit not modelled (UC file streams not implemented).
+
+After (final code):
+- cancel-overflow-long (520 × 1024-char busy, active cancel): ours 3/3 probe runs + 1 npm-test run PASS, busy ACK 520, abort 10–11 ms (official 4–5 ms, 3 + 1 runs). Before: ours ACK 489, no cancel.
+- cancel-overflow-backlog (488 long busy, 2000-char backlog target): ours 3/3 + 1 PASS (terminal retained, never started); official 1 + 1 PASS.
+- cancel-overflow (200): official/ours PASS in npm test. Atomic component: no loss.
+- npm test 133/133; r3 46/36/10/0, lifecycle PASS; 8 UC scenarios vs golden pass; overflow 3 fresh pairs 200/200; rotation 5 fresh strict pairs SAME, TICK-BOUNDARY=0.
+
+Risk (same as the original): reply memory is unbounded while the backend is slow/stalled (a flood of polled items or chatty stdout accumulates in RAM; no producer backpressure). Real backend untested.

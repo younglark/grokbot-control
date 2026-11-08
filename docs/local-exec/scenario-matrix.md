@@ -1,5 +1,5 @@
 # local-exec 场景验收矩阵（0.79.3 Linux，2026-11-08 Asia/Singapore）
-> t107 第四轮：P2 cancel-behind-overflow（我们 busy ACK128、cancel 不可达）已修：closing 延迟改为字节+条数预算（≤1MiB/8192，原 128 条），最终代码 ours 4 次/官方 4 次探针全过，127 tests、46/36/10/0；有界内存下超预算洪泛仍会延迟控制（见 REVIEW-FIXES Round 4），待独立复验。
+> t107 第四轮更正：当时仅为 200 例容量缓解，原 P2 未关（520×1024 超预算仍堵），且 cancel 预留按估算导致 backlog 终帧丢失（已在 t108 修为原子）。t108 第五轮：按用户要求与原版一致——原版 reply 队列（oee）按请求分 lane、内存无上限、单次 take 256 帧/8MiB、全部 ACK；我们改为同机制（无界存储、轮转取批、poll limit 64）。520 长 ID/cancel、backlog 终帧、200 例探针官方/我们均通过，133 tests、46/36/10/0。风险同原版：后端卡住时回复内存无界。待独立复验。
 > t106 第三轮：上轮 rotation 独立复验**未通过**（独立 26 对 official 0 晚 / ours 3 晚；"400" 为 20+20 次运行的交叉配对数，非 400 次运行）。比较器 TICK-BOUNDARY 改为 UNRESOLVED 失败；根因为我方 250ms poll 定时器（官方无），改为 30s 安全轮询后 strict rotation 20 独立对全 SAME、124 tests、46/36/10/0。详见 REVIEW-FIXES.md Round 3，待独立复验。
 
 > t103u 新批次（UC keepalive，d8b1d87/5bb3443 被审查阻塞 4×P2+P3 修正后，fa46d0f 再被阻塞 P2-1/P2-2/P3，本轮修正）：执行方自测，**待独立再审**；上一批 t101u 已独立验收并于 56ee14c push。
