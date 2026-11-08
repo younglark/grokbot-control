@@ -9,6 +9,7 @@ const { startUcFakePeer, SYN_CRED, SYN_MACHINE } = require('./helpers/uc-fake-pe
 const { sealJson } = require('../dist/uc/sealed.js');
 const { ownershipDecision, leaseIsActive, generationFromEnv, pidAlive } = require('../dist/state/lease.js');
 const { unsealJson } = require('../dist/uc/sealed.js');
+const { lifecycleTrace } = require('../dist/trace.js');
 
 const ROOT = path.resolve(__dirname, '..');
 const DAEMON = path.join(ROOT, 'dist', 'index.js');
@@ -296,10 +297,17 @@ describe('ownership PID superseded + UC admission gate + superviseBacklog', () =
       computerId: 'synthetic',
     });
     const discoveryPath = path.join(data, 'local-exec-daemon.json');
+    let traceOwner;
     const until = (pred, ms, label) =>
       new Promise((resolve, reject) => {
         const t0 = Date.now();
         const tick = () => {
+          if (process.env.LED_LIFECYCLE_TRACE) {
+            try {
+              const owner = JSON.parse(fs.readFileSync(discoveryPath, 'utf8')).pid;
+              if (owner !== traceOwner) { traceOwner = owner; lifecycleTrace('fixture:owner-observed', { target: child.pid, owner, label }); }
+            } catch { /* synthetic discovery may not exist yet */ }
+          }
           try {
             if (pred()) return resolve();
           } catch { /* retry */ }
@@ -323,7 +331,9 @@ describe('ownership PID superseded + UC admission gate + superviseBacklog', () =
       );
       refreshSupervisor();
       const prev = JSON.parse(fs.readFileSync(discoveryPath, 'utf8'));
+      lifecycleTrace('fixture:supersede-begin', { target: child.pid, owner: process.pid });
       fs.writeFileSync(discoveryPath, JSON.stringify({ ...prev, pid: process.pid, generation: 2 }));
+      lifecycleTrace('fixture:supersede-done', { target: child.pid, owner: process.pid });
       const exited = await Promise.race([
         exitPromise,
         until(() => child.exitCode === 0, 20000, 'superseded-exit').then(() => ({ code: child.exitCode, signal: null })),

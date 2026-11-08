@@ -32,6 +32,7 @@ import { dataRootFromEnv } from "../util";
 import { approvalsPathFor, authorizationOf, describeExec, execRefusal, retireApproval, retirementsPathFor, type Authorization } from "./approvals";
 import type { UserComputerHello, UserComputerTransport } from "./types";
 
+export type ResolvedUcChannel = { backendUrl: string; machineId: string; credential: string };
 export type UcProviderOptions = {
   backendUrl: string;
   machineId: string;
@@ -43,6 +44,8 @@ export type UcProviderOptions = {
   /** Max poll limit (official default-ish). */
   pollLimit?: number;
   accountScope?: string;
+  /** D:L179387–179395: live scope lookup, not the construction-time credential snapshot. */
+  resolveChannel?: () => Promise<ResolvedUcChannel | null>;
 };
 
 const requestKinds = Object.fromEntries(GrokBotUserComputerRequestFrame.fields.list().map(f => [f.localName, f.no]));
@@ -161,6 +164,11 @@ export const UC_BUSY_TEXT =
 export class UserComputerProvider implements UserComputerTransport {
   private closed = false;
   private stopped = false;
+  private closing = false;
+  private watchStopped = false;
+  private closeDrained = false;
+  private onPollIdle?: () => void;
+  private onInflightDrained?: () => void;
   private abort = new AbortController();
   private presenceToken = crypto.randomBytes(16).toString("hex");
   private pendingAcks: string[] = [];
@@ -224,6 +232,7 @@ export class UserComputerProvider implements UserComputerTransport {
     };
     // Official reply lanes + flush/submit retry (oee, L177276; flush/submit L178671–178760): see reply-lanes.ts.
     this.replies = new UcReplyLanes({
+      canFlush: () => !!this.channel && this.proven && !this.closed && !this.closing,
       send: async (frames, signal) => {
         const ch = this.channel!;
         // Frames carry no authority: machineId/credential come from the current channel at each attempt.
@@ -247,7 +256,7 @@ export class UserComputerProvider implements UserComputerTransport {
       // Fenced where the failure is set: a stale channel's 401 never closes a channel that rotated in between.
       reject: (e) => {
         if (e.epoch !== undefined && e.epoch !== this.channel) return false;
-        this.admissionClosed = true; this.abort.abort(); return true;
+        this.proven = false; this.admissionClosed = true; this.abort.abort(); return true;
       },
       isCancelled: (id) => this.cancelledIds.has(id),
     });
@@ -268,17 +277,61 @@ export class UserComputerProvider implements UserComputerTransport {
     };
     this.keepAliveTimer = setTimeout(() => void tick(), UC_KEEPALIVE_INTERVAL_MS);
     let attempts = 0;
-    while (!this.closed) {
+    while (!this.closed && !this.watchStopped) {
+      let liveChannel: ResolvedUcChannel | null = null;
+      try { liveChannel = await this.resolveChannel(); }
+      catch { console.error("[user-computer-provider] channel resolve failed"); }
+      if (liveChannel === null) {
+        this.channel = null; this.proven = false; this.abandonWork();
+        await new Promise(r => setTimeout(r, 10_000)); // original channelRetry, even after a resolve error
+        continue;
+      }
+      this.applyResolvedChannel(liveChannel);
+      if (this.closed || this.watchStopped) break;
       if (this.admissionClosed) { await new Promise(r => setTimeout(r, 100)); continue; }
       hello.standing = this.standingFor((await loadSettings()).permission);
       hello.serverAuthoritative = this.opts.hello.serverAuthoritative;
       this.announcedStanding = hello.standing;
       await this.watchLoop(hello);
-      if (this.closed) break;
+      if (this.closed || this.watchStopped) break;
       await new Promise(r => setTimeout(r, Math.min(2000, 100 * 2 ** Math.min(attempts++, 4))));
     }
     clearInterval(this.pollTimer);
     clearTimeout(this.keepAliveTimer);
+  }
+
+  private resolveChannel(): Promise<ResolvedUcChannel | null> {
+    return this.opts.resolveChannel ? this.opts.resolveChannel() : Promise.resolve(this.channel ?? {
+      backendUrl: this.opts.backendUrl, machineId: this.opts.machineId, credential: this.opts.credential,
+    });
+  }
+  private applyResolvedChannel(next: ResolvedUcChannel): boolean {
+    const old = this.channel;
+    if (old && old.backendUrl === next.backendUrl && old.machineId === next.machineId && old.credential === next.credential) return false;
+    this.client = createClient(GrokBotService, createConnectTransport({
+      baseUrl: next.backendUrl, httpVersion: "1.1", useBinaryFormat: true,
+      readMaxBytes: 8 * 1024 * 1024, writeMaxBytes: 8 * 1024 * 1024,
+    }));
+    this.channel = next;
+    this.proven = false;
+    this.abort.abort(); this.abort = new AbortController();
+    this.admissionClosed = false; this.replies?.resume();
+    return true;
+  }
+  /** D:L178180–178220: re-resolve a current scope; missing channel abandons work. */
+  async rehelloIfChanged(): Promise<void> {
+    if (this.channel !== null) {
+      const next = await this.resolveChannel();
+      if (next === null) {
+        this.channel = null; this.proven = false; this.abandonWork(); this.abort.abort(); return;
+      }
+      if (this.applyResolvedChannel(next)) return;
+    }
+    const standing = this.standingFor((await loadSettings()).permission);
+    if (this.announcedStanding !== undefined && this.announcedStanding !== standing) {
+      this.announcedStanding = standing;
+      this.abort.abort(); this.abort = new AbortController();
+    }
   }
 
   /** Same-machine, same-scope rotation resumes the SAME reply/ack/task state. */
@@ -305,27 +358,73 @@ export class UserComputerProvider implements UserComputerTransport {
   beginShutdown(): void {
     this.closed = true; clearInterval(this.pollTimer); clearTimeout(this.keepAliveTimer); this.abort.abort();
   }
-  async stop(): Promise<void> {
-    if (this.stopped) return;
-    this.stopped = true;
-    this.beginShutdown();
-    this.backlog = [];
-    this.active.forEach(id => cancelRequest(id));
-    // Abort exits must reach emit before draining/stopping the reply lane.
-    await Promise.race([Promise.all([...this.activeJobs]), new Promise(r => setTimeout(r, 1000))]);
-    const drained = await this.replies?.drain();
-    if (drained === false) console.error("[user-computer-provider] reply drain deadline (pending replies retained until process exit)");
-    this.replies?.stop();
+  /** D:L178009–178025. Reentrant close returns immediately; it does not join the first close. */
+  async stop(options: { withdrawPresence?: boolean } = {}): Promise<void> {
+    if (this.closed || this.closing) return;
+    this.closing = true;
+    this.stopped = true; // existing pending-approval guard; do not spawn after close starts
+    const withdraw = options.withdrawPresence === true ? this.stopWatchingAndWithdraw() : Promise.resolve();
+    clearTimeout(this.keepAliveTimer);
+    clearInterval(this.pollTimer);
+    if (this.replies instanceof UcReplyLanes) this.replies.pauseForClose();
+    this.abandonWork();
+    if (this.pollBusy) await this.awaitSettledOnClose("the in-flight poll", done => { this.onPollIdle = done; });
+    this.onPollIdle = undefined;
+    if (this.active.size > 0) await this.awaitSettledOnClose("in-flight requests", done => { this.onInflightDrained = done; });
+    this.onInflightDrained = undefined;
+    await this.drainOnClose();
+    this.closed = true;
+    this.abort.abort();
+    await withdraw;
+  }
+
+  private async stopWatchingAndWithdraw(): Promise<void> {
+    // D:L178027–178049: begin withdrawal BEFORE poll/inflight/flush drain; await it last.
+    this.watchStopped = true;
     this.abort.abort();
     const ch = this.channel;
     if (!ch) return;
     try {
       await this.client.withdrawGrokBotUserComputerPresence({
         machineId: ch.machineId, credential: ch.credential, presenceToken: this.presenceToken,
-      }, {timeoutMs: 2000});
-    } catch {
-      /* ignore */
+      }, { timeoutMs: 750 }); // g9r
+    } catch { /* original reports failure but close still completes */
+      console.error("[user-computer-provider] presence withdraw failed");
     }
+  }
+
+  private abandonWork(): void {
+    const pending = this.backlog;
+    this.backlog = [];
+    for (const q of pending) void Promise.resolve(this.emit(this.closingFrame(q, UC_BACKLOG_CLOSED_BEFORE_START)))
+      .catch(() => console.error("[user-computer-provider] abandoned backlog reply failed"));
+    for (const id of this.active) cancelRequest(id);
+  }
+
+  private async awaitSettledOnClose(label: string, register: (done: () => void) => void): Promise<void> {
+    let timer: NodeJS.Timeout | undefined;
+    await new Promise<void>(resolve => {
+      register(resolve);
+      timer = setTimeout(() => { console.error(`[user-computer-provider] close gave up waiting for ${label}`); resolve(); }, 10_000); // ok
+    });
+    clearTimeout(timer);
+  }
+
+  private async drainOnClose(): Promise<void> {
+    if (this.replies instanceof UcReplyLanes) {
+      const replies = this.replies;
+      replies.dropStreams();
+      if (replies.flushing) await this.awaitSettledOnClose("the in-progress flush", done => { void replies.waitForIdle().then(done); });
+      const ch = this.channel, client = this.client;
+      if (ch && this.proven) await replies.drainOnClose(async frames => {
+        await client.submitGrokBotUserComputerResponses({ machineId: ch.machineId, credential: ch.credential, frames }, { timeoutMs: 10_000 });
+      });
+    } else {
+      // Compatibility for pre-lanes transports/test doubles, not the production start path.
+      await this.replies?.drain();
+      this.replies?.stop();
+    }
+    this.closeDrained = true;
   }
 
   private bump(delta: number): void {
@@ -337,16 +436,17 @@ export class UserComputerProvider implements UserComputerTransport {
 
   private queueSubmit(frames: ExecFrameOut[]): Promise<void> {
     const ch = this.channel;
-    if (!ch || frames.length === 0 || !this.replies) return Promise.resolve();
+    if (frames.length === 0 || !this.replies || (!ch && !(this.replies instanceof UcReplyLanes))) return Promise.resolve();
+    // Lane envelopes are decoded to frames only; missing channel must not discard abandonWork's terminal.
     return this.replies.enqueue(Buffer.from(new SubmitGrokBotUserComputerResponsesRequest({
-      machineId: ch.machineId, credential: ch.credential, frames: frames.map(responseFrame),
+      machineId: ch?.machineId ?? "", credential: ch?.credential ?? "", frames: frames.map(responseFrame),
     }).toBinary()), frames.map(f => f.requestId));
   }
 
   async pollOnce(): Promise<void> {
     if (this.pollBusy) { this.pollAgain = true; return; }
     // Official keeps polling at capacity/backpressure so cancel + superviseBacklog nudge stay live.
-    if (this.closed || this.admissionClosed || !this.channel) return;
+    if (this.closed || this.closing || this.admissionClosed || !this.channel) return;
     this.pollBusy = true;
     const acks = this.pendingAcks.splice(0);
     const pollChannel = this.channel;
@@ -364,7 +464,8 @@ export class UserComputerProvider implements UserComputerTransport {
         machineId: ch.machineId, credential: ch.credential, ackIds: acks,
         // Official tgt=64 on every poll regardless of local capacity (D:L177848, L178474).
         limit: this.opts.pollLimit ?? UC_POLL_LIMIT,
-      }, {timeoutMs: 2000});
+      }, {timeoutMs: 10_000}); // original controlDeadline ok
+      if (this.channel !== pollChannel) { this.pendingAcks.unshift(...acks); return; }
       const queued = res.requests.map(parseQueued).filter(q => q.id);
       trace("poll-items", { n: queued.length, rids: queued.map(q => q.requestId.slice(0, 16)) });
       // Only forget queue ids after the peer confirms receipt of prior acks.
@@ -398,6 +499,11 @@ export class UserComputerProvider implements UserComputerTransport {
           for (const f of closings) if (!this.storeClosingFrame(f)) throw new Error("reserved closing reply not held");
           continue;
         }
+        // D:L178543–178546: a poll already in flight when close starts ACKs and closes new exec work.
+        if (this.closing) {
+          await this.emit(this.closingFrame(q, UC_BACKLOG_CLOSED_BEFORE_START));
+          continue;
+        }
         // Promote before admit (official startRequest.finally pulls while inflight<8,
         // D:L178576–178583). Same-poll recoveries with replies.available must free
         // backlog slots before the busy check — otherwise a recovered lane falsely
@@ -429,11 +535,13 @@ export class UserComputerProvider implements UserComputerTransport {
       // Failed poll never re-executes an admitted request.
     } finally {
       this.pollBusy = false;
+      this.onPollIdle?.();
+      if (this.closeDrained) void this.drainOnClose();
       // Official pollOnce loops at once while acks are pending or the page was full
       // (D:L178459–178557), so a burst (e.g. 64 cancels) is drained in back-to-back polls, not one
       // page per safety-poll tick. Only once the provider loop is running (pollTimer).
-      const drain = polled && this.pollTimer !== undefined && !this.closed && this.pendingAcks.length > 0;
-      if (this.pollAgain || drain) { this.pollAgain = false; setTimeout(() => void this.pollOnce().catch(() => undefined), drain ? 0 : 25); }
+      const drain = polled && this.pollTimer !== undefined && !this.closed && !this.closing && this.pendingAcks.length > 0;
+      if (!this.closing && (this.pollAgain || drain)) { this.pollAgain = false; setTimeout(() => void this.pollOnce().catch(() => undefined), drain ? 0 : 25); }
     }
   }
   /**
@@ -442,7 +550,7 @@ export class UserComputerProvider implements UserComputerTransport {
    * Exposed for regressions (clock injectable via nowMs).
    */
   superviseBacklog(nowMs = Date.now()): void {
-    if (this.backlog.length === 0 || this.closed || this.admissionClosed) return;
+    if (this.backlog.length === 0 || this.closed || this.closing || this.admissionClosed) return;
     if (this.lastPolledAt <= 0) return;
     const age = nowMs - this.lastPolledAt;
     if (age > UC_BACKLOG_STALE_MS) {
@@ -486,7 +594,7 @@ export class UserComputerProvider implements UserComputerTransport {
   /** Official sendKeepAlives (daemon.formatted.cjs L178625–178661): messagesAccepted frames only. */
   async sendKeepAlives(now = performance.now()): Promise<string[]> {
     const ch = this.channel;
-    if (!ch || !this.proven || this.closed || this.admissionClosed || this.keepAliveSending) return [];
+    if (!ch || !this.proven || this.closed || this.closing || this.admissionClosed || this.keepAliveSending) return [];
     const held = this.heldRequestIds();
     for (const id of [...this.keepAliveDueAt.keys()]) if (!held.has(id)) this.keepAliveDueAt.delete(id);
     for (const id of [...this.cancelledIds]) if (!held.has(id)) this.cancelledIds.delete(id);
@@ -547,9 +655,9 @@ export class UserComputerProvider implements UserComputerTransport {
   }
   private offerFrame(frame: ExecFrameOut): boolean {
     const ch = this.channel; const r = this.replies;
-    if (!ch || !r) return false;
+    if (!r || (!ch && !(r instanceof UcReplyLanes))) return false;
     if (typeof r.offer === "function") return r.offer(Buffer.from(new SubmitGrokBotUserComputerResponsesRequest({
-      machineId: ch.machineId, credential: ch.credential, frames: [responseFrame(frame)] }).toBinary()), [frame.requestId]);
+      machineId: ch?.machineId ?? "", credential: ch?.credential ?? "", frames: [responseFrame(frame)] }).toBinary()), [frame.requestId]);
     // Minimal stubs without offer(): fall back to emit; a rejection re-defers (bounded).
     let p: Promise<void>;
     try { p = Promise.resolve(this.emit(frame)); } catch (e) { p = Promise.reject(e); }
@@ -572,17 +680,17 @@ export class UserComputerProvider implements UserComputerTransport {
   /** Official rejectCredential(e): only the channel that is still current may be closed. */
   private rejectCredential(ch: { credential: string } | null): void {
     if (!ch || this.channel !== ch) return;
-    this.admissionClosed = true; this.abort.abort();
+    this.proven = false; this.admissionClosed = true; this.abort.abort();
   }
 
   private runBacklog(): void {
-    while (!this.closed && !this.admissionClosed && this.active.size < UC_INFLIGHT_MAX && this.backlog.length && this.replies?.available) {
+    while (!this.closed && !this.closing && !this.admissionClosed && this.active.size < UC_INFLIGHT_MAX && this.backlog.length && this.replies?.available) {
       const q = this.backlog.shift()!;
       if (this.active.has(q.requestId)) continue;
       this.active.add(q.requestId); this.bump(1); trace("admit", { rid: q.requestId.slice(0, 16) });
       const job = this.handleQueued(q).catch(e => requestError(q.requestId, lastAllocatedExecIdOrZero(), e, this.emit, { root: this.opts.root, serverMessage: q.serverMessage }))
         .catch(() => { console.error("[user-computer-provider] request reply failed"); })
-        .then(() => undefined).finally(() => { this.activeJobs.delete(job); this.active.delete(q.requestId); this.bump(-1); this.runBacklog(); });
+        .then(() => undefined).finally(() => { this.activeJobs.delete(job); this.active.delete(q.requestId); this.bump(-1); if (this.active.size === 0) this.onInflightDrained?.(); this.runBacklog(); });
       this.activeJobs.add(job);
     }
   }

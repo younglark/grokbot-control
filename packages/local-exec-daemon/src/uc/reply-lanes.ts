@@ -74,6 +74,7 @@ export type UcLanesOptions = {
   /** Official rejectCredential: false when the rejected channel is no longer current (retry at once). */
   reject: (e: HttpStatusError) => boolean | void;
   isCancelled: (requestId: string) => boolean;
+  canFlush?: () => boolean;
   now?: () => number;
   sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
   log?: (msg: string) => void;
@@ -96,6 +97,29 @@ export class UcReplyLanes {
   /** True while a flush loop owns the mutex (probes / drain). */
   get flushing(): boolean { return this.flushing_; }
   private stopped = false;
+  private closing = false;
+  private idleWaiters = new Set<() => void>();
+  /** D:L178677: close stops normal flushes without aborting the current submit or rejecting late frames. */
+  pauseForClose(): void { this.closing = true; }
+  waitForIdle(): Promise<void> {
+    return !this.flushing_ ? Promise.resolve() : new Promise(resolve => this.idleWaiters.add(resolve));
+  }
+  /** Current lanes have materialised frames only, not attached async streams (D:oee.dropStreams). */
+  dropStreams(): void { /* no attached stream objects in this implementation */ }
+  /** D:L178101–178134: one control submit per batch; failure drops that batch, no normal retry/backoff. */
+  async drainOnClose(send: (frames: Frame[]) => Promise<void>): Promise<void> {
+    this.flushing_ = true;
+    try {
+      for (let frames = this.take(); frames.length > 0; frames = this.take()) {
+        try { await send(frames); }
+        catch (error) { this.log(`[user-computer-provider] dropping ${frames.length}-frame response batch on close: ${String(error)}`); return; }
+      }
+    } finally {
+      this.flushing_ = false;
+      for (const done of this.idleWaiters) done();
+      this.idleWaiters.clear();
+    }
+  }
   private stopSignal = new AbortController();
   private submitAbort?: AbortController;
   private submittingFrames: Frame[] = [];
@@ -177,7 +201,7 @@ export class UcReplyLanes {
     try {
       for (;;) {
         // official: `if (channel === undefined || !proven) return` — here a current-channel 401 pause
-        if (this.stopped || this.failure) return;
+        if (this.stopped || this.closing || this.failure || this.o.canFlush?.() === false) return;
         const frames = this.take();
         trace("take", { n: frames.length, rids: [...new Set(frames.map(f => f.requestId.slice(0, 16)))] });
         if (frames.length === 0) return;
@@ -192,6 +216,8 @@ export class UcReplyLanes {
       }
     } finally {
       this.submittingFrames = []; this.submitting = []; this.submitAbort = undefined; this.flushing_ = false;
+      for (const done of this.idleWaiters) done();
+      this.idleWaiters.clear();
     }
   }
   private async flushAfterClosingBackoff(): Promise<void> {

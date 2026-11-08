@@ -185,7 +185,7 @@ test('P2-2 fence at the failure site: RPC 401 then rotation in a microtask (befo
     // control: a 401 for the current channel still closes admission
     const q = new ReplyQueue(async () => { throw new (require('../dist/transport/replies.js').HttpStatusError)(401, 'cur'); }, (e) => e.epoch === 'cur');
     q.enqueue(Buffer.from('x'), ['x']); await new Promise((r) => setTimeout(r, 5)); assert.equal(String(q.failure), 'Error: reply HTTP 401');
-    await p.stop(); await running;
+    await p.stop({ withdrawPresence: true }); await running;
   } finally { process.env.SAND_DATA_ROOT = old; fs.rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -289,7 +289,7 @@ test('rotation tick slip root cause: provider keeps no sub-30s poll timer beside
     global.setInterval = oSI; global.setTimeout = oST;
     assert.deepEqual(intervals, [uc.UC_SAFETY_POLL_MS]); assert.equal(uc.UC_SAFETY_POLL_MS, 30000);
     assert.ok(timeouts.includes(500), 'keepalive tick 500 ms');
-    await p.stop(); await running;
+    await p.stop({ withdrawPresence: true }); await running;
   } finally { global.setInterval = oSI; global.setTimeout = oST; process.env.SAND_DATA_ROOT = old; fs.rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -451,7 +451,7 @@ test('resume during an in-flight 401 flush is honored after the mutex clears (tw
       assert.deepEqual(sent, [['q'], ['q']]);
       assert.equal(p.replies.readyCount, 0);
       assert.equal(p.replies.failure, undefined);
-      await p.stop(); await running;
+      await p.stop({ withdrawPresence: true }); await running;
     }
   } finally { process.env.SAND_DATA_ROOT = old; fs.rmSync(root, { recursive: true, force: true }); }
 });
