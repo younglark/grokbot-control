@@ -1,3 +1,4 @@
+import { trace } from "../trace";
 import { proto3 } from "@bufbuild/protobuf";
 import {
   ExecClientMessage,
@@ -28,6 +29,7 @@ let nextExecId = 1;
 let lastAllocatedExecId = 0;
 export function allocateExecId(): number {
   lastAllocatedExecId = nextExecId++;
+  trace("exec-id", { id: lastAllocatedExecId });
   return lastAllocatedExecId;
 }
 /** Most recent allocateExecId() result (0 if none since reset). For catch paths that must not double-allocate. */
@@ -39,8 +41,65 @@ export function resetExecIdCounter(value = 1): void {
   nextExecId = value;
   lastAllocatedExecId = 0;
 }
-export async function requestError(requestId: string, msgId: number, error: unknown, emit: Emit): Promise<void> {
-  await emit({ kind: "control", requestId, message: { throw: { id: msgId, error: String(error instanceof Error ? error.message : error) } }, cwdState: "unset" });
+/**
+ * Official Aft (daemon.formatted.cjs L132554–132566) used when forwarding an exec throw (L136340–136347):
+ * - only shellStreamArgs / backgroundShellSpawnArgs probe workingDirectory (bft L132549: empty → root);
+ * - otherwise "unset";
+ * - xft (L132546) via stat: directory → "exists", ENOENT/ENOTDIR (F5r L132528) → "missing";
+ * - other probe errors / Wi 1000 ms timeout (J5r L132553) → undefined so the field is omitted.
+ * Permission refusals use x9 (L136410) with no cwdState — callers must not pass a probe context there.
+ */
+export async function cwdStateForThrow(
+  root: string,
+  serverMessage?: Record<string, unknown>,
+): Promise<"exists" | "missing" | "unset" | undefined> {
+  const shell = (serverMessage?.shellStreamArgs ?? serverMessage?.backgroundShellSpawnArgs) as
+    | { workingDirectory?: string }
+    | undefined;
+  if (!shell || typeof shell !== "object") return "unset";
+  const requested = String(shell.workingDirectory ?? "").trim();
+  const target = requested.length === 0
+    ? root
+    : path.isAbsolute(requested) ? path.resolve(requested) : path.resolve(root, requested);
+  try {
+    const isDir = await Promise.race([
+      fs.promises.stat(target).then(
+        (st) => st.isDirectory(),
+        (e: NodeJS.ErrnoException) => {
+          if (e?.code === "ENOENT" || e?.code === "ENOTDIR") return false;
+          throw e;
+        },
+      ),
+      new Promise<never>((_, rej) => {
+        setTimeout(() => rej(new Error("cwd probe timed out")), 1000);
+      }),
+    ]);
+    return isDir ? "exists" : "missing";
+  } catch (e) {
+    console.error(
+      `[local-exec-daemon] cwd probe failed, cwdState left out: ${e instanceof Error ? e.message : String(e)}`,
+    );
+    return undefined;
+  }
+}
+
+export type ThrowCwdContext = { root: string; serverMessage?: Record<string, unknown> };
+
+export async function requestError(
+  requestId: string,
+  msgId: number,
+  error: unknown,
+  emit: Emit,
+  ctx?: ThrowCwdContext,
+): Promise<void> {
+  const cwdState = ctx ? await cwdStateForThrow(ctx.root, ctx.serverMessage) : "unset";
+  const throwFrame: ExecFrameOut = {
+    kind: "control",
+    requestId,
+    message: { throw: { id: msgId, error: String(error instanceof Error ? error.message : error) } },
+  };
+  if (cwdState !== undefined) throwFrame.cwdState = cwdState;
+  await emit(throwFrame);
   await emit({ kind: "control", requestId, message: { streamClose: { id: msgId } } });
 }
 export async function shutdownShells(): Promise<void> {
@@ -51,10 +110,10 @@ export async function shutdownShells(): Promise<void> {
   await Promise.all(jobs.map(j => j.done));
 }
 
-const NEVER_MSG =
+export const NEVER_MSG =
   'Local tools are turned off. The user has set local tool access to "Never", so Shell, Read, and AwaitShell with machineId, plus CopyToBox and CopyFromBox, cannot run on their computer. Do not retry them while this setting remains "Never". Use your own computer instead by omitting machineId, or ask the user to change the setting in Settings → Bot → Execution on Local Computer. If they change it away from "Never", you may try again.';
 
-const ASK_MSG =
+export const ASK_MSG =
   'That action was not approved on the user\'s computer, so nothing ran. Ask the user to approve it (or to set Settings → Bot → Execution on Local Computer to "Always allow"), and use your own computer (Shell, Read, AwaitShell) in the meantime.';
 
 export function refuseByPermission(permission: PermissionMode, requestId: string, emit: Emit): boolean {
@@ -124,7 +183,7 @@ export async function handleRead(args: {
     });
     await emit({ kind: "control", requestId, message: { streamClose: { id: msgId } } });
   } catch (e) {
-    await requestError(requestId, msgId, e, emit);
+    await requestError(requestId, msgId, e, emit, { root, serverMessage: { readArgs: { path } } });
   }
 }
 
@@ -161,7 +220,7 @@ export async function handleLs(args: {
     await emit({ kind: "client", requestId, message: client.toJson() as Record<string, unknown> });
     await emit({ kind: "control", requestId, message: { streamClose: { id: msgId } } });
   } catch (e) {
-    await requestError(requestId, msgId, e, emit);
+    await requestError(requestId, msgId, e, emit, { root, serverMessage: { lsArgs: { path: args.path || root } } });
   }
 }
 
@@ -226,6 +285,12 @@ export async function handleShellStream(args: {
   let prepared: PreparedShell;
   let notice: string | undefined;
   try {
+    // t110u: official shell execute awaits Sft (cwd resolution, D:L132620) before any shell preparation, so the
+    // synchronous cwd checks and the first (shared) prepareShell never run inside the admission pass that arms the
+    // other execs' heartbeat timers. The lifecycle is already registered above, so a cancel/stop landing here
+    // sets pendingReason and takes the existing pre-spawn abort path (start, aborted exit, streamClose; no spawn).
+    await undefined;
+    trace("shell-body", { rid: requestId });
     realRoot = fs.realpathSync(root);
     // Explicit workingDirectory wins; otherwise reuse the session cwd (official oracle cwdpersist),
     // re-validated against the root on every use; fall back to the root.
@@ -255,14 +320,16 @@ export async function handleShellStream(args: {
       if (!fs.statSync(cwd).isDirectory()) throw new Error("cwd is not a directory");
     }
     if (pendingReason === undefined) {
+      trace("prep-call", { rid: requestId });
       const p = prepareShell(command, realRoot);
+      trace("prep-returned", { rid: requestId });
       p.catch(() => undefined);
       await Promise.race([p, preSpawnAborted]);
       if (pendingReason === undefined) prepared = await p;
     }
   } catch (e) {
     clearTimeout(timeoutTimer); shells.delete(requestId);
-    await requestError(requestId, msgId, e, emit); resolveDone(); return;
+    await requestError(requestId, msgId, e, emit, { root, serverMessage: { shellStreamArgs: { workingDirectory: args.workingDirectory ?? "" } } }); resolveDone(); return;
   }
   if (pendingReason !== undefined) { await emitAborted(pendingReason, cwd); return; }
   if (notice) await emit({ kind: "client", requestId, message: { id: msgId, shellStream: { stderr: { data: notice } }, localExecutionTimeMs: 0 } });
@@ -308,7 +375,7 @@ export async function handleShellStream(args: {
       const truncated = dumpSize > MAX_STATE_BYTES;
       const finalCwd = commitShell(Buffer.concat(dumpChunks), Boolean(reason) || Boolean(error) || truncated) ?? cwd;
       try {
-      if (error) await requestError(requestId, msgId, error, emit);
+      if (error) await requestError(requestId, msgId, error, emit, { root, serverMessage: { shellStreamArgs: { workingDirectory: args.workingDirectory ?? "" } } });
       else {
         const elapsed = Date.now() - startedAt;
         await emit({ kind: "client", requestId, message: { id: msgId,
@@ -360,14 +427,24 @@ export function cancelRequest(requestId: string): boolean {
   job.abort(ShellAbortReason.USER_ABORT); return true;
 }
 
-export function handleUnsupported(requestId: string, msgId: number, typeName: string, emit: Emit): void {
-  emit({
-    kind: "control",
-    requestId,
-    message: { throw: { id: msgId, error: `No handler found for server message of type ${typeName}` } },
-    cwdState: "unset",
-  });
-  emit({ kind: "control", requestId, message: { streamClose: { id: msgId } } });
+export function handleUnsupported(
+  requestId: string,
+  msgId: number,
+  typeName: string,
+  emit: Emit,
+  ctx?: ThrowCwdContext,
+): void {
+  void (async () => {
+    const cwdState = ctx ? await cwdStateForThrow(ctx.root, ctx.serverMessage) : "unset";
+    const throwFrame: ExecFrameOut = {
+      kind: "control",
+      requestId,
+      message: { throw: { id: msgId, error: `No handler found for server message of type ${typeName}` } },
+    };
+    if (cwdState !== undefined) throwFrame.cwdState = cwdState;
+    await emit(throwFrame);
+    await emit({ kind: "control", requestId, message: { streamClose: { id: msgId } } });
+  })().catch(() => console.error("[local-exec] unsupported reply failed"));
 }
 
 export function handleDownload(args: {
@@ -414,12 +491,14 @@ export async function withExecHeartbeat(requestId: string, msgId: number, emit: 
   let closed = false;
   let timer: NodeJS.Timeout | undefined;
   const arm = (): void => {
+    trace("hb-arm", { rid: requestId, id: msgId });
     timer = setTimeout(() => {
+      trace("hb-fire", { rid: requestId, id: msgId, closed });
       if (closed) return;
       let p: Promise<unknown>;
       try { p = Promise.resolve(emit({ kind: "control", requestId, message: { heartbeat: { id: msgId } } })); }
       catch (e) { p = Promise.reject(e); }
-      p.then(() => { if (!closed) arm(); }, () => undefined);
+      p.then(() => { trace("hb-write-resolved", { rid: requestId, id: msgId }); if (!closed) arm(); }, () => undefined);
     }, intervalMs);
   };
   const wrapped: Emit = (f) => {
@@ -454,7 +533,7 @@ export async function dispatchExec(args: {
     if (refuseByPermission(permission, requestId, emit)) return;
     const p = (serverMessage.readArgs as { path?: string }).path;
     if (!p) {
-      handleUnsupported(requestId, msgId, "readArgs", emit);
+      handleUnsupported(requestId, msgId, "readArgs", emit, { root, serverMessage });
       return;
     }
     await withExecHeartbeat(requestId, msgId, emit, (e) => handleRead({ root, requestId, msgId, path: p, emit: e }));
@@ -474,7 +553,7 @@ export async function dispatchExec(args: {
       timeout?: number;
     };
     if (!a.command) {
-      handleUnsupported(requestId, msgId, "shellStreamArgs", emit);
+      handleUnsupported(requestId, msgId, "shellStreamArgs", emit, { root, serverMessage });
       return;
     }
     const command = a.command;
@@ -490,9 +569,9 @@ export async function dispatchExec(args: {
     return;
   }
   if (serverMessage.backgroundShellSpawnArgs) {
-    handleUnsupported(requestId, msgId, "backgroundShellSpawnArgs", emit);
+    handleUnsupported(requestId, msgId, "backgroundShellSpawnArgs", emit, { root, serverMessage });
     return;
   }
   const typeName = detectServerMessageType(serverMessage);
-  handleUnsupported(requestId, msgId, typeName, emit);
+  handleUnsupported(requestId, msgId, typeName, emit, { root, serverMessage });
 }

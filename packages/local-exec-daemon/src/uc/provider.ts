@@ -1,4 +1,5 @@
-import { loadSettings } from "../settings";
+import { trace } from "../trace";
+import { loadSettings, loadSettingsSync } from "../settings";
 import { HttpStatusError, type ReplyQueue } from "../transport/replies";
 import { UcReplyLanes } from "./reply-lanes";
 import { requestError } from "../exec/handlers";
@@ -15,6 +16,8 @@ import {
   lastAllocatedExecIdOrZero,
   cancelRequest,
   dispatchExec,
+  NEVER_MSG,
+  ASK_MSG,
   type Emit,
   type ExecFrameOut,
 } from "../exec/handlers";
@@ -167,7 +170,6 @@ export class UserComputerProvider implements UserComputerTransport {
   /** Official keepAliveDueAt / cancelledIds / keepAlivePausedUntil / proven (Watch `connected` seen). */
   readonly keepAliveDueAt = new Map<string, number>();
   private cancelledIds = new Set<string>();
-  private settingsChain: Promise<void> = Promise.resolve();
   private keepAlivePausedUntil = 0;
   private keepAliveSending = false;
   private proven = false;
@@ -347,6 +349,7 @@ export class UserComputerProvider implements UserComputerTransport {
         limit: this.opts.pollLimit ?? UC_POLL_LIMIT,
       }, {timeoutMs: 2000});
       const queued = res.requests.map(parseQueued).filter(q => q.id);
+      trace("poll-items", { n: queued.length, rids: queued.map(q => q.requestId.slice(0, 16)) });
       // Only forget queue ids after the peer confirms receipt of prior acks.
       acks.forEach(id => this.seen.delete(id));
       for (const q of queued) {
@@ -553,8 +556,8 @@ export class UserComputerProvider implements UserComputerTransport {
     while (!this.closed && !this.admissionClosed && this.active.size < UC_INFLIGHT_MAX && this.backlog.length && this.replies?.available) {
       const q = this.backlog.shift()!;
       if (this.active.has(q.requestId)) continue;
-      this.active.add(q.requestId); this.bump(1);
-      const job = this.handleQueued(q).catch(e => requestError(q.requestId, lastAllocatedExecIdOrZero(), e, this.emit))
+      this.active.add(q.requestId); this.bump(1); trace("admit", { rid: q.requestId.slice(0, 16) });
+      const job = this.handleQueued(q).catch(e => requestError(q.requestId, lastAllocatedExecIdOrZero(), e, this.emit, { root: this.opts.root, serverMessage: q.serverMessage }))
         .catch(() => { console.error("[user-computer-provider] request reply failed"); })
         .then(() => undefined).finally(() => { this.activeJobs.delete(job); this.active.delete(q.requestId); this.bump(-1); this.runBacklog(); });
       this.activeJobs.add(job);
@@ -570,13 +573,33 @@ export class UserComputerProvider implements UserComputerTransport {
       return;
     }
     // Authoritative / approval / scope grants are NOT implemented. Fail closed.
-    // Official reads the permission from its in-memory settings store (re()/AUe, D:L179276–179288), so admitted execs
-    // reach nextExecId++ in admission order. The live file read is kept but chained FIFO so completion order of
-    // concurrent reads cannot reorder exec ids / start frames (t112 fair gate).
-    const read = this.settingsChain.then(() => loadSettings());
-    this.settingsChain = read.then(() => undefined, () => undefined);
-    const live = await read;
+    // Official re() (D:L179276–179288) calls N.getLocalToolPermission() → load() → readFileSync (L82881/L82271/pue)
+    // synchronously inside startRequest, before its first await (v_.handle L135963 → withInflight L136032 →
+    // handleExecRequest L136309–136318 have no earlier await). Same here: one synchronous read per request, so execs
+    // reach allocateExecId in admission order without any chain, cache or shared promise (t108u).
+    const live = loadSettingsSync();
     const permission = this.opts.hello.serverAuthoritative ? "ask" : live.permission;
+    // t110u: official `let i = await this.options.isLocalUseBlocked?.(...)` (D:L136318) — every request of a Poll
+    // batch reads its permission synchronously first; exec id + heartbeat arm follow only after this await
+    // (nextExecId++ L136332 → wE.handle h() L98140). Then `if (r.cancelled) { n(O6r(s)); return; }` (L136328–136331,
+    // O6r L136419 = streamClose{id:0}): a cancel that landed meanwhile never starts the exec.
+    await undefined;
+    // t112u: official order after that await (D:L136324–136332): (1) blocked → `n(x9({requestId, error}))`, x9
+    // (L136410) = control throw{id:0,error}, no exec id consumed; (2) cancelled → O6r; (3) nextExecId++.
+    // AUe (L81503) / Qce (L81473) for a non-serverAuthoritative exec (global action): effective never → Xh,
+    // ask → i5 (approval grants are not implemented here: fail closed); serverAuthoritative without an
+    // authorization check here → i5. Text: NEVER_MSG = Xh (L81193), ASK_MSG = i5 (L81199).
+    if (permission !== "always") {
+      const error = permission === "never" && !this.opts.hello.serverAuthoritative ? NEVER_MSG : ASK_MSG;
+      await this.emit({ kind: "control", requestId: q.requestId, message: { throw: { id: 0, error } } });
+      return;
+    }
+    // Our guard (official stop path not mapped): stop() cancels only registered shells, so a stop landing in this
+    // await also ends the request here instead of spawning after shutdown.
+    if (this.cancelledIds.has(q.requestId) || this.stopped) {
+      await this.emit({ kind: "control", requestId: q.requestId, message: { streamClose: { id: 0 } } });
+      return;
+    }
     await dispatchExec({ root: this.opts.root, requestId: q.requestId,
       serverMessage: q.serverMessage, permission, emit: this.emit });
   }

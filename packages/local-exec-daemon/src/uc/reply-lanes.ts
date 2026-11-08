@@ -1,3 +1,4 @@
+import { trace } from "../trace";
 /**
  * UC reply storage + flush, mirroring the original daemon (0.79.3, daemon.formatted.cjs):
  *  - `oee` (L177276–177400): per-request lanes in a Map, unbounded; take() fills one submit by rounds,
@@ -123,7 +124,7 @@ export class UcReplyLanes {
   /** Producers never wait (official enqueue = replies.push + flush). */
   enqueue(body: Buffer, _ids: string[] = []): Promise<void> {
     if (this.stopped) return Promise.reject(new Error("reply lane stopped"));
-    this.push(this.decode(body)); void this.flush(); return Promise.resolve();
+    this.push(this.decode(body)); trace("enqueue", { flushing: this.flushing_ }); void this.flush(); return Promise.resolve();
   }
   offer(body: Buffer, _ids: string[] = []): boolean {
     if (this.stopped) return false;
@@ -178,11 +179,13 @@ export class UcReplyLanes {
         // official: `if (channel === undefined || !proven) return` — here a current-channel 401 pause
         if (this.stopped || this.failure) return;
         const frames = this.take();
+        trace("take", { n: frames.length, rids: [...new Set(frames.map(f => f.requestId.slice(0, 16)))] });
         if (frames.length === 0) return;
         const ac = new AbortController();
         this.submitAbort = ac; this.submittingFrames = frames;
         this.submitting = [...new Set(frames.map(f => f.requestId))]; this.submittingSince = this.now();
         const kept = await this.submit(frames, ac.signal);
+        trace("submit-done", { n: frames.length, kept });
         this.submittingFrames = []; this.submitting = []; this.submitAbort = undefined;
         if (kept > 0 && this.readyCount === kept) { this.closingRetryWait ??= this.flushAfterClosingBackoff(); return; }
         // kept < 0 (paused) falls through to the state check above: a resume() that already ran continues here.

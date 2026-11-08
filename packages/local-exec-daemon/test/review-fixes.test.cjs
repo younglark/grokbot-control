@@ -69,7 +69,9 @@ test('UC scheduler admits 8 active +64 backlog; live Never hot read',async()=>{
  try{
  fs.writeFileSync(path.join(data,'settings.json'),JSON.stringify({version:1,localToolPermission:'never'}));
  await provider.handleQueued({id:'hot',requestId:'hot',kind:2,serverMessage:{id:1,shellStreamArgs:{command:'touch forbidden'}}});
- assert.equal(fs.existsSync(path.join(root,'forbidden')),false);assert.match(JSON.stringify(got),/turned off/);
+ assert.equal(fs.existsSync(path.join(root,'forbidden')),false);
+ // t112u: official x9 (D:L136410) — control throw{id:0, Xh}, not a fileError frame (old assertion only matched the text).
+ assert.deepEqual(got,[{kind:'control',requestId:'hot',message:{throw:{id:0,error:require('../dist/exec/handlers').NEVER_MSG}}}]);
  // Exercise real runBacklog admission, no subprocess fixtures required.
  const pending=[];provider.replies={available:true};provider.handleQueued=()=>new Promise(r=>pending.push(r));
  provider.backlog=Array.from({length:72},(_,i)=>({id:String(i),requestId:String(i),kind:2,serverMessage:{}}));provider.runBacklog();assert.equal(provider.active.size,8);assert.equal(provider.backlog.length,64);

@@ -82,9 +82,10 @@ function buildPollResponse(queuedList){
 function buildSubmitAccepted(n){return pb.encVarint(1,n);}
 function buildWithdrawn(v=true){return pb.encBool(1,v);}
 
-const T0=Date.now();const ctl={submitDelayMs:0,keepaliveError:false,rotation:false};
+// t108u: monotonic timeline (performance.now) beside the original Date.now `t` (kept for traceability).
+const T0=Date.now();const P0=performance.now();const mono=()=>+(performance.now()-P0).toFixed(3);const ctl={submitDelayMs:0,keepaliveError:false,rotation:false};
 function startUcServer(){
-  const log=[];
+  const log=[];{const push0=log.push.bind(log);log.push=(...xs)=>{const tm=mono();for(const x of xs)if(x&&typeof x==='object'&&x.tm===undefined)x.tm=tm;return push0(...xs)};}
   let queue=[]; // {id, frameBuf}
   let watchRes=null;
   let forceUnauth=false;
@@ -200,7 +201,7 @@ function startUcServer(){
           }
           // retry-probe (t108 review): attempts 2–4 → 503 then recover; retry-expiry: every attempt ≥2 → 503.
           if(ctl.retryProbe&&!keepalive){ctl.attempt=(ctl.attempt||0)+1;entry.attempt=ctl.attempt;if(ctl.attempt>=2&&(ctl.retryForever||ctl.attempt<=4)){entry.status=503;res.writeHead(503,{'content-type':'application/json'});res.end(JSON.stringify({code:'unavailable',message:'synthetic retry probe'}));return;}entry.status=200;}
-          const respond=()=>{try{res.writeHead(200,{'content-type':'application/proto'});res.end(buildSubmitAccepted(frames.length))}catch{}};
+          const respond=()=>{entry.respondT=Date.now()-T0;entry.respondTm=mono();entry.httpStatus=200;try{res.writeHead(200,{'content-type':'application/proto'});res.end(buildSubmitAccepted(frames.length))}catch{}};
           if(ctl.retryProbe&&!keepalive&&ctl.attempt===1){setTimeout(respond,500);return;}
           // t112 independent control (peer-side only): hold the first Submit carrying sh3's exit (hb-hold-exit) or stdout
           // (hb-hold-burst) for 1500 ms so the daemon's KA ticks run while sh3's frames are in flight.
@@ -262,10 +263,10 @@ function startUcServer(){
  fs.writeFileSync(base+'/data/local-exec-daemon-credential.json',seal(key,JSON.stringify(cred)));
  const PROBE_MAIN=process.env.PROBE_MAIN||'/input/main.cjs';
  const spawnedAt=Date.now()-T0;const STARTUP_MS=8000;
- const child=cp.spawn('/runtime/node',[PROBE_MAIN],{env:envFor(base,process.env.PROBE_MAIN?{NODE_PATH:'/repo/node_modules'}:{}),cwd:base,stdio:['ignore','pipe','pipe','ipc']});
+ const child=cp.spawn('/runtime/node',[PROBE_MAIN],{env:envFor(base,{...(process.env.PROBE_MAIN?{NODE_PATH:'/repo/node_modules'}:{}),...(process.env.UC_TRACE==='1'?{UC_TRACE_FILE:base+'/uc-trace.jsonl'}:{})}),cwd:base,stdio:['ignore','pipe','pipe','ipc']});
  let out='';child.stdout.on('data',b=>out=(out+b).slice(-8192));child.stderr.on('data',b=>out=(out+b).slice(-8192));const ended=new Promise(r=>child.on('exit',r));
  async function until(fn,ms=8000){const end=Date.now()+ms;while(Date.now()<end){if(fn())return;await delay(20)}throw Error('deadline')}
- let marks={};let killedByProbe=false;let diedEarly=null;child.on('exit',(c,sig)=>{if(!killedByProbe)diedEarly={code:c,signal:sig,t:Date.now()-T0}});
+ const marksMono={};let marks=new Proxy({},{set(o,k,v){o[k]=v;marksMono[k]=mono();return true}});let killedByProbe=false;let diedEarly=null;child.on('exit',(c,sig)=>{if(!killedByProbe)diedEarly={code:c,signal:sig,t:Date.now()-T0}});
  const killAt=(process.argv.find(a=>a.startsWith('--kill-at='))||'').slice(10);if(killAt)setTimeout(()=>child.kill('SIGKILL'),Number(killAt));
  try{
   marks.spawned=spawnedAt;child.once('spawn',()=>{marks.spawnEvent=Date.now()-T0});
@@ -331,6 +332,8 @@ time.sleep(10)'`,timeout:20000}});marks.enqueued=Date.now()-T0;await delay(1000)
     await delay(9000);
   }
   const subs=uc.log.filter(x=>x.kind==='submit');
+  // t108u evidence: Submit receive (tm) / response written (respondTm) / response-close, all monotonic ms.
+  const timeline={p0Wall:performance.timeOrigin+P0,...(process.env.UC_TRACE==='1'?{trace:(()=>{try{return fs.readFileSync(base+'/uc-trace.jsonl','utf8').trim().split('\n').map(l=>JSON.parse(l))}catch(e){return String(e)}})()}:{}),clock:'performance.now ms since harness start; t fields remain Date.now-T0',marksMono,obsDeadlineMono:scenario.startsWith('cancel-overflow')&&marksMono.cancel!==undefined?+(marksMono.cancel+CO.obs).toFixed(3):undefined,submits:subs.map(x=>({t:x.t,tm:x.tm,respondT:x.respondT,respondTm:x.respondTm,keepalive:x.keepalive,ids:x.types.map(f=>f.requestId.slice(0,24)).filter((v,i,a)=>a.indexOf(v)===i).slice(0,12),count:x.count,starts:x.rawFrames.filter(f=>f.message?.shellStream?.start).map(f=>[f.requestId.slice(0,24),f.message.id]),heartbeats:x.rawFrames.filter(f=>f.message?.heartbeat).map(f=>[f.requestId.slice(0,24),f.message.heartbeat.id])})),closes:uc.log.filter(x=>x.kind==='response-close').map(x=>({t:x.t,tm:x.tm,n:x.ids.length,ended:x.ended})),targetFrames:scenario.startsWith('cancel-overflow')?subs.flatMap((x,i)=>x.rawFrames.map((f,j)=>({f,j})).filter(({f})=>f.requestId===CO.target).map(({f,j})=>({submitIdx:i,frameIdx:j,submitFrames:x.count,t:x.t,tm:x.tm,respondTm:x.respondTm,httpStatus:x.httpStatus??x.status,keepaliveSubmit:x.keepalive,frameType:f.type,message:f.message}))):undefined,pollItems:uc.log.filter(x=>x.kind==='poll-items').map(x=>({t:x.t,tm:x.tm,ids:x.ids.map(i=>String(i).slice(0,24))}))};
   const keepalives=subs.filter(x=>x.keepalive).map(x=>({t:x.t,ids:x.types.map(f=>f.requestId)}));
   const firstNonKeepalive={};for(const s of subs) if(!s.keepalive) for(const f of s.types) firstNonKeepalive[f.requestId]??=s.t;
   const dataSeq=subs.filter(s=>!s.keepalive).map(s=>[s.t,s.types.length]);const dataSubmits={};for(const s of subs) if(!s.keepalive) for(const f of s.types) dataSubmits[f.requestId]=(dataSubmits[f.requestId]||0)+1;
@@ -344,13 +347,13 @@ time.sleep(10)'`,timeout:20000}});marks.enqueued=Date.now()-T0;await delay(1000)
   const alive=child.exitCode===null&&child.signalCode===null&&!diedEarly;
   const results=[{name:scenario,status:alive?'pass':'fail',error:alive?undefined:'daemon died before cleanup: '+JSON.stringify(diedEarly||{code:child.exitCode,signal:child.signalCode})}];
   if(scenario==='retry-probe'||scenario==='retry-expiry'){console.log(JSON.stringify({scenario,marks,attempts:subs.filter(s=>!s.keepalive).map(s=>({t:s.t,status:s.status,frames:s.rawFrames})),accepted:subs.filter(s=>!s.keepalive&&s.status===200).flatMap(s=>s.rawFrames),watches:uc.log.filter(x=>x.kind==='watch').map(x=>({t:x.t,label:x.label})),daemonAlive:alive,results}));}
-  else if(scenario==='fairness-native'){console.log(JSON.stringify({scenario,marks,busyBatches:subs.filter(s=>!s.keepalive&&s.types.some(f=>f.requestId.startsWith('busyLane'))).map(s=>({t:s.t,ids:s.types.map(f=>f.requestId),frames:s.rawFrames})),daemonAlive:alive,results}));}
+  else if(scenario==='fairness-native'){console.log(JSON.stringify({scenario,marks,timeline,busyBatches:subs.filter(s=>!s.keepalive&&s.types.some(f=>f.requestId.startsWith('busyLane'))).map(s=>({t:s.t,ids:s.types.map(f=>f.requestId),frames:s.rawFrames})),daemonAlive:alive,results}));}
   else if(scenario==='overflow'){
     const terminal=subs.flatMap(x=>x.rawFrames).filter(x=>x.requestId.startsWith('busy')&&x.message?.throw).map(x=>({requestId:x.requestId,error:x.message.throw.error}));
     const acked=[...new Set(uc.log.filter(x=>x.kind==='poll').flatMap(x=>x.acks||[]).filter(x=>x.startsWith('busy')))];
     const started=Object.keys(data).filter(k=>k.startsWith('busy')&&(data[k]||[]).some(m=>m&&m.shellStream&&m.shellStream.start));
     console.log(JSON.stringify({scenario,marks,acked,terminal,busyStarted:started,keepalives,daemonAlive:alive,results}));
-  } else if(scenario.startsWith('cancel-overflow')){const acked=[...new Set(uc.log.filter(x=>x.kind==='poll').flatMap(x=>x.acks||[]))];const targetData=subs.flatMap(s=>s.rawFrames).filter(f=>f.requestId===CO.target);console.log(JSON.stringify({scenario,marks,firstSubmit:subs.find(s=>!s.keepalive),busyCount:CO.n,queuedTargetTerminal:targetData.map(f=>f.message),targetStarted:targetData.some(f=>f.message?.shellStream?.start),pollItemsAfterCancel:uc.log.filter(x=>x.kind==='poll-items'&&x.t>=marks.cancel),busyAcked:acked.filter(x=>x.startsWith('busy')).length,cancelAcked:acked.includes('cancel-'+CO.target),targetExit:targetData.filter(f=>f.message?.shellStream?.exit).map(f=>f.message),closes,polls,daemonAlive:alive,results}));}else console.log(JSON.stringify({scenario,marks,keepalives,firstNonKeepalive,dataSubmits,dataSeq,sh8,data,watches,closes,polls,...(ctl.holdKind?{boundary:uc.log.filter(x=>x.kind?.startsWith('boundary-')),submits:subs.map(x=>({t:x.t,keepalive:x.keepalive,ids:x.types.map(f=>f.requestId)}))}:{}),daemonAlive:alive,results}));
+  } else if(scenario.startsWith('cancel-overflow')){const acked=[...new Set(uc.log.filter(x=>x.kind==='poll').flatMap(x=>x.acks||[]))];const targetData=subs.flatMap(s=>s.rawFrames).filter(f=>f.requestId===CO.target);console.log(JSON.stringify({scenario,marks,timeline,firstSubmit:subs.find(s=>!s.keepalive),busyCount:CO.n,queuedTargetTerminal:targetData.map(f=>f.message),targetStarted:targetData.some(f=>f.message?.shellStream?.start),pollItemsAfterCancel:uc.log.filter(x=>x.kind==='poll-items'&&x.t>=marks.cancel),busyAcked:acked.filter(x=>x.startsWith('busy')).length,cancelAcked:acked.includes('cancel-'+CO.target),targetExit:targetData.filter(f=>f.message?.shellStream?.exit).map(f=>f.message),closes,polls,daemonAlive:alive,results}));}else console.log(JSON.stringify({scenario,marks,timeline,keepalives,firstNonKeepalive,dataSubmits,dataSeq,sh8,data,watches,closes,polls,...(ctl.holdKind?{boundary:uc.log.filter(x=>x.kind?.startsWith('boundary-')),submits:subs.map(x=>({t:x.t,keepalive:x.keepalive,ids:x.types.map(f=>f.requestId)}))}:{}),daemonAlive:alive,results}));
   if(!alive)process.exitCode=3;
  }finally{killedByProbe=true;child.kill('SIGTERM');await Promise.race([ended,delay(2500)]);if(child.exitCode===null)child.kill('SIGKILL');uc.closeWatch();await uc.close();if(process.env.DEBUG_OUT||scenario.startsWith('retry-'))console.error(out)}
 })().catch(e=>{console.error(e);process.exitCode=1});

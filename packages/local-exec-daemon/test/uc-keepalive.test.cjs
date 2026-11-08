@@ -323,7 +323,7 @@ test('closing deferral is budgeted (count + bytes): at the budget items stay unA
 });
 const coCases = { 'cancel-overflow': { busy: 200, check: 'assert-cancel.py' }, 'cancel-overflow-long': { busy: 520, check: 'assert-cancel.py' }, 'cancel-overflow-backlog': { busy: 488, check: 'assert-terminal.py' } };
 for (const [sc, c] of Object.entries(coCases)) for (const who of ['official', 'ours']) {
-  test(`oracle ${sc} (${who}): every busy ACKed and the cancel is reachable / its terminal retained`, { skip: !(fs.existsSync('/usr/bin/bwrap') && fs.existsSync(lab)) }, () => {
+  test(`oracle ${sc} (${who}): every busy ACKed and the cancel is reachable / its terminal retained`, { skip: !(fs.existsSync('/usr/bin/bwrap') && fs.existsSync(lab)) || (who === 'official' && process.env.UC_SKIP_OFFICIAL === '1' && 'UC_SKIP_OFFICIAL=1: official binary not run this round') }, () => {
     const env = { ...process.env }; if (who === 'ours') env.REPO = path.resolve(__dirname, '..', '..', '..'); else delete env.REPO;
     const r = spawnSync('python3', [path.join(dir, 'run-background.py'), 'uc-keepalive.cjs', sc], { env, encoding: 'utf8', timeout: 70000, maxBuffer: 256 << 20 });
     assert.equal(r.status, 0, r.stderr);
