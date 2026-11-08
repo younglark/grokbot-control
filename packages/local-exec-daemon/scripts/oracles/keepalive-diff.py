@@ -21,6 +21,15 @@ Semantic data evidence (P3; replaces "ignore all data submits"):
   * named rule EXEC-ID: the inner exec `id` is a local sequence assigned at admission (it differs
     between fresh official runs when admissions in one poll race). Each side must use exactly one
     id per request and distinct ids across requests; the value itself is then replaced by '#'.
+  * named rule TICK-BOUNDARY: a keepalive due exactly 3000 ms after the previous one is heard is
+    picked by the 6th 500 ms serial tick after it, so both daemons sit on a sub-millisecond tie:
+    Node timers fire against libuv's integer-ms clock while due times use performance.now(). Measured in
+    ours (instrumented run, 20 runs): per-tick gaps 499.1–501.6 ms, 6th-tick margin +0.2…+5.7 ms; a
+    negative margin skips to the next tick (+500 ms). Official uses the same mechanism (D:yre/qr.schedule
+    setTimeout + monotonicNow, c9r 500, u9r 3000). One such shift of exactly one tick (±50 ms) per run,
+    never on the first keepalive, is accepted and counted; any other lateness still fails.
+Overflow (8 active + 64 backlog + 200 busy, first submit stalled 10 s): all 200 busy items acknowledged
+  and terminal on both sides, same error text, none started; keepalives/data not compared.
 Keepalives:
   * backlog/cancel/stall/exhausted/rotation: id lists in order exactly, offsets within tolerance;
   * pressure: ids keepalived before the cancel mark must be equal as sets; no cancelled id may be
@@ -34,6 +43,9 @@ Lifecycle:
   * rotation: keepalives continue after the old credential's late 401 (new channel not blocked).
 """
 import json, sys
+
+TICK_MS = 500       # official keep-alive tick c9r (serial hc/yre cadence)
+TICK_BAND_MS = 50
 
 def norm_msgs(msgs):
     out = []
@@ -86,6 +98,17 @@ def main(argv):
         if not res or any(r.get('status') != 'pass' for r in res): bad.append(f'{side} results not pass: {res}')
     sc = o.get('scenario')
     if sc != u.get('scenario'): bad.append('scenario mismatch')
+    if sc == 'overflow':
+        # P2-1 (review t104): every busy queue item that was acknowledged must have its terminal busy
+        # frame, all 200 must end terminal on both sides, error text equal, none started.
+        for side, d in (('official', o), ('ours', u)):
+            acked = set(d.get('acked') or []); term = {t['requestId'] for t in d.get('terminal') or []}
+            if len(acked) != 200 or term != acked: bad.append(f'{side}: acked {len(acked)} terminal {len(term)} missing {sorted(acked - term)[:5]}')
+            if d.get('busyStarted'): bad.append(f'{side}: busy requests started {d["busyStarted"][:5]}')
+        eo = {t['error'] for t in o.get('terminal') or []}; eu = {t['error'] for t in u.get('terminal') or []}
+        if eo != eu: bad.append(f'busy error text differs: {eo} vs {eu}')
+        print(('FAIL ' + '; '.join(bad)) if bad else f'SAME overflow acked=terminal={len(u.get("acked") or [])}')
+        return 1 if bad else 0
     do, du = dict(o.get('data') or {}), dict(u.get('data') or {})
     hb = hbu = 0
     for k in list(do):
@@ -111,6 +134,7 @@ def main(argv):
     if not do: bad.append('official golden has no data evidence (re-record it)')
     if not du: bad.append('ours has no data evidence')
     ko, ku = o.get('keepalives') or [], u.get('keepalives') or []
+    tick_boundary = 0
     mo, mu = o['marks']['enqueued'], u['marks']['enqueued']
     if sc == 'pressure':
         co, cu = o['marks']['cancel'], u['marks']['cancel']
@@ -124,8 +148,15 @@ def main(argv):
     else:
         if [k['ids'] for k in ko] != [k['ids'] for k in ku]: bad.append(f'keepalive ids differ: {[k["ids"] for k in ko]} vs {[k["ids"] for k in ku]}')
         else:
-            for x, y in zip(ko, ku):
-                if abs((x['t'] - mo) - (y['t'] - mu)) > tol: bad.append(f'keepalive offset {x["t"] - mo} vs {y["t"] - mu} > {tol}ms')
+            shift = 0
+            for i, (x, y) in enumerate(zip(ko, ku)):
+                d = (y['t'] - mu) - (x['t'] - mo) - shift
+                if abs(d) <= tol: continue
+                # TICK-BOUNDARY: see module doc. Exactly one 500 ms tick (±50 ms), not the first
+                # keepalive, at most once per run; later keepalives must keep the shifted cadence.
+                if i > 0 and shift == 0 and abs(abs(d) - TICK_MS) <= TICK_BAND_MS:
+                    shift = TICK_MS if d > 0 else -TICK_MS; tick_boundary += 1; continue
+                bad.append(f'keepalive offset {x["t"] - mo} vs {y["t"] - mu} > {tol}ms')
     if sc == 'cancel' and o.get('sh8') != u.get('sh8'): bad.append('cancelled backlog frames differ')
     if sc == 'stall-cancel':
         for side, d in (('official', o), ('ours', u)):
@@ -137,7 +168,7 @@ def main(argv):
     if sc == 'rotation':
         for side, d in (('official', o), ('ours', u)):
             if not any(k['t'] > d['marks']['old401'] for k in d.get('keepalives') or []): bad.append(f'{side}: no keepalive after old-credential 401 (channel blocked)')
-    print(('FAIL ' + '; '.join(bad)) if bad else f'SAME {sc} keepalives={len(ko)} dataIds={len(do)} EXEC-HEARTBEAT official={hb} ours={hbu}')
+    print(('FAIL ' + '; '.join(bad)) if bad else f'SAME {sc} keepalives={len(ko)} dataIds={len(do)} EXEC-HEARTBEAT official={hb} ours={hbu} TICK-BOUNDARY={tick_boundary}')
     return 1 if bad else 0
 
 if __name__ == '__main__': sys.exit(main(sys.argv[1:]))

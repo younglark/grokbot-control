@@ -92,13 +92,13 @@ test('keepalive-diff negative: missing keepalives / wrong id / late offset / mis
   assert.equal(run('backlog', () => {}), 0);
   assert.notEqual(run('backlog', (u) => { u.keepalives = []; }), 0);
   assert.notEqual(run('backlog', (u) => { u.keepalives[0].ids = ['sh0']; }), 0);
-  assert.notEqual(run('stall', (u) => { u.keepalives[1].t += 500; }), 0);
+  assert.notEqual(run('stall', (u) => { u.keepalives[1].t += 400; }), 0);
   assert.notEqual(run('cancel', (u) => { u.sh8 = []; }), 0);
   assert.notEqual(run('cancel', (u) => { u.results[0].status = 'fail'; }), 0);
 });
 
 const lab = '/workspace/local-exec-offline-lab-0793/input/main.cjs';
-for (const s of ['backlog', 'cancel', 'stall', 'exhausted', 'pressure', 'rotation', 'stall-cancel']) {
+for (const s of ['backlog', 'cancel', 'stall', 'exhausted', 'pressure', 'rotation', 'stall-cancel', 'overflow']) {
   test(`oracle: ours vs official golden, scenario ${s} (bwrap, real daemon process)`, { skip: !(fs.existsSync('/usr/bin/bwrap') && fs.existsSync(lab)) }, () => {
     const r = spawnSync('python3', [path.join(dir, 'run-background.py'), 'uc-keepalive.cjs', s], { env: { ...process.env, REPO: path.resolve(__dirname, '..', '..', '..') }, encoding: 'utf8', timeout: 70000 });
     assert.equal(r.status, 0, r.stdout + r.stderr);
@@ -110,22 +110,38 @@ for (const s of ['backlog', 'cancel', 'stall', 'exhausted', 'pressure', 'rotatio
 }
 
 // ---- t104 review regressions (P2-1..P2-4, P3) ----
-test('P2-1 closing replies under reply-lane pressure: async capacity rejection is deferred, bounded, retried; no unhandled rejection', async () => {
+test('P2-1 closing replies: held by lane or bounded deferral, otherwise the work stays retryable (never ACK-then-drop)', async () => {
   const { p } = mk();
   const unhandled = []; const onU = (e) => unhandled.push(e); process.on('unhandledRejection', onU);
-  const errs = []; const oldErr = console.error; console.error = (m) => errs.push(String(m));
   try {
-    let accept = false; const sent = [];
-    p.replies = { available: false, enqueue: (body, ids) => accept ? (sent.push(ids[0]), Promise.resolve()) : Promise.reject(new Error('reply producer capacity exceeded')) };
-    for (let i = 0; i < 200; i++) p.emitBusy({ id: `q${i}`, requestId: `r${i}`, kind: 2 });
-    await new Promise((r) => setTimeout(r, 20));
+    let release; const sent = [];
+    p.replies = new ReplyQueue(async (body) => { sent.push(body); if (sent.length === 1) await new Promise((r) => { release = r; }); }, () => {}, 1 << 20, 4, (b) => Buffer.concat(b));
+    const stored = [];
+    for (let i = 0; i < 200; i++) stored.push(p.storeClosing({ id: `q${i}`, requestId: `r${i}`, kind: 2 }, 'busy'));
+    const n = stored.filter(Boolean).length;
+    assert.equal(n, 4 + 128, 'lane (4 frames) + bounded deferral (128)'); assert.deepEqual(stored.slice(n), Array(200 - n).fill(false));
+    assert.equal(p.pendingClosings.length, 128);
+    // a rejected busy item is left unacknowledged: removed from pendingAcks and seen → redelivered
+    p.seen.add('q199'); p.pendingAcks.push('q199'); p.unack({ id: 'q199', requestId: 'r199', kind: 2 });
+    assert.equal(p.seen.has('q199'), false); assert.deepEqual(p.pendingAcks, []);
+    // deferred closings are held + keepalive-eligible (official replies.requestIds())
+    p.noteAdmitted('r10', 0);
+    assert.ok(p.heldRequestIds().has('r10')); assert.ok(p.keepAliveEligibleIds(1).has('r10'));
+    release(); await new Promise((r) => setTimeout(r, 10));
+    for (let k = 0; k < 100 && p.pendingClosings.length; k++) { p.flushClosings(); await new Promise((r) => setTimeout(r, 2)); }
+    assert.equal(p.pendingClosings.length, 0); assert.ok(await p.replies.drain(500));
     assert.equal(unhandled.length, 0);
-    assert.equal(p.pendingClosings.length, 128, 'bounded');
-    assert.ok(errs.some((m) => /closing reply for r\d+ dropped/.test(m)), 'overflow is logged, not silent');
-    accept = true; p.replies.available = true; p.flushClosings();
-    await new Promise((r) => setTimeout(r, 20));
-    assert.equal(p.pendingClosings.length, 0); assert.equal(sent.length, 128); assert.equal(sent[0], 'r0', 'order kept');
-  } finally { process.off('unhandledRejection', onU); console.error = oldErr; }
+  } finally { process.off('unhandledRejection', onU); }
+});
+
+test('P2-1 backlog drain keeps items whose closing reply cannot be held; cancel stays unacknowledged without room', async () => {
+  const { p } = mk();
+  p.replies = { offer: () => false, enqueue: async () => {}, available: false };
+  p.pendingClosings = Array.from({ length: 128 }, (_, i) => ({ kind: 'control', requestId: `x${i}`, message: { throw: { id: 0, error: 'e' } } }));
+  p.lastPolledAt = 1; p.backlog = [{ id: 'b1', requestId: 'b1', kind: 2 }];
+  p.superviseBacklog(1 + 16000);
+  assert.deepEqual(p.backlog.map((q) => q.requestId), ['b1'], 'not dropped');
+  assert.equal(p.closingRoom(), 0);
 });
 
 test('P2-2 channel fencing: a stale channel\'s 401 (keepalive or rejectCredential) does not close the rotated channel', async () => {
@@ -137,6 +153,33 @@ test('P2-2 channel fencing: a stale channel\'s 401 (keepalive or rejectCredentia
   assert.equal(p.blocked, false, 'old-credential keepalive 401 after rotation ignored');
   p.rejectCredential(old); assert.equal(p.blocked, false);
   p.rejectCredential(fresh); assert.equal(p.blocked, true, 'current channel 401 still closes');
+});
+
+test('P2-2 fence at the failure site: RPC 401 then rotation in a microtask (before the lane catch) does not block the new channel', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'uc-rot-')); const old = process.env.SAND_DATA_ROOT; process.env.SAND_DATA_ROOT = root;
+  try {
+    const p = new UserComputerProvider({ backendUrl: 'http://127.0.0.1:9', machineId: 'synthetic-m', credential: 'synthetic-old', root, permission: 'always',
+      hello: { label: 'lab', localRoot: root, terminalsFolder: root, standing: 'always', variant: 'lab', supervised: true, serverAuthoritative: false } });
+    let rejectRPC; const creds = [];
+    p.client = {
+      submitGrokBotUserComputerResponses: (req) => { creds.push(req.credential); return creds.length === 1 ? new Promise((_, r) => { rejectRPC = r; }) : Promise.resolve({ acceptedCount: req.frames.length }); },
+      pollGrokBotUserComputerRequests: async () => ({ requests: [] }), withdrawGrokBotUserComputerPresence: async () => ({}),
+      watchGrokBotUserComputerRequests: async function* (_, { signal }) { yield { event: { case: 'connected', value: {} } }; await new Promise((r) => { if (signal.aborted) r(); else signal.addEventListener('abort', r, { once: true }); }); },
+    };
+    const running = p.start();
+    while (!p.proven) await new Promise((r) => setImmediate(r));
+    await p.emit({ kind: 'control', requestId: 'q', message: { throw: { error: 'synthetic' } } });
+    let rotated = false;
+    rejectRPC(new ConnectError('rejected', Code.Unauthenticated));
+    queueMicrotask(() => { rotated = p.updateChannel({ backendUrl: 'http://127.0.0.1:9', machineId: 'synthetic-m', credential: 'synthetic-new' }); });
+    for (let i = 0; i < 20; i++) await new Promise((r) => setImmediate(r));
+    assert.equal(rotated, true); assert.equal(p.blocked, false); assert.equal(p.abort.signal.aborted, false); assert.equal(p.replies.failure, undefined);
+    assert.ok(await p.replies.drain(1000)); assert.deepEqual(creds, ['synthetic-old', 'synthetic-new'], 'same reply retried on the new channel');
+    // control: a 401 for the current channel still closes admission
+    const q = new ReplyQueue(async () => { throw new (require('../dist/transport/replies.js').HttpStatusError)(401, 'cur'); }, (e) => e.epoch === 'cur');
+    q.enqueue(Buffer.from('x'), ['x']); await new Promise((r) => setTimeout(r, 5)); assert.equal(String(q.failure), 'Error: reply HTTP 401');
+    await p.stop(); await running;
+  } finally { process.env.SAND_DATA_ROOT = old; fs.rmSync(root, { recursive: true, force: true }); }
 });
 
 test('P2-3 ReplyQueue.drop aborts an all-cancelled in-flight submit and moves on; mixed batch keeps going; stop aborts', async () => {
@@ -195,6 +238,28 @@ test('P3 keepalive-diff semantic data rules (negative + allowed-difference cases
   no(run('rotation', (u) => { u.keepalives = u.keepalives.filter((k) => k.t <= u.marks.old401); })); // channel blocked after stale 401
   no(run('pressure', (u) => { u.results = [{ name: 'pressure', status: 'fail', error: 'daemon died before cleanup' }]; u.daemonAlive = false; }));
   no(run('pressure', (u) => { u.keepalives.push({ t: u.marks.cancel + 1000, ids: ['sh9'] }); })); // cancelled id still keepalived
+});
+
+test('TICK-BOUNDARY / overflow comparator rules: deliberate lateness and dropped busy terminals fail', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kad4-'));
+  const run = (s, mut) => { const o = JSON.parse(fs.readFileSync(path.join(dir, 'keepalive-official', `${s}.json`)));
+    const u = JSON.parse(JSON.stringify(o)); mut(u);
+    const a = path.join(tmp, 'o.json'), b = path.join(tmp, 'u.json'); fs.writeFileSync(a, JSON.stringify(o)); fs.writeFileSync(b, JSON.stringify(u));
+    return spawnSync('python3', [path.join(dir, 'keepalive-diff.py'), a, b], { encoding: 'utf8' }); };
+  const ok = (r) => assert.equal(r.status, 0, r.stdout); const no = (r) => assert.notEqual(r.status, 0, r.stdout);
+  const ka = (u, i, dt) => { u.keepalives[i].t += dt; };
+  const r = run('rotation', (u) => ka(u, 2, 508)); ok(r); assert.match(r.stdout, /TICK-BOUNDARY=1/);
+  no(run('rotation', (u) => ka(u, 2, 400)));                 // late but not one tick
+  no(run('rotation', (u) => ka(u, 2, 620)));                 // more than one tick ±50
+  no(run('rotation', (u) => ka(u, 2, 1000)));                // two ticks
+  no(run('rotation', (u) => { ka(u, 0, 500); ka(u, 1, 500); ka(u, 2, 500); }));  // first keepalive never
+  no(run('rotation', (u) => { ka(u, 1, 500); ka(u, 2, 1000); }));                 // a second shift
+  ok(run('rotation', (u) => { ka(u, 1, 500); ka(u, 2, 500); }));                  // one shift, cadence kept
+  ok(run('overflow', () => {}));
+  no(run('overflow', (u) => { u.terminal = u.terminal.slice(0, 184); }));       // acked but no terminal (t104 finding)
+  no(run('overflow', (u) => { u.acked = u.acked.slice(0, 150); u.terminal = u.terminal.filter((t) => u.acked.includes(t.requestId)); }));
+  no(run('overflow', (u) => { u.busyStarted = ['busy3']; }));
+  no(run('overflow', (u) => { u.terminal[0].error = 'other'; }));
 });
 
 const labOk = fs.existsSync('/usr/bin/bwrap') && fs.existsSync('/workspace/local-exec-offline-lab-0793/input/main.cjs');

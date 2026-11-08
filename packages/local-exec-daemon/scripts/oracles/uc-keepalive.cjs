@@ -244,7 +244,7 @@ function startUcServer(){
 (async()=>{
  assert(!fs.existsSync('/home/box')&&!fs.existsSync('/workspace'),'isolation');
  const scenario=process.argv[2]||'backlog';
- if(scenario==='pressure')ctl.submitDelayMs=10000;else if(scenario==='stall'||scenario==='exhausted'||scenario==='stall-cancel') ctl.submitDelayMs=7000;
+ if(scenario==='overflow'||scenario==='pressure')ctl.submitDelayMs=10000;else if(scenario==='stall'||scenario==='exhausted'||scenario==='stall-cancel') ctl.submitDelayMs=7000;
  if(scenario==='rotation') ctl.rotation=true;
  if(scenario==='exhausted') ctl.keepaliveError=true;
  const uc=startUcServer();await uc.listen();const base=mkBase('ka-'+scenario);
@@ -258,7 +258,14 @@ function startUcServer(){
  const killAt=(process.argv.find(a=>a.startsWith('--kill-at='))||'').slice(10);if(killAt)setTimeout(()=>child.kill('SIGKILL'),Number(killAt));
  try{
   child.send({type:'sand-local-exec-file-key',key,computerId:SYN_MACHINE});await until(()=>uc.log.some(x=>x.kind==='watch'));
-  if(scenario==='pressure'){
+  if(scenario==='overflow'){
+    // Independent review t104 probe: 8 active + 64 backlog + 200 busy while the first submit stalls 10s.
+    for(let i=0;i<8;i++)uc.enqueueExec('sh'+i,{id:1,shellStreamArgs:{command:`/usr/bin/python3 -c 'import os,time
+for _ in range(1000): os.write(1,b"x"*4096); time.sleep(.003)
+time.sleep(20)'`,timeout:25000}});marks.enqueued=Date.now()-T0;await delay(1000);
+    for(let i=8;i<72;i++)uc.enqueueExec('sh'+i,{id:1,shellStreamArgs:{command:'echo BACKLOG',timeout:5000}});await delay(1500);
+    for(let i=0;i<200;i++)uc.enqueueExec('busy'+i,{id:1,shellStreamArgs:{command:'echo SHOULD_NOT_START',timeout:5000}});marks.busy=Date.now()-T0;await delay(2000);ctl.submitDelayMs=0;await delay(7500);
+  }else if(scenario==='pressure'){
     for(let i=0;i<8;i++)uc.enqueueExec('sh'+i,{id:1,shellStreamArgs:{command:`/usr/bin/python3 -c 'import os,time
 for _ in range(1000): os.write(1,b"x"*4096); time.sleep(.003)
 time.sleep(10)'`,timeout:20000}});marks.enqueued=Date.now()-T0;await delay(1000);
@@ -270,7 +277,10 @@ time.sleep(10)'`,timeout:20000}});marks.enqueued=Date.now()-T0;await delay(1000)
     await until(()=>uc.log.some(x=>x.kind==='watch'&&x.label==='new'));marks.newWatch=Date.now()-T0;await until(()=>uc.log.some(x=>x.kind==='old-ka-401'));marks.old401=Date.now()-T0;await delay(200);uc.enqueueExec('post',{id:1,shellStreamArgs:{command:'echo ROTATED',timeout:2000}});marks.post=Date.now()-T0;
     await delay(4000);
   } else if(scenario==='stall-cancel'){
-    uc.enqueueExec('one',{id:1,shellStreamArgs:{command:'echo hi; sleep 30',timeout:20000}});marks.enqueued=Date.now()-T0;
+    // Stable semantic boundary: 'one' emits nothing between its start frame and the cancel. With
+    // 'echo hi; sleep 30' whether "hi" was read before or after the cancel's replies.drop raced in both
+    // daemons (official kept it in some runs, ours in others), so the probe no longer depends on it.
+    uc.enqueueExec('one',{id:1,shellStreamArgs:{command:'sleep 30',timeout:20000}});marks.enqueued=Date.now()-T0;
     await until(()=>uc.log.some(s=>s.kind==='submit'&&!s.keepalive));
     ctl.submitDelayMs=0;marks.cancel=Date.now()-T0;uc.enqueueCancel('one');uc.enqueueExec('two',{id:1,shellStreamArgs:{command:'echo AFTER_CANCEL',timeout:5000}});
     await delay(6000);
@@ -297,7 +307,12 @@ time.sleep(10)'`,timeout:20000}});marks.enqueued=Date.now()-T0;await delay(1000)
   // Death gate (P2-4): the daemon must still be alive when the scenario ends (before probe cleanup).
   const alive=child.exitCode===null&&child.signalCode===null&&!diedEarly;
   const results=[{name:scenario,status:alive?'pass':'fail',error:alive?undefined:'daemon died before cleanup: '+JSON.stringify(diedEarly||{code:child.exitCode,signal:child.signalCode})}];
-  console.log(JSON.stringify({scenario,marks,keepalives,firstNonKeepalive,dataSubmits,dataSeq,sh8,data,watches,closes,polls,daemonAlive:alive,results}));
+  if(scenario==='overflow'){
+    const terminal=subs.flatMap(x=>x.rawFrames).filter(x=>x.requestId.startsWith('busy')&&x.message?.throw).map(x=>({requestId:x.requestId,error:x.message.throw.error}));
+    const acked=[...new Set(uc.log.filter(x=>x.kind==='poll').flatMap(x=>x.acks||[]).filter(x=>x.startsWith('busy')))];
+    const started=Object.keys(data).filter(k=>k.startsWith('busy')&&(data[k]||[]).some(m=>m&&m.shellStream&&m.shellStream.start));
+    console.log(JSON.stringify({scenario,marks,acked,terminal,busyStarted:started,keepalives,daemonAlive:alive,results}));
+  } else console.log(JSON.stringify({scenario,marks,keepalives,firstNonKeepalive,dataSubmits,dataSeq,sh8,data,watches,closes,polls,daemonAlive:alive,results}));
   if(!alive)process.exitCode=3;
  }finally{killedByProbe=true;child.kill('SIGTERM');await Promise.race([ended,delay(2500)]);if(child.exitCode===null)child.kill('SIGKILL');uc.closeWatch();await uc.close();if(process.env.DEBUG_OUT)console.error(out)}
 })().catch(e=>{console.error(e);process.exitCode=1});

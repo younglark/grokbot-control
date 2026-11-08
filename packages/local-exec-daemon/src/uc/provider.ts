@@ -194,7 +194,7 @@ export class UserComputerProvider implements UserComputerTransport {
       catch (error) {
         // Channel fencing: a rejection of a credential that has since been rotated is retried on the
         // current channel instead of closing it (official rejectCredential checks channel identity).
-        if (authError(error) && this.channel === ch) throw new HttpStatusError(401);
+        if (authError(error)) throw new HttpStatusError(401, ch);
         throw error;
       }
       this.noteHeard(request.frames.map(f => f.requestId));
@@ -205,7 +205,12 @@ export class UserComputerProvider implements UserComputerTransport {
       if (accepted < submitted) console.error(
         `[user-computer-provider] server accepted ${accepted} of ${submitted} response frames; the rest were not queued for this machine`,
       );
-    }, () => { this.admissionClosed = true; this.abort.abort(); },
+    }, (e) => {
+      // Fenced where the failure is set (not only when the RPC returned): a stale channel's 401 never
+      // closes admission of a channel that rotated in between (official rejectCredential: channel===e).
+      if (e.epoch !== undefined && e.epoch !== this.channel) return false;
+      this.admissionClosed = true; this.abort.abort(); return true;
+    },
     // Official replies.take() submits every ready frame in one batch; encoded protobuf requests
     // merge by concatenation (repeated `frames`; machineId/credential are reset per submit above).
     undefined, undefined, bodies => Buffer.concat(bodies));
@@ -325,16 +330,19 @@ export class UserComputerProvider implements UserComputerTransport {
         if (this.seen.has(q.id)) continue;
         // Capacity is checked before ack/admission. Cancel controls bypass backlog.
         this.seen.add(q.id); this.pendingAcks.push(q.id);
-        if (q.parseError) { await this.emit({ kind: "control", requestId: q.requestId, message: { throw: { error: q.parseError } } }); continue; }
+        if (q.parseError) { if (!this.storeClosingFrame({ kind: "control", requestId: q.requestId, message: { throw: { error: q.parseError } } })) this.unack(q); continue; }
         if (q.kind === requestKinds.cancel) {
-          this.cancelledIds.add(q.requestId);
           // Official (D:L178526–178535, Gl/Kce): each cancelled backlog entry gets a closing error.
           const dropped = this.backlog.filter(x => x.requestId === q.requestId);
+          // No room to hold their closing replies: leave the cancel unacknowledged (redelivered by the
+          // next poll) instead of dropping terminal frames of already-acknowledged backlog work.
+          if (dropped.length > this.closingRoom()) { this.unack(q); continue; }
+          this.cancelledIds.add(q.requestId);
           this.backlog = this.backlog.filter(x => x.requestId !== q.requestId);
           // Official replies.drop(requestId) + submitAbort when the in-flight batch is all cancelled.
           cancelRequest(q.requestId);
           if (typeof this.replies?.drop === 'function') this.replies.drop(id => this.cancelledIds.has(id));
-          for (const d of dropped) this.emitClosing(d, UC_CANCELLED_BEFORE_START);
+          for (const d of dropped) this.storeClosing(d, UC_CANCELLED_BEFORE_START);
           continue;
         }
         // Promote before admit (official startRequest.finally pulls while inflight<8,
@@ -347,7 +355,9 @@ export class UserComputerProvider implements UserComputerTransport {
         // promote — including reply-stall where runBacklog cannot move work —
         // refuse so backlog never grows past 64.
         if (this.backlog.length >= UC_BACKLOG_MAX) {
-          this.emitBusy(q);
+          // The queue item is acknowledged only once its busy reply is held (lane or bounded deferral);
+          // otherwise it stays unacknowledged and the server redelivers it on a later poll.
+          if (!this.storeClosing(q, UC_BUSY_TEXT)) this.unack(q);
           continue;
         }
         // Official startRequest suppresses an already-inflight requestId with
@@ -383,8 +393,10 @@ export class UserComputerProvider implements UserComputerTransport {
     if (this.lastPolledAt <= 0) return;
     const age = nowMs - this.lastPolledAt;
     if (age > UC_BACKLOG_STALE_MS) {
+      // Items whose closing reply cannot be held yet stay in the backlog (still held and keepalived)
+      // and are drained on a later tick.
       const drained = this.backlog.splice(0, this.backlog.length);
-      for (const q of drained) this.emitClosing(q, UC_BACKLOG_CLOSED_BEFORE_START);
+      for (const q of drained) if (!this.storeClosing(q, UC_BACKLOG_CLOSED_BEFORE_START)) this.backlog.push(q);
     } else if (age >= UC_BACKLOG_NUDGE_MS) {
       void this.pollOnce().catch(() => undefined);
     }
@@ -401,6 +413,7 @@ export class UserComputerProvider implements UserComputerTransport {
     for (const q of this.backlog) held.add(q.requestId);
     for (const id of this.replies?.requestIds() ?? []) held.add(id);
     for (const id of this.replies?.submitting ?? []) held.add(id);
+    for (const f of this.pendingClosings) held.add(f.requestId);
     return held;
   }
   /** Official keepAliveEligibleIds: backlog, queued replies, and a submitting batch unless stuck ≥120s; minus cancelled. Running requests with nothing queued are not eligible. */
@@ -412,6 +425,8 @@ export class UserComputerProvider implements UserComputerTransport {
     const stuckIds = new Set(stuck ? submitting : []);
     for (const id of this.replies?.requestIds() ?? []) if (!stuckIds.has(id)) out.add(id);
     if (!stuck) for (const id of submitting) out.add(id);
+    // Deferred closing replies are queued replies not yet in the lane (official: replies.requestIds()).
+    for (const f of this.pendingClosings) out.add(f.requestId);
     for (const id of this.cancelledIds) out.delete(id);
     return out;
   }
@@ -442,42 +457,48 @@ export class UserComputerProvider implements UserComputerTransport {
     return ids;
   }
 
-  private emitBusy(q: Queued): void { this.emitClosing(q, UC_BUSY_TEXT); }
   /**
-   * Closing replies (busy / cancelled-before-start / backlog drained / unsupported) never block the
-   * poll loop and never become unhandled rejections. When the reply lane is saturated they are
-   * deferred (bounded by the admitted-but-unstarted set, ≤ UC_PENDING_CLOSINGS_MAX) and retried from
-   * the keepalive tick; overflow is logged explicitly, never silently swallowed.
+   * Closing replies (busy / cancelled-before-start / backlog drained / parse error / unsupported).
+   * A closing reply is either held by the reply lane (`offer`, sync) or, while the lane is full, by a
+   * bounded deferral list retried in order from the keepalive tick. If neither can hold it the caller
+   * keeps the work retryable (queue item left unacknowledged, backlog item kept, job retries):
+   * a terminal frame is never dropped after its queue item was acknowledged.
    */
-  private emitClosing(q: Queued, error: string): void {
-    let frame: ExecFrameOut;
-    if ([requestKinds.upload, requestKinds.download, requestKinds.discoverAiTool].includes(q.kind)) frame = { kind: "file-error", requestId: q.requestId, error };
-    else if (q.kind === requestKinds.messagesOp) frame = { kind: "messages-error", requestId: q.requestId, error };
-    else frame = { kind: "control", requestId: q.requestId, message: { throw: { id: 0, error } } };
-    this.sendClosing(frame);
+  private closingFrame(q: Queued, error: string): ExecFrameOut {
+    if ([requestKinds.upload, requestKinds.download, requestKinds.discoverAiTool].includes(q.kind)) return { kind: "file-error", requestId: q.requestId, error };
+    if (q.kind === requestKinds.messagesOp) return { kind: "messages-error", requestId: q.requestId, error };
+    return { kind: "control", requestId: q.requestId, message: { throw: { id: 0, error } } };
   }
-  private sendClosing(frame: ExecFrameOut): void {
-    if (this.pendingClosings.length) { this.deferClosing(frame); return; }
+  private storeClosing(q: Queued, error: string): boolean { return this.storeClosingFrame(this.closingFrame(q, error)); }
+  /** Same as storeClosing (name kept for regressions/probes); returns whether the reply is held. */
+  private emitClosing(q: Queued, error: string): boolean { return this.storeClosing(q, error); }
+  private storeClosingFrame(frame: ExecFrameOut): boolean {
+    if (this.closed) return false;
+    if (!this.pendingClosings.length && this.offerFrame(frame)) return true;
+    if (this.pendingClosings.length >= UC_PENDING_CLOSINGS_MAX) return false;
+    this.pendingClosings.push(frame); return true;
+  }
+  /** Free deferral slots (the lane itself may hold more; this is the guaranteed part). */
+  private closingRoom(): number { return UC_PENDING_CLOSINGS_MAX - this.pendingClosings.length; }
+  private offerFrame(frame: ExecFrameOut): boolean {
+    const ch = this.channel; const r = this.replies;
+    if (!ch || !r) return false;
+    if (typeof r.offer === "function") return r.offer(Buffer.from(new SubmitGrokBotUserComputerResponsesRequest({
+      machineId: ch.machineId, credential: ch.credential, frames: [responseFrame(frame)] }).toBinary()), [frame.requestId]);
+    // Minimal stubs without offer(): fall back to emit; a rejection re-defers (bounded).
     let p: Promise<void>;
     try { p = Promise.resolve(this.emit(frame)); } catch (e) { p = Promise.reject(e); }
-    p.catch(() => this.deferClosing(frame));
+    p.catch(() => { if (!this.closed && this.pendingClosings.length < UC_PENDING_CLOSINGS_MAX) this.pendingClosings.push(frame); });
+    return true;
   }
-  private deferClosing(frame: ExecFrameOut): void {
-    if (this.closed) return;
-    if (this.pendingClosings.length >= UC_PENDING_CLOSINGS_MAX) {
-      console.error(`[user-computer-provider] closing reply for ${frame.requestId} dropped: ${UC_PENDING_CLOSINGS_MAX} closing replies already waiting for the reply lane`);
-      return;
-    }
-    this.pendingClosings.push(frame);
+  /** Leave a polled queue item unacknowledged so the server redelivers it. */
+  private unack(q: Queued): void {
+    this.seen.delete(q.id);
+    const i = this.pendingAcks.lastIndexOf(q.id); if (i >= 0) this.pendingAcks.splice(i, 1);
   }
   /** Retry deferred closing replies in order while the lane accepts them. */
   private flushClosings(): void {
-    while (this.pendingClosings.length && this.replies?.available && !this.closed) {
-      const frame = this.pendingClosings.shift()!;
-      let p: Promise<void>;
-      try { p = Promise.resolve(this.emit(frame)); } catch (e) { p = Promise.reject(e); }
-      p.catch(() => this.deferClosing(frame));
-    }
+    while (this.pendingClosings.length && !this.closed && this.offerFrame(this.pendingClosings[0])) this.pendingClosings.shift();
   }
   /** Official rejectCredential(e): only the channel that is still current may be closed. */
   private rejectCredential(ch: { credential: string } | null): void {
@@ -501,7 +522,8 @@ export class UserComputerProvider implements UserComputerTransport {
       // Frozen oracle dispatch maps unimplemented outer variants to an error.
       // Full variant-specific payloads remain a documented gap (not silent success).
       const error = "This computer's local-exec daemon does not understand that request frame; update the desktop app.";
-      this.emitClosing(q, error);
+      // An admitted job: wait (bounded by the job's own slot) until its terminal frame is held.
+      while (!this.closed && !this.storeClosing(q, error)) await new Promise(r => setTimeout(r, UC_KEEPALIVE_INTERVAL_MS));
       return;
     }
     // Authoritative / approval / scope grants are NOT implemented. Fail closed.

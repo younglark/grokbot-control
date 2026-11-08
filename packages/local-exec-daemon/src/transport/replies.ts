@@ -2,7 +2,8 @@
  * Transient failures retain bytes indefinitely with capped backoff. Authentication
  * failure pauses the same lane until same-scope credentials explicitly rotate. */
 export class HttpStatusError extends Error {
-  constructor(readonly status: number) { super(`reply HTTP ${status}`); }
+  /** `epoch`: identity of the channel the rejected submit used (fenced where failure is set). */
+  constructor(readonly status: number, readonly epoch?: unknown) { super(`reply HTTP ${status}`); }
 }
 export class ReplyQueue {
   private items: { body: Buffer; attempts: number; ids: string[] }[] = [];
@@ -24,7 +25,7 @@ export class ReplyQueue {
    * `replies.take()` (daemon.formatted.cjs L178680). UC protobuf bodies merge by concatenation
    * (repeated `frames`); lanes without it (Box JSON) keep one body per submit.
    */
-  constructor(private send: (body: Buffer, signal: AbortSignal) => Promise<void>, private reject: () => void,
+  constructor(private send: (body: Buffer, signal: AbortSignal) => Promise<void>, private reject: (e: HttpStatusError) => boolean | void,
     readonly maxBytes = 8 * 1024 * 1024, readonly maxFrames = 256, private merge?: (bodies: Buffer[]) => Buffer) {}
   // Reserve capacity for already-admitted requests (start/exit/control frames).
   get available(): boolean { return !this.stopped && !this.failure && this.waiters.length === 0 && this.items.length < Math.max(1, this.maxFrames - 32) && this.bytes < this.maxBytes * 0.75; }
@@ -38,6 +39,15 @@ export class ReplyQueue {
     // credits cover admitted producers only; overflow is explicit, not silent.
     if (this.waiters.length >= 64 || this.waiterBytes + body.length > this.maxBytes) return Promise.reject(new Error("reply producer capacity exceeded"));
     return new Promise((resolve, reject) => { this.waiters.push({body,ids,resolve,reject}); this.waiterBytes += body.length; });
+  }
+  /**
+   * Synchronous, non-waiting store: true only if the body is now held by the lane (it will be
+   * submitted and retried like any reply). Used for closing replies whose queue item must stay
+   * unacknowledged when the lane cannot hold its terminal frame.
+   */
+  offer(body: Buffer, ids: string[] = []): boolean {
+    if (this.stopped || this.waiters.length || this.items.length >= this.maxFrames || this.bytes + body.length > this.maxBytes) return false;
+    this.items.push({ body, attempts: 0, ids }); this.bytes += body.length; void this.pump(); return true;
   }
   private admitWaiters(): void {
     while (this.waiters.length && this.items.length < this.maxFrames && this.bytes + this.waiters[0].body.length <= this.maxBytes) {
@@ -67,7 +77,11 @@ export class ReplyQueue {
         if (this.stopped) break;
         batch.forEach(b => b.attempts++);
         if (e instanceof HttpStatusError && (e.status === 401 || e.status === 403)) {
-          this.failure = e; this.reject(); break;
+          // Fence at the point the lane fails: the owner refuses (returns false) when the rejected
+          // credential is no longer current (rotated between the RPC reject and this catch), and the
+          // batch is retried at once on the current channel instead of blocking it.
+          if (this.reject(e) === false) { this.timer = setTimeout(() => { this.running = false; void this.pump(); }, 0); return; }
+          this.failure = e; break;
         }
         this.timer = setTimeout(() => { this.running = false; void this.pump(); }, Math.min(2000, 100 * 2 ** Math.min(batch[0].attempts, 5)));
         return;
