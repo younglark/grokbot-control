@@ -1,4 +1,5 @@
 # local-exec 场景验收矩阵（0.79.3 Linux，2026-11-08 Asia/Singapore）
+> t106 第三轮：上轮 rotation 独立复验**未通过**（独立 26 对 official 0 晚 / ours 3 晚；"400" 为 20+20 次运行的交叉配对数，非 400 次运行）。比较器 TICK-BOUNDARY 改为 UNRESOLVED 失败；根因为我方 250ms poll 定时器（官方无），改为 30s 安全轮询后 strict rotation 20 独立对全 SAME、124 tests、46/36/10/0。详见 REVIEW-FIXES.md Round 3，待独立复验。
 
 > t103u 新批次（UC keepalive，d8b1d87/5bb3443 被审查阻塞 4×P2+P3 修正后，fa46d0f 再被阻塞 P2-1/P2-2/P3，本轮修正）：执行方自测，**待独立再审**；上一批 t101u 已独立验收并于 56ee14c push。
 > 前批状态：t101u 第一批（e984310）独立验收未通过；d75f9f0/2ee10eb 修正后第二轮再审又提出 P2×5、P3×1，已在 10d37df（代码+回归）/5993cfa（门禁）修正；第三轮再审（eb79982）余 P2 init 进程组残留、P3 runner 未查 step 状态，已修复；第四轮 P2 PGID 复用误认领已以所有权句柄修正；第五轮 init timeout 回退已修正，**修正待独立复验**。npm test 98 pass；差分 46/36/10 不变。不宣称 drop-in。
