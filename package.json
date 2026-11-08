@@ -16,6 +16,8 @@
     "test:protocol-tools": "python3 -m unittest discover -s tools/protocol",
     "smoke:uc": "npm run smoke:uc -w local-exec-daemon",
     "smoke:electron": "npm run smoke:electron -w local-exec-daemon",
+    "dev:gbc": "npm run dev -w grokbot-control --",
+    "dev:mcp": "npm run dev:mcp -w grokbot-control --",
     "gbc": "npm run gbc -w grokbot-control --",
     "mcp": "npm run mcp -w grokbot-control --",
     "prepublishOnly": "node -e \"throw new Error('Workspace root is private. Publish only the reviewed release package.')\"",

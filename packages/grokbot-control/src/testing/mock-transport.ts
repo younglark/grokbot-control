@@ -8,6 +8,16 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import { GrokBotService } from "#proto-gen/GrokBotService";
 import type { SidebarSection } from "../dto/types.js";
 
+export type MockSandboxState = {
+  state: number;
+  imageUpdateAvailable?: boolean;
+  image?: { registryTag?: string; staticSnapshotPath?: string };
+  recreateStarted?: boolean;
+  recreateReason?: string;
+  operationId?: string;
+  migrationPhases?: Array<{ phase: number; detail?: string }>;
+};
+
 export type MockState = {
   bots: Array<Record<string, unknown>>;
   sections: SidebarSection[];
@@ -22,10 +32,25 @@ export type MockState = {
   tasks: unknown[];
   subagents: unknown[];
   transcript: unknown[];
+  sandbox: MockSandboxState;
 };
+
+function defaultSandbox(): MockSandboxState {
+  return {
+    state: 1,
+    recreateStarted: true,
+    operationId: "op-mock",
+    migrationPhases: [
+      { phase: 1, detail: "backing up" },
+      { phase: 2, detail: "creating" },
+      { phase: 6, detail: "done" },
+    ],
+  };
+}
 
 export function createEmptyMockState(): MockState {
   return {
+    sandbox: defaultSandbox(),
     bots: [],
     sections: [],
     messages: [],
@@ -40,7 +65,54 @@ export function createEmptyMockState(): MockState {
 
 export function createMockTransport(state: MockState) {
   return createRouterTransport(({ service }) => {
+    const sandbox = () => (state.sandbox ??= defaultSandbox());
+    const startReset = () => {
+      const s = sandbox();
+      if (s.recreateStarted === false) {
+        return {
+          started: false,
+          reason: s.recreateReason ?? "simulated reset refusal",
+          operationId: "",
+        };
+      }
+      s.state = 4;
+      return {
+        started: true,
+        reason: "",
+        operationId: s.operationId ?? "op-mock",
+      };
+    };
     service(GrokBotService, {
+      async getSandBoxRunState() {
+        const s = sandbox();
+        return {
+          state: s.state,
+          imageUpdateAvailable: s.imageUpdateAvailable,
+          image: s.image,
+        };
+      },
+      async recreateSandBox() {
+        return startReset();
+      },
+      async forceRecreateSandBox() {
+        return startReset();
+      },
+      async *watchSandBoxMigration(req) {
+        const s = sandbox();
+        const phases = s.migrationPhases ?? [];
+        const from = String(req.fromOffsetKey ?? "");
+        const start = /^off-\d+$/.test(from) ? Number(from.slice(4)) + 1 : 0;
+        for (let i = Math.max(0, start); i < phases.length; i++) {
+          const phase = phases[i]!;
+          yield {
+            phase: phase.phase,
+            detail: phase.detail ?? "",
+            atMs: BigInt(Date.now()),
+            offsetKey: `off-${i}`,
+            operationId: s.operationId ?? "op-mock",
+          };
+        }
+      },
       async listGrokBotAgents() {
         return { agents: state.bots, truncated: false, slackConnections: [], teamsConnections: [] };
       },

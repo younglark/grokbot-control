@@ -13,6 +13,9 @@ EXAMPLES:
   gbc --mock --json message history --agent-id <id>
   gbc --mock --json session list --agent-id <id>
   gbc --mock --json bot status --agent-id <id>
+  gbc --mock --json computer state
+  gbc --mock --json --allow-writes computer reset --confirm=RESET_COMPUTER
+  gbc --json --allow-writes computer reset --confirm=RESET_COMPUTER --wait --timeout 600
   gbc --mock --json --allow-writes sidebar create --name Work
   gbc --mock --json --allow-writes sidebar move --agent-id <id> --section-id <sid>
   gbc --mock --json auth whoami
@@ -52,6 +55,12 @@ NOTES:
   - Live auth/RPC against production is NOT verified in this build's automated tests.
   - Remote writes require --allow-writes (or GBT_ALLOW_WRITES=1). --dry-run is pure (no RPC).
   - bot delete / sidebar delete / interrupt require --confirm=<resource-id> (exact match).
+  - computer reset requires --confirm=RESET_COMPUTER and --allow-writes. It recreates the
+    shared computer with preserve_data=false and cannot be canceled after it starts.
+    --hard calls ForceRecreateSandBox instead of RecreateSandBox.
+  - computer reset --wait follows WatchSandBoxMigration phases (backing-up, creating, moving,
+    cleaning-up, wiping, done/failed) and stops waiting at --timeout (1..3600s, default 600).
+    SIGINT stops waiting only; the reset may continue. No percentage is reported.
   - Value flags: "--flag value" or "--flag=value". A missing value (or a next token starting
     with "--") is a usage error (exit 2); use --text=--literal for values starting with "-".
   - --limit must be an integer 1..1000 (default 50); invalid values exit 2.

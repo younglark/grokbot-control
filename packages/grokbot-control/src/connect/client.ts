@@ -36,6 +36,7 @@ export const READ_ONLY_UNARY_METHODS = new Set([
   "ListGrokBotAgentTasks",
   "ListGrokBotSubagents",
   "ListGrokBotTranscriptEntries",
+  "GetSandBoxRunState",
   "ResolveGrokBotAttachmentReads",
   "PresignSandBoxStoreReads",
 ]);

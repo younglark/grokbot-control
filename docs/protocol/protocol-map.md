@@ -20,6 +20,8 @@ App 行为旁证：Linux **0.79.2** `main-app.pretty.cjs`（静态，未登录�
 | 运行进展 | LiveState | `progress.status` | `gbc bot status` | `get_bot_status` | `ListGrokBotAgentStatuses` | 只读 |
 | todos/tasks/subagents | 原生对象 | `progress.todos` 等 | `gbc bot todos`… | `list_agent_todos`… | `ListGrokBotAgentTodos` / `Tasks` / `Subagents` | 只读；≠自建 bridge_task |
 | 中断 | Run | `progress.interrupt` | `gbc bot interrupt --confirm` | `interrupt_run` | `InterruptGrokBotAgentRun` | 写；作用域 agent(+session?) 待验 |
+| 电脑状态 | SandBox | `computer.state` | `gbc computer state` | `get_computer_state` | `GetSandBoxRunState` | 只读；粗粒度 |
+| 重置电脑 | SandBox | `computer.reset` | `gbc computer reset --confirm=RESET_COMPUTER` | `reset_computer` | `RecreateSandBox`（`preserve_data:false`）/`ForceRecreateSandBox` | 写；不可取消；`--wait` 订阅 `WatchSandBoxMigration` |
 | **侧边栏分组读** | SidebarSections | `sidebar.get` | `gbc sidebar list` | `get_sidebar_sections` | `GetGrokBotUserRuntimeSettings` | 只读 |
 | **侧边栏分组写** | SidebarSections | `sidebar.set/patch` | `gbc sidebar …` | `update_sidebar_sections` | `UpdateGrokBotUserRuntimeSettings`（仅 sections±base） | 写；冲突 best-effort；**删组≠删 bot** |
 | 多 bot 房间 | Room | `room.*` | `gbc room …` | `create_room`… | `CreateGrokBotRoom` 等 | **非默认分组** |
