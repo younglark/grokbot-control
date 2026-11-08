@@ -285,3 +285,22 @@ Risks / not proven:
 - index.ts 1000 ms setInterval (tryStartBox) remains and still co-fires occasionally.
 - Admission now waits for Watch events / 30 s safety poll instead of 250 ms polling; unacked redelivery depends on server.
 - Pending independent re-review; no compatibility/acceptance/drop-in claimed.
+
+## Round 4 (t107, on cd72af6) — P2 cancel behind overflow (fix pending independent re-review)
+
+Reviewer evidence (/tmp/independent-t106/cancel-behind-overflow): first Submit (target only) stalls 10 s; then 8 active (stdout flood) + 64 backlog + 200 busy, then cancel target. Official: busy ACK 200, target aborted 4–5 ms after cancel, USER_ABORT exit. Ours (cd72af6): busy ACK 128, no cancel ACK/abort/exit within 3 s (cancel only +7004 ms after the submit recovered).
+
+Reproduced locally on cd72af6 (1/1 FAIL, same signature).
+
+Root cause: the reply lane is full of stdout during the stall, so busy closing replies went to the deferral list capped at 128. Busy #128+ were left unACKed (correct: no ACK-then-drop), but the peer queue is FIFO and only advances on ACK, so the unACKed busy items sat at its head and the cancel behind them was never delivered. Official ACKs everything because its reply lanes (oee.push) hold closings without a cap.
+
+Constraint analysis: with no-ACK-then-drop and a FIFO queue that only advances on ACK, a control behind K unACKable items needs K held closing replies. So bounded memory cannot guarantee control reachability for an arbitrarily long flood during a reply stall; any bound has a K beyond which the cancel waits for the lane to recover (then it is delivered — nothing is dropped). Official avoids this only by being unbounded. No new fields/endpoints exist in the frozen proto to bypass FIFO (Poll has ack_ids/limit only), and official uses no persistence for replies, so no SQLite was added.
+
+Fix (provider.ts): closing replies are small and fixed-shape (requestId + shared constant text). The deferral is now budgeted by accounted bytes (`closingCost` = 96 + 2·len(requestId), total ≤ 1 MiB = 1/8 of the 8 MiB lane) and count (≤ 8192) instead of 128 entries: ≥ 4681 closings even with 64-char ids. Beyond the budget behaviour is unchanged (unACK, redelivered, never dropped). Not changed: poll limit (an earlier closed test pins it), queue semantics, fake peer, pressure, timing, comparator.
+
+After fix:
+- cancel-overflow probe (scenario added to scripts/oracles/uc-keepalive.cjs as in the reviewer's probe; assert-cancel.py added; runner no longer truncates stdout at 64 KiB): 6 independent ours runs (3 + 3) all PASS, busyAcked 200, abort 5–7 ms after cancel, USER_ABORT exit; 3 official runs PASS (abort 4–6 ms).
+- npm test 127/127 (124 + budget regression + cancel-overflow oracle official + ours).
+- r3 46/36/10/0, lifecycle PASS; 8 scenarios vs golden in npm test; overflow 3 fresh pairs SAME 200/200; rotation 5 fresh strict pairs SAME, TICK-BOUNDARY=0.
+
+Risks: bounded ⇒ a flood larger than the budget (~4.7k+ busy during one reply stall) still delays control until recovery (documented limit, not equivalent to official); real backend redelivery/order not tested; up to ~1 MiB extra memory.
