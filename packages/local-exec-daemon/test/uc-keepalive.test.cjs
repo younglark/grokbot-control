@@ -320,3 +320,24 @@ for (const who of ['official', 'ours']) {
     const a = spawnSync('python3', [path.join(dir, 'assert-cancel.py'), f], { encoding: 'utf8' }); assert.equal(a.status, 0, a.stdout);
   });
 }
+
+// ---- t108 atomic cancel of backlog entries (reserve actual frames before removal/ACK) ----
+test('cancel of backlog entries is atomic: reserved by actual frame cost, else nothing removed and cancel stays unACKed', async () => {
+  const { GrokBotUserComputerQueuedRequest } = require('../dist/generated/aiserver.v1_pb.js');
+  const { p } = mk(); p.proven = true; p.lastPolledAt = Date.now();
+  p.replies = { available: false, requestIds: () => new Set(), submitting: [], offer: () => false, enqueue: () => Promise.reject(new Error('cap')), drop: () => 0 };
+  for (let i = 0; ; i++) if (!p.storeClosing({ id: `q${i}`, requestId: `f${i}`.padEnd(64, 'x'), kind: 2 }, 'busy')) break;
+  const target = 'target'.padEnd(1024, 't');
+  assert.ok(p.closingRoom() > 0 && uc.closingCost(target) > uc.UC_PENDING_CLOSINGS_MAX_BYTES - p.pendingClosings.reduce((n, f) => n + uc.closingCost(f.requestId), 0), 'estimate says room, actual target does not fit');
+  // two backlog entries of the same request: neither half-saved nor half-removed
+  p.backlog.push({ id: 'b1', requestId: target, kind: 2 }, { id: 'b2', requestId: target, kind: 2 });
+  const before = p.pendingClosings.length; const acks = []; let n = 0;
+  p.client = { pollGrokBotUserComputerRequests: async (req) => { acks.push([...req.ackIds]); return { requests: n++ ? [] : [GrokBotUserComputerQueuedRequest.fromJson({ id: 'cancel-target', frame: { requestId: target, cancel: {} } })] }; } };
+  await p.pollOnce(); await p.pollOnce();
+  assert.equal(p.backlog.length, 2); assert.equal(p.cancelledIds.has(target), false);
+  assert.equal(p.pendingClosings.length, before); assert.deepEqual(acks, [[], []]);
+  // room appears → the redelivered cancel commits both closings and is ACKed
+  p.pendingClosings.splice(0, 20); n = 0; await p.pollOnce(); await p.pollOnce();
+  assert.equal(p.backlog.length, 0); assert.equal(p.pendingClosings.filter((f) => f.requestId === target).length, 2);
+  assert.deepEqual(acks.at(-1), ['cancel-target']);
+});

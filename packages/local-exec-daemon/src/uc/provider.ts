@@ -358,13 +358,17 @@ export class UserComputerProvider implements UserComputerTransport {
           const dropped = this.backlog.filter(x => x.requestId === q.requestId);
           // No room to hold their closing replies: leave the cancel unacknowledged (redelivered by the
           // next poll) instead of dropping terminal frames of already-acknowledged backlog work.
-          if (dropped.length > this.closingRoom()) { this.unack(q); continue; }
+          // Reserve against the ACTUAL closing frames (their real requestId cost), all or nothing:
+          // only when every terminal frame can be held are the backlog removal and the cancel ACK
+          // committed; otherwise nothing is removed and the cancel stays unACKed (redelivered).
+          const closings = dropped.map(d => this.closingFrame(d, UC_CANCELLED_BEFORE_START));
+          if (!this.canHoldClosings(closings)) { this.unack(q); continue; }
           this.cancelledIds.add(q.requestId);
           this.backlog = this.backlog.filter(x => x.requestId !== q.requestId);
           // Official replies.drop(requestId) + submitAbort when the in-flight batch is all cancelled.
           cancelRequest(q.requestId);
           if (typeof this.replies?.drop === 'function') this.replies.drop(id => this.cancelledIds.has(id));
-          for (const d of dropped) this.storeClosing(d, UC_CANCELLED_BEFORE_START);
+          for (const f of closings) if (!this.storeClosingFrame(f)) throw new Error("reserved closing reply not held");
           continue;
         }
         // Promote before admit (official startRequest.finally pulls while inflight<8,
@@ -499,6 +503,12 @@ export class UserComputerProvider implements UserComputerTransport {
     if (!this.pendingClosings.length && this.offerFrame(frame)) return true;
     if (this.closingRoom() <= 0 || this.pendingClosingBytes + closingCost(frame.requestId) > UC_PENDING_CLOSINGS_MAX_BYTES) return false;
     this.deferClosing(frame); return true;
+  }
+  /** True iff the deferral alone (lane not counted) can hold every frame by count and actual byte cost. */
+  private canHoldClosings(frames: ExecFrameOut[]): boolean {
+    if (this.closed) return false;
+    const bytes = this.pendingClosings.reduce((n, f) => n + closingCost(f.requestId), 0) + frames.reduce((n, f) => n + closingCost(f.requestId), 0);
+    return this.pendingClosings.length + frames.length <= UC_PENDING_CLOSINGS_MAX && bytes <= UC_PENDING_CLOSINGS_MAX_BYTES;
   }
   private deferClosing(frame: ExecFrameOut): void { this.pendingClosings.push(frame); this.pendingClosingBytes += closingCost(frame.requestId); }
   /** Free deferral slots (the lane itself may hold more; this is the guaranteed part). */
