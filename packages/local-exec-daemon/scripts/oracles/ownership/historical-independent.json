@@ -1,0 +1,44 @@
+{
+  "status": "all-fixed-experiment-assertions-passed",
+  "realChildScenarios": 2,
+  "originalPureComparisons": 2,
+  "expectedBusinessTimeouts": 1,
+  "results": [
+    {
+      "scenario": "overwrite-before-rename",
+      "status": "expected-inner-timeout-and-recovery-confirmed",
+      "businessExitExpectation": "FAILED after full 20000ms as injected",
+      "elapsedMs": 20001.540509,
+      "keepDecisions": 10,
+      "pongReplies": 3,
+      "exit": {
+        "code": 0,
+        "signal": null
+      }
+    },
+    {
+      "scenario": "replace-after-rename",
+      "status": "counterfactual-clean-superseded-exit",
+      "businessExitExpectation": "PASSED",
+      "elapsedMs": 2011.1324999999997,
+      "exit": {
+        "code": 0,
+        "signal": null
+      }
+    },
+    {
+      "scenario": "original-pure-overwrite",
+      "owner": 123,
+      "decision": "keep",
+      "notAnOfficialProcessRun": true
+    },
+    {
+      "scenario": "original-pure-after-rename",
+      "owner": 456,
+      "decision": "exit",
+      "notAnOfficialProcessRun": true
+    }
+  ],
+  "totalElapsedMs": 26423.567198,
+  "provenance": "Historical t142 run, not rerun for t147. No historical root cause identified."
+}

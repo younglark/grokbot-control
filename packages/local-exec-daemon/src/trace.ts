@@ -16,10 +16,12 @@ const lifecycleEvents: string[] = [];
 if (lifecycleFile && lifecycleBuffered) process.once("exit", () => {
   try { fs.appendFileSync(lifecycleFile, lifecycleEvents.join("")); } catch { /* diagnostic */ }
 });
+export function lifecycleTraceEnabled(): boolean { return !!lifecycleFile; }
 export function lifecycleTrace(ev: string, info: Record<string, unknown> = {}): void {
   if (!lifecycleFile) return;
   try {
-    const row = JSON.stringify({ w: performance.timeOrigin + performance.now(), pid: process.pid, ev, ...info }) + "\n";
+    const monoMs = performance.now();
+    const row = JSON.stringify({ w: performance.timeOrigin + monoMs, monoMs, timeOrigin: performance.timeOrigin, pid: process.pid, ev, ...info }) + "\n";
     if (lifecycleBuffered) lifecycleEvents.push(row);
     else fs.appendFileSync(lifecycleFile, row);
   } catch { /* diagnostic */ }

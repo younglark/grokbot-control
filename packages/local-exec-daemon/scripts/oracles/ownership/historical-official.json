@@ -1,0 +1,36 @@
+{
+  "officialProcesses": 2,
+  "fixedScenarios": 2,
+  "firstScenario": {
+    "businessExpectation": "FAILED: full 20000ms superseded exit expectation timed out as injected",
+    "elapsedMs": 20004.903288,
+    "observedDiscoveryReadsBeforeTimeout": 11,
+    "responsivePongs": 4,
+    "recoveryExit": {
+      "code": 0,
+      "signal": null
+    },
+    "recoveryElapsedMs": 7932.478228,
+    "harnessStatus": "exit 1: approximate-implementation log regex did not match official exact superseded text after recovery; original failure retained; first scene not rerun"
+  },
+  "control": {
+    "scenarios": 1,
+    "officialFullDaemon": true,
+    "results": [
+      {
+        "name": "replace-after-rename",
+        "status": "counterfactual-superseded-exit",
+        "elapsedMs": 10024.892930999998,
+        "exit": {
+          "code": 0,
+          "signal": null
+        }
+      }
+    ]
+  },
+  "historicalTimeoutRootCause": "NOT established",
+  "officialDefaultOwnershipMs": 10000,
+  "officialStandingMs": 2000,
+  "repositoryModifiedByThisTask": false,
+  "provenance": "Historical t145 full official run. First scene ran once, control ran once separately after literal log assertion correction. No reruns."
+}

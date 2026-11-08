@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { lifecycleTrace, lifecycleTraceEnabled } from "../trace";
 import { dataRootFromEnv, filesKeyIdFromBase64Key, writeAtomic } from "../util";
 
 export type DiscoveryRecord = {
@@ -40,12 +41,37 @@ export async function clearDiscovery(env: NodeJS.ProcessEnv = process.env): Prom
 }
 
 
-export async function loadDiscovery(env: NodeJS.ProcessEnv = process.env): Promise<DiscoveryRecord | null> {
+// Correlation is (pid, timeOrigin, readId); allocate only when diagnostics are enabled.
+let discoveryReadSequence = 0;
+function readErrorCode(error: unknown): string {
   try {
-    const raw = JSON.parse(await fs.promises.readFile(discoveryPath(env), "utf8")) as Partial<DiscoveryRecord>;
-    if (!Number.isInteger(raw.pid) || (raw.pid as number) <= 0) return null;
-    if (typeof raw.startedAt !== "number" || Number.isNaN(raw.startedAt)) return null;
-    return {
+    const code = (error as { code?: unknown } | null)?.code;
+    return typeof code === "string" && /^[A-Z0-9_]{1,32}$/.test(code) ? code : "UNKNOWN";
+  } catch { return "UNKNOWN"; }
+}
+
+export async function loadDiscovery(env: NodeJS.ProcessEnv = process.env): Promise<DiscoveryRecord | null> {
+  const readId = lifecycleTraceEnabled() ? ++discoveryReadSequence : 0;
+  let ioFinished = false;
+  let jsonParsed = false;
+  let outcome = "invalid-record";
+  if (readId) lifecycleTrace("discovery:load-read-start", { readId });
+  try {
+    const text = await fs.promises.readFile(discoveryPath(env), "utf8");
+    ioFinished = true;
+    // Promise settlement observed by JS, before JSON.parse; not the kernel's physical I/O completion time.
+    if (readId) lifecycleTrace("discovery:load-read-io-end", { readId });
+    const raw = JSON.parse(text) as Partial<DiscoveryRecord>;
+    jsonParsed = true;
+    if (!Number.isInteger(raw.pid) || (raw.pid as number) <= 0) {
+      if (readId) lifecycleTrace("discovery:load-read-parse-end", { readId, result: "invalid-record", reason: "pid" });
+      return null;
+    }
+    if (typeof raw.startedAt !== "number" || Number.isNaN(raw.startedAt)) {
+      if (readId) lifecycleTrace("discovery:load-read-parse-end", { readId, result: "invalid-record", reason: "startedAt" });
+      return null;
+    }
+    const record: DiscoveryRecord = {
       pid: raw.pid as number,
       startedAt: raw.startedAt,
       servingAt: typeof raw.servingAt === "number" ? raw.servingAt : undefined,
@@ -53,8 +79,23 @@ export async function loadDiscovery(env: NodeJS.ProcessEnv = process.env): Promi
       filesKeyId: typeof raw.filesKeyId === "string" ? raw.filesKeyId : undefined,
       generation: typeof raw.generation === "number" ? raw.generation : undefined,
     };
-  } catch {
-    return null;
+    outcome = "record";
+    if (readId) lifecycleTrace("discovery:load-read-parse-end", { readId, result: "record", owner: record.pid });
+    return record;
+  } catch (error) {
+    if (readId) {
+      if (!ioFinished) {
+        const code = readErrorCode(error);
+        outcome = code === "ENOENT" ? "missing" : "io-error";
+        lifecycleTrace("discovery:load-read-io-error", { readId, code });
+      } else {
+        outcome = jsonParsed ? "invalid-record" : "invalid-json";
+        lifecycleTrace("discovery:load-read-parse-end", { readId, result: outcome });
+      }
+    }
+    return null; // Preserve existing fail-open fallback for every read/parse/shape failure.
+  } finally {
+    if (readId) lifecycleTrace("discovery:load-read-end", { readId, outcome });
   }
 }
 

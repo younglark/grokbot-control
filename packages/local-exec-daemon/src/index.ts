@@ -35,19 +35,24 @@ async function main(): Promise<void> {
   let uc: UserComputerProvider | undefined;
   let shuttingDown = false;
 
-  // Serialized discovery chain (not C/T coalescing). Preserve its original live-owner fence (D:L179202–179207).
-  let publishChain: Promise<void> = Promise.resolve();
+  // D:L179193–179239: pending/running coalesce requests; T tracks the running publication.
+  // The ownership latch A suppresses new writes until the ownership tick clears it.
+  let supersededSinceMs: number | undefined;
+  let publishPending = false;
+  let publishRunning = false;
+  let publishTask: Promise<void> | undefined;
   let publishId = 0;
-  const publish = () => {
-    const id = ++publishId;
-    lifecycleTrace("publish:request", { id, shuttingDown });
-    if (shuttingDown) return publishChain;
-    publishChain = publishChain
-      .then(async () => {
+  const flushDiscovery = async (): Promise<void> => {
+    try {
+      while (publishPending) {
+        publishPending = false;
+        if (supersededSinceMs !== undefined) return;
         const discovery = await loadDiscovery();
         const otherAlive = !!discovery && discovery.pid !== process.pid && pidAlive(discovery.pid);
-        lifecycleTrace("publish:guard", { id, owner: discovery?.pid, otherAlive, shuttingDown });
-        if (shuttingDown || otherAlive) return;
+        lifecycleTrace("publish:guard", { owner: discovery?.pid, otherAlive, shuttingDown });
+        if (otherAlive || shuttingDown) return;
+        // Original has no post-read CAS: an already-started write can finish after ownership changes.
+        let written = true;
         await publishDiscovery(
           {
             pid: process.pid,
@@ -57,11 +62,26 @@ async function main(): Promise<void> {
             ...(generation !== undefined ? { generation } : {}),
           },
           key,
-        );
-        lifecycleTrace("publish:done", { id });
-      })
-      .catch(error => { lifecycleTrace("publish:error", { id, kind: error?.name }); });
-    return publishChain;
+        ).catch(error => { written = false; lifecycleTrace("publish:error", { kind: error?.name }); });
+        if (written) lifecycleTrace("publish:done");
+      }
+    } finally {
+      publishRunning = false;
+    }
+  };
+  const publish = async (): Promise<void> => {
+    lifecycleTrace("publish:request", { id: ++publishId, shuttingDown });
+    if (shuttingDown) return;
+    publishPending = true;
+    if (publishRunning) return; // Busy C returns immediately; close separately awaits T.
+    publishRunning = true;
+    const task = flushDiscovery();
+    publishTask = task;
+    try {
+      await task;
+    } finally {
+      if (publishTask === task) publishTask = undefined;
+    }
   };
 
   // D:yre/hc L78435–78587: next cadence is anchored at completion, not at a wall-clock interval.
@@ -92,11 +112,16 @@ async function main(): Promise<void> {
     });
   };
 
+  let ownershipTask: Promise<void> | undefined;
+  let ownershipFollowUp = false;
+  let ownershipTimer: NodeJS.Timeout | undefined;
+
   const shutdown = (signal: string) => {
     if (shuttingDown) return;
     shuttingDown = true;
     lifecycleTrace("shutdown:begin", { signal });
     clearTimeout(ucRefreshTimer);
+    clearTimeout(ownershipTimer);
     logInfo(`received ${signal}, shutting down`);
     void (async () => {
       try {
@@ -118,7 +143,7 @@ async function main(): Promise<void> {
       lifecycleTrace("shutdown:tick-wait");
       await ucRefresh;
       lifecycleTrace("shutdown:tick-done");
-      await publishChain;
+      await publishTask;
       lifecycleTrace("shutdown:publish-done");
       await clearDiscovery();
       lifecycleTrace("shutdown:exit");
@@ -217,6 +242,60 @@ async function main(): Promise<void> {
     void provider.start().catch(() => console.error("[user-computer-provider] provider lifecycle failed"));
   };
 
+  // Ownership tick: supervisor/lease + discovery PID superseded (official FDe/Jae/hce).
+  // Generation is published into discovery from env; daemon does not compare generations.
+  const ownershipTick = async (): Promise<void> => {
+    if (shuttingDown) return;
+    lifecycleTrace("ownership:begin");
+    const supervised = await isSupervised();
+    const lease = await loadLease();
+    const hb = await readJsonIfExists<{ at: number }>(path.join(dataRootFromEnv(), "local-exec-supervisor.json"));
+    const staleFor = Date.now() - (hb?.at ?? startedAt) - 90_000;
+    const disc = await loadDiscovery();
+    if (disc && disc.pid !== process.pid && pidAlive(disc.pid)) {
+      supersededSinceMs ??= Date.now();
+    } else {
+      supersededSinceMs = undefined; // D:L179502: clear A before C, not after awaiting it.
+      if (disc?.pid !== process.pid) await publish();
+    }
+    const supersededForMs = supersededSinceMs == null ? null : Date.now() - supersededSinceMs;
+    const decision = ownershipDecision({
+        supervisedFresh: supervised,
+        lease,
+        inflightCount,
+        supervisorStaleForMs: staleFor,
+        supersededForMs,
+      });
+    lifecycleTrace("ownership:decision", { owner: disc?.pid, otherAlive: disc ? pidAlive(disc.pid) : false,
+      inflightCount, supervised, staleFor, supersededForMs, decision });
+    if (decision === "exit") {
+      shutdown(supersededSinceMs != null ? "superseded" : "unsupervised");
+    }
+  };
+  // D:78810 vre=10000; hc/yre starts leading and schedules from async completion (D:78474–78545).
+  // Separate from standing Rre=2000. Pokes coalesce, never overlap a pending read/publication.
+  const requestOwnershipTick = (): void => {
+    if (shuttingDown) return;
+    if (ownershipTask) { ownershipFollowUp = true; return; }
+    clearTimeout(ownershipTimer);
+    ownershipTimer = undefined;
+    ownershipTask = Promise.resolve().then(async () => {
+      do {
+        ownershipFollowUp = false;
+        await ownershipTick();
+      } while (ownershipFollowUp && !shuttingDown);
+    }).catch(error => {
+      lifecycleTrace("ownership:error", { kind: error?.name });
+      shutdown("ownership-state-error");
+    }).finally(() => {
+      ownershipTask = undefined;
+      if (!shuttingDown) {
+        ownershipTimer = setTimeout(requestOwnershipTick, 10_000);
+        ownershipTimer.unref();
+      }
+    });
+  };
+
   for (let i = 0; i < 50 && !box && !uc && !shuttingDown; i++) {
     await tryStartBox();
     requestUcRefresh();
@@ -224,47 +303,14 @@ async function main(): Promise<void> {
     if (!box && !uc) await delay(100);
   }
 
-  lifecycleTrace("startup:ready");
-  logInfo(`started (pid ${process.pid}); serving local exec over the gateway`);
-
   // Box retry keeps its existing cadence. UC standing has an independent completion-anchored 2s timer.
   setInterval(() => { void tryStartBox().catch(() => undefined); }, 1000);
   ucCadenceStarted = true;
-  requestUcRefresh(); // default leading tick, as yre.start()
-
-  // Ownership tick: supervisor/lease + discovery PID superseded (official FDe/Jae/hce).
-  // Generation is published into discovery from env; daemon does not compare generations.
-  let supersededSinceMs: number | undefined;
-  setInterval(() => {
-    void (async () => {
-      if (shuttingDown) return;
-      lifecycleTrace("ownership:begin");
-      const supervised = await isSupervised();
-      const lease = await loadLease();
-      const hb = await readJsonIfExists<{ at: number }>(path.join(dataRootFromEnv(), "local-exec-supervisor.json"));
-      const staleFor = Date.now() - (hb?.at ?? startedAt) - 90_000;
-      const disc = await loadDiscovery();
-      if (disc && disc.pid !== process.pid && pidAlive(disc.pid)) {
-        supersededSinceMs ??= Date.now();
-      } else {
-        if (disc && disc.pid !== process.pid) await publish();
-        supersededSinceMs = undefined;
-      }
-      const supersededForMs = supersededSinceMs == null ? null : Date.now() - supersededSinceMs;
-      const decision = ownershipDecision({
-          supervisedFresh: supervised,
-          lease,
-          inflightCount,
-          supervisorStaleForMs: staleFor,
-          supersededForMs,
-        });
-      lifecycleTrace("ownership:decision", { owner: disc?.pid, otherAlive: disc ? pidAlive(disc.pid) : false,
-        inflightCount, supervised, staleFor, supersededForMs, decision });
-      if (decision === "exit") {
-        shutdown(supersededSinceMs != null ? "superseded" : "unsupervised");
-      }
-    })().catch(error => { lifecycleTrace("ownership:error", { kind: error?.name }); shutdown("ownership-state-error"); });
-  }, 2000).unref();
+  requestUcRefresh(); // D:179481 standing registration precedes ownership (179493).
+  requestOwnershipTick(); // Both policies lead before the outer entrypoint announces started (187316–187335).
+  await Promise.resolve(); // Registration's leading callbacks begin; readiness does not await their completion.
+  lifecycleTrace("startup:ready");
+  logInfo(`started (pid ${process.pid}); serving local exec over the gateway`);
 }
 
 main().catch(() => exitFatal());

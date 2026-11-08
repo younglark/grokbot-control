@@ -290,7 +290,10 @@ describe('ownership PID superseded + UC admission gate + superviseBacklog', () =
     let stdout = '';
     child.stdout.on('data', (chunk) => { stdout += String(chunk); });
     child.stderr.on('data', (chunk) => { stdout += String(chunk); });
-    const exitPromise = new Promise((resolve) => child.once('exit', (code, signal) => resolve({ code, signal })));
+    const exitPromise = new Promise((resolve) => child.once('exit', (code, signal) => {
+      lifecycleTrace('fixture:child-exit', { target: child.pid, code, signal });
+      resolve({ code, signal });
+    }));
     child.send({
       type: 'sand-local-exec-file-key',
       key: Buffer.alloc(32, 9).toString('base64'),
@@ -344,6 +347,11 @@ describe('ownership PID superseded + UC admission gate + superviseBacklog', () =
         /received superseded, shutting down/,
         `expected superseded shutdown log, got: ${stdout.slice(-500)}`,
       );
+    } catch (error) {
+      let owner;
+      try { owner = JSON.parse(fs.readFileSync(discoveryPath, 'utf8')).pid; } catch { /* diagnostic */ }
+      lifecycleTrace('fixture:failed', { target: child.pid, owner, childAlive: pidAlive(child.pid), ownerAlive: owner == null ? false : pidAlive(owner), exitCode: child.exitCode, signalCode: child.signalCode });
+      throw error; // keep the original assertion and 20s deadline
     } finally {
       if (child.exitCode === null) {
         child.kill('SIGTERM');
