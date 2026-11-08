@@ -198,3 +198,22 @@ Remaining limits: residue that leaves the group (setsid/own pgrp) is not tracked
 Path audit (all same-handle paths): close → reapInitGroup once + retire; timeout → cleanupInitGroup; shutdown → cleanupInitGroup then await close; signalInitGroup retires before signalling, so a later path never signals again.
 Counts: `npm test` 99 pass / 0 fail; run_all.sh 46 / 36 / 10 / 0 diff, lifecycle PASS, RC=0; stale-lifecycle 0 signals; initgroups no live process, marker false.
 Risks: finish("") does not wait for the killed residue to be reaped (signal is sent before finish); residue that left the group via setsid is not tracked; theoretical reuse window between leader reap and the first cleanup relies on the pid==pgid guard. Not drop-in.
+
+## t103u batch: UC keepalive (2026-11-08, Asia/Singapore) — **执行方自测，待独立复验**
+
+Baseline: previous batch independently accepted; 56ee14c pushed. This batch is local commit d8b1d87 (not pushed).
+
+Choice: plan listed `sendKeepAlives / keepAliveDueAt` as the remaining UC transport gap next to superviseBacklog (already done); it is bounded, has static evidence (D:L178601–178661, A9r L178849, constants L177848–177854) and is testable offline with the existing fake UC peer. Approval/standing/scope needs a settings/authorization oracle and was left for a later batch.
+
+Official oracle (unchanged 0.79.3 main.cjs in bwrap, synthetic credential, fake Connect peer): `scripts/oracles/uc-keepalive.cjs` scenarios backlog / cancel / stall / exhausted; goldens in `keepalive-official/`, ours in `keepalive-ours/`; `keepalive-diff.py` compares keepalive id sequences exactly, offsets within 300 ms, the cancelled-backlog frame, and step status.
+
+| Behavior | Official (measured) | Ours before | Ours now |
+|---|---|---|---|
+| keepalive frames | messagesAccepted for backlog / queued-reply / submitting ids; not for running requests with nothing queued; first ≈1.47 s after enqueue, then +3.0 s | none | same (4/4 scenarios SAME) |
+| ResourceExhausted on keepalive | next keepalive +5 s | n/a | same |
+| cancel of backlog item | keepalives stop; throw "Cancelled before it started on the user's computer." | silently removed | same |
+| slow data submit (7 s) | single submit waits (deadline 120 s) | re-submitted the same frame every ≈2.4 s (2 s timeout) | 120 s deadline, single submit |
+| submit batching | several frames per submit | one frame per submit | **unchanged, documented deviation** |
+
+Tick is serial like official hc/yre (next tick 500 ms after the previous completes). Auth error on a keepalive closes admission like other UC calls. Not verified against official: keepalive under Watch reconnect/credential rotation, stuck-submit ≥120 s cutoff (unit-tested only), more than 256 due ids.
+Counts: `npm test` 107 pass / 0 fail (99 + 8 new: 6 unit, 2 bwrap oracle runs); r3 strict differential unchanged 46 / 36 / 10 / 0 diff, lifecycle PASS, RC=0.
