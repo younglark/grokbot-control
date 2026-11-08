@@ -167,6 +167,7 @@ export class UserComputerProvider implements UserComputerTransport {
   /** Official keepAliveDueAt / cancelledIds / keepAlivePausedUntil / proven (Watch `connected` seen). */
   readonly keepAliveDueAt = new Map<string, number>();
   private cancelledIds = new Set<string>();
+  private settingsChain: Promise<void> = Promise.resolve();
   private keepAlivePausedUntil = 0;
   private keepAliveSending = false;
   private proven = false;
@@ -569,7 +570,12 @@ export class UserComputerProvider implements UserComputerTransport {
       return;
     }
     // Authoritative / approval / scope grants are NOT implemented. Fail closed.
-    const live = await loadSettings();
+    // Official reads the permission from its in-memory settings store (re()/AUe, D:L179276–179288), so admitted execs
+    // reach nextExecId++ in admission order. The live file read is kept but chained FIFO so completion order of
+    // concurrent reads cannot reorder exec ids / start frames (t112 fair gate).
+    const read = this.settingsChain.then(() => loadSettings());
+    this.settingsChain = read.then(() => undefined, () => undefined);
+    const live = await read;
     const permission = this.opts.hello.serverAuthoritative ? "ask" : live.permission;
     await dispatchExec({ root: this.opts.root, requestId: q.requestId,
       serverMessage: q.serverMessage, permission, emit: this.emit });

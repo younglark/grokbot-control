@@ -201,6 +201,7 @@ export async function handleShellStream(args: {
   // snapshot) reports USER_ABORT, i.e. the timeout clock does not run during the snapshot wait;
   // it is armed at spawn. The snapshot wait itself is bounded by initialSnapshot's own cap.
   let timeoutTimer: NodeJS.Timeout | undefined;
+  let startSent = false;
 
   const emitAborted = async (why: ShellAbortReason, cwdForExit: string) => {
     clearTimeout(timeoutTimer);
@@ -208,7 +209,7 @@ export async function handleShellStream(args: {
     try {
       const elapsed = Date.now() - startedAt;
       // Oracle frame order for an abort before the command ran: start, aborted exit, close.
-      await emit({ kind: "client", requestId, message: { id: msgId,
+      if (!startSent) await emit({ kind: "client", requestId, message: { id: msgId,
         shellStream: { start: { sandboxPolicy: new SandboxPolicy({type: SandboxPolicy_Type.INSECURE_NONE}).toJson() } }, localExecutionTimeMs: elapsed } });
       await emit({ kind: "client", requestId, message: { id: msgId,
         shellStream: { exit: { code: 4294967295, cwd: cwdForExit, aborted: true,
@@ -249,7 +250,9 @@ export async function handleShellStream(args: {
       cwd = realRoot;
     } else {
       cwd = fs.realpathSync(abs);
-      if (!(await fs.promises.stat(cwd)).isDirectory()) throw new Error("cwd is not a directory");
+      // Synchronous like the surrounding realpath/exists checks: an async stat here let fs thread-pool completion
+      // order reorder concurrent admissions before `start` (official Sft does no I/O for an empty cwd).
+      if (!fs.statSync(cwd).isDirectory()) throw new Error("cwd is not a directory");
     }
     if (pendingReason === undefined) {
       const p = prepareShell(command, realRoot);
@@ -264,6 +267,12 @@ export async function handleShellStream(args: {
   if (pendingReason !== undefined) { await emitAborted(pendingReason, cwd); return; }
   if (notice) await emit({ kind: "client", requestId, message: { id: msgId, shellStream: { stderr: { data: notice } }, localExecutionTimeMs: 0 } });
   // Re-check after the notice await: never spawn a cancelled request.
+  if (pendingReason !== undefined) { await emitAborted(pendingReason, cwd); return; }
+  // Official shell executor yields `start` before it spawns (daemon.formatted.cjs L130994–130996), so start
+  // frames follow admission order; emitting on the child's async 'spawn' event reordered lanes (t112 fair gate).
+  await emit({ kind: "client", requestId, message: { id: msgId,
+    shellStream: { start: { sandboxPolicy: new SandboxPolicy({type: SandboxPolicy_Type.INSECURE_NONE}).toJson() } }, localExecutionTimeMs: 1 } });
+  startSent = true;
   if (pendingReason !== undefined) { await emitAborted(pendingReason, cwd); return; }
   const prep = prepared!;
   {
@@ -326,11 +335,6 @@ export async function handleShellStream(args: {
       // that observed bounded normal drain, separately from abort deadlines.
       drain = setTimeout(() => { void finish(code); }, 5000);
     });
-    child.once("spawn", () => {
-      Promise.resolve(emit({ kind: "client", requestId, message: { id: msgId,
-        shellStream: { start: { sandboxPolicy: new SandboxPolicy({type: SandboxPolicy_Type.INSECURE_NONE}).toJson() } }, localExecutionTimeMs: 1 } }))
-        .catch(() => abortJob(ShellAbortReason.USER_ABORT));
-    });
     if (args.timeout && args.timeout > 0) timeoutTimer = setTimeout(() => abortJob(ShellAbortReason.TIMEOUT), args.timeout);
     for (const [stream, name] of [[child.stdout, "stdout"], [child.stderr, "stderr"]] as const) {
       stream?.on("data", (b: Buffer) => {
@@ -392,6 +396,41 @@ export function handleDownload(args: {
   }
 }
 
+/** Official zHt = 3e3 (daemon.formatted.cjs L98040). */
+export const EXEC_HEARTBEAT_MS = 3000;
+/**
+ * Official per-exec wrapper (wE.handle, L98140–98153 / finally L98187–98193): once a handler accepts the
+ * exec, a timer writes `heartbeat{id}` into the exec's output channel every zHt ms; the next timer is armed
+ * only after the previous heartbeat write settled (`.then(h)`), a failed write is swallowed and ends the
+ * chain (`.catch(() => {})`), and the finally (completion, throw, cancel/abort, shutdown) clears the timer
+ * and closes the channel so no frame follows. The heartbeat is an ordinary control frame in the request's
+ * reply lane; it gives no keepalive credit by itself — only a successful Submit carrying it calls noteHeard.
+ * Deviation: the official channel is closed in `finally`, so a timer firing between the streamClose write and
+ * the finally would reject on the next write only; here the wrapper closes as soon as streamClose/throw is
+ * emitted, so no heartbeat can follow the terminal frame.
+ */
+export async function withExecHeartbeat(requestId: string, msgId: number, emit: Emit,
+  run: (emit: Emit) => Promise<void>, intervalMs = EXEC_HEARTBEAT_MS): Promise<void> {
+  let closed = false;
+  let timer: NodeJS.Timeout | undefined;
+  const arm = (): void => {
+    timer = setTimeout(() => {
+      if (closed) return;
+      let p: Promise<unknown>;
+      try { p = Promise.resolve(emit({ kind: "control", requestId, message: { heartbeat: { id: msgId } } })); }
+      catch (e) { p = Promise.reject(e); }
+      p.then(() => { if (!closed) arm(); }, () => undefined);
+    }, intervalMs);
+  };
+  const wrapped: Emit = (f) => {
+    if (f.kind === "control" && ("streamClose" in f.message || "throw" in f.message)) { closed = true; clearTimeout(timer); }
+    return emit(f);
+  };
+  arm();
+  try { await run(wrapped); }
+  finally { closed = true; clearTimeout(timer); }
+}
+
 export function detectServerMessageType(serverMessage: Record<string, unknown>): string {
   for (const k of Object.keys(serverMessage)) {
     if (k.endsWith("Args") || k === "readArgs" || k === "lsArgs" || k === "shellStreamArgs") return k;
@@ -418,13 +457,13 @@ export async function dispatchExec(args: {
       handleUnsupported(requestId, msgId, "readArgs", emit);
       return;
     }
-    await handleRead({ root, requestId, msgId, path: p, emit });
+    await withExecHeartbeat(requestId, msgId, emit, (e) => handleRead({ root, requestId, msgId, path: p, emit: e }));
     return;
   }
   if (serverMessage.lsArgs && typeof serverMessage.lsArgs === "object") {
     if (refuseByPermission(permission, requestId, emit)) return;
     const p = (serverMessage.lsArgs as { path?: string }).path || root;
-    await handleLs({ root, requestId, msgId, path: p, emit });
+    await withExecHeartbeat(requestId, msgId, emit, (e) => handleLs({ root, requestId, msgId, path: p, emit: e }));
     return;
   }
   if (serverMessage.shellStreamArgs && typeof serverMessage.shellStreamArgs === "object") {
@@ -438,15 +477,16 @@ export async function dispatchExec(args: {
       handleUnsupported(requestId, msgId, "shellStreamArgs", emit);
       return;
     }
-    await handleShellStream({
+    const command = a.command;
+    await withExecHeartbeat(requestId, msgId, emit, (e) => handleShellStream({
       root,
       requestId,
       msgId,
-      command: a.command,
+      command,
       workingDirectory: a.workingDirectory,
       timeout: a.timeout,
-      emit,
-    });
+      emit: e,
+    }));
     return;
   }
   if (serverMessage.backgroundShellSpawnArgs) {

@@ -91,7 +91,7 @@ function startUcServer(){
   let acceptWithdraw=true;
   const server=http.createServer((req,res)=>{
     const url=req.url||'';
-    log.push({method:req.method,url,ct:req.headers['content-type'],cl:req.headers['content-length']});
+    log.push({method:req.method,url,t:Date.now()-T0,ct:req.headers['content-type'],cl:req.headers['content-length']});
     const chunks=[];
     req.on('data',c=>chunks.push(c));
     req.on('end',()=>{
@@ -202,6 +202,12 @@ function startUcServer(){
           if(ctl.retryProbe&&!keepalive){ctl.attempt=(ctl.attempt||0)+1;entry.attempt=ctl.attempt;if(ctl.attempt>=2&&(ctl.retryForever||ctl.attempt<=4)){entry.status=503;res.writeHead(503,{'content-type':'application/json'});res.end(JSON.stringify({code:'unavailable',message:'synthetic retry probe'}));return;}entry.status=200;}
           const respond=()=>{try{res.writeHead(200,{'content-type':'application/proto'});res.end(buildSubmitAccepted(frames.length))}catch{}};
           if(ctl.retryProbe&&!keepalive&&ctl.attempt===1){setTimeout(respond,500);return;}
+          // t112 independent control (peer-side only): hold the first Submit carrying sh3's exit (hb-hold-exit) or stdout
+          // (hb-hold-burst) for 1500 ms so the daemon's KA ticks run while sh3's frames are in flight.
+          if(!keepalive&&ctl.holdKind&&!ctl.boundaryHeld&&rawFrames.some(f=>f.requestId==='sh3'&&f.message?.shellStream?.[ctl.holdKind])){
+            ctl.boundaryHeld=true;log.push({kind:'boundary-hold',t,ids:types.map(f=>f.requestId)});
+            setTimeout(()=>{log.push({kind:'boundary-release',t:Date.now()-T0});respond()},1500);return;
+          }
           if(!keepalive&&ctl.submitDelayMs){setTimeout(respond,ctl.submitDelayMs);return;}
           respond();
           return;
@@ -250,17 +256,23 @@ function startUcServer(){
  if(scenario.startsWith('cancel-overflow')||scenario==='overflow'||scenario==='pressure')ctl.submitDelayMs=10000;else if(scenario==='stall'||scenario==='exhausted'||scenario==='stall-cancel') ctl.submitDelayMs=7000;
  if(scenario==='rotation') ctl.rotation=true;if(scenario==='fairness-native')ctl.submitDelayMs=2000;
  if(scenario==='exhausted') ctl.keepaliveError=true;
+ if(scenario==='hb-hold-exit')ctl.holdKind='exit';if(scenario==='hb-hold-burst')ctl.holdKind='stdout';
  const uc=startUcServer();await uc.listen();const base=mkBase('ka-'+scenario);
  const cred={backendUrl:'http://127.0.0.1:'+uc.port(),userComputer:{credential:SYN_CRED,machineId:SYN_MACHINE,accountScope:'lab:scope',serverAuthoritative:false}};
  fs.writeFileSync(base+'/data/local-exec-daemon-credential.json',seal(key,JSON.stringify(cred)));
  const PROBE_MAIN=process.env.PROBE_MAIN||'/input/main.cjs';
+ const spawnedAt=Date.now()-T0;const STARTUP_MS=8000;
  const child=cp.spawn('/runtime/node',[PROBE_MAIN],{env:envFor(base,process.env.PROBE_MAIN?{NODE_PATH:'/repo/node_modules'}:{}),cwd:base,stdio:['ignore','pipe','pipe','ipc']});
  let out='';child.stdout.on('data',b=>out=(out+b).slice(-8192));child.stderr.on('data',b=>out=(out+b).slice(-8192));const ended=new Promise(r=>child.on('exit',r));
  async function until(fn,ms=8000){const end=Date.now()+ms;while(Date.now()<end){if(fn())return;await delay(20)}throw Error('deadline')}
  let marks={};let killedByProbe=false;let diedEarly=null;child.on('exit',(c,sig)=>{if(!killedByProbe)diedEarly={code:c,signal:sig,t:Date.now()-T0}});
  const killAt=(process.argv.find(a=>a.startsWith('--kill-at='))||'').slice(10);if(killAt)setTimeout(()=>child.kill('SIGKILL'),Number(killAt));
  try{
-  child.send({type:'sand-local-exec-file-key',key,computerId:SYN_MACHINE});await until(()=>uc.log.some(x=>x.kind==='watch'));
+  marks.spawned=spawnedAt;child.once('spawn',()=>{marks.spawnEvent=Date.now()-T0});
+  child.send({type:'sand-local-exec-file-key',key,computerId:SYN_MACHINE});marks.keySent=Date.now()-T0;
+  // t112: startup failures are reported with evidence (first HTTP rows, daemon state, output tail, load) instead of a bare 'deadline'.
+  try{await until(()=>uc.log.some(x=>x.kind==='watch'),STARTUP_MS);marks.watch=uc.log.find(x=>x.kind==='watch').t;}
+  catch(e){const os_=require('os');console.log(JSON.stringify({scenario,startupFailure:{waitedMs:STARTUP_MS,marks,http:uc.log.filter(x=>x.url).slice(0,10).map(x=>({t:x.t,url:x.url})),daemon:{exitCode:child.exitCode,signal:child.signalCode,diedEarly},loadavg:os_.loadavg(),freemem:os_.freemem(),out:out.slice(-4000)},results:[{name:scenario,status:'fail',error:'daemon did not open Watch within '+STARTUP_MS+' ms'}]}));throw e;}
   // cancel-overflow: 200 busy (t106 review); -long: 520 busy with 1024-char ids, active cancel (t107 over-budget);
   // -backlog: 488 long busy, cancel of a 2000-char-id backlog entry, its terminal must survive (t107 terminal loss).
   const CO=scenario==='cancel-overflow-long'?{n:520,id:i=>'busy'+String(i).padStart(4,'0')+'x'.repeat(1016),target:'target',obs:3000}:scenario==='cancel-overflow-backlog'?{n:488,id:i=>'busy'+String(i).padStart(4,'0')+'x'.repeat(1016),target:'backlogTarget'.padEnd(2000,'z'),obs:9000}:{n:200,id:i=>'busy'+i,target:'target',obs:3000};
@@ -308,8 +320,8 @@ time.sleep(10)'`,timeout:20000}});marks.enqueued=Date.now()-T0;await delay(1000)
     await until(()=>uc.log.some(s=>s.kind==='submit'&&!s.keepalive));
     ctl.submitDelayMs=0;marks.cancel=Date.now()-T0;uc.enqueueCancel('one');uc.enqueueExec('two',{id:1,shellStreamArgs:{command:'echo AFTER_CANCEL',timeout:5000}});
     await delay(6000);
-  } else if(scenario==='backlog'||scenario==='cancel'){
-    for(let i=0;i<9;i++) uc.enqueueExec('sh'+i,{id:1,shellStreamArgs:{command:'sleep 6; echo done'+i,timeout:20000}});
+  } else if(scenario==='backlog'||scenario==='cancel'||scenario==='hb-hold-exit'||scenario==='hb-hold-burst'){
+    for(let i=0;i<9;i++) uc.enqueueExec('sh'+i,{id:1,shellStreamArgs:{command:scenario==='hb-hold-exit'?'sleep 6.4':'sleep 6; echo done'+i,timeout:20000}});
     marks.enqueued=Date.now()-T0;
     if(scenario==='cancel'){await delay(3000);marks.cancel=Date.now()-T0;uc.enqueueCancel('sh8');}
     await delay(8500);
@@ -331,14 +343,14 @@ time.sleep(10)'`,timeout:20000}});marks.enqueued=Date.now()-T0;await delay(1000)
   // Death gate (P2-4): the daemon must still be alive when the scenario ends (before probe cleanup).
   const alive=child.exitCode===null&&child.signalCode===null&&!diedEarly;
   const results=[{name:scenario,status:alive?'pass':'fail',error:alive?undefined:'daemon died before cleanup: '+JSON.stringify(diedEarly||{code:child.exitCode,signal:child.signalCode})}];
-  if(scenario==='retry-probe'||scenario==='retry-expiry'){console.log(JSON.stringify({scenario,marks,attempts:subs.filter(s=>!s.keepalive).map(s=>({t:s.t,status:s.status,frames:s.rawFrames})),accepted:subs.filter(s=>!s.keepalive&&s.status===200).flatMap(s=>s.rawFrames),daemonAlive:alive,results}));}
-  else if(scenario==='fairness-native'){console.log(JSON.stringify({scenario,marks,busyBatches:subs.filter(s=>!s.keepalive&&s.types.some(f=>f.requestId.startsWith('busyLane'))).map(s=>({t:s.t,ids:s.types.map(f=>f.requestId)})),daemonAlive:alive,results}));}
+  if(scenario==='retry-probe'||scenario==='retry-expiry'){console.log(JSON.stringify({scenario,marks,attempts:subs.filter(s=>!s.keepalive).map(s=>({t:s.t,status:s.status,frames:s.rawFrames})),accepted:subs.filter(s=>!s.keepalive&&s.status===200).flatMap(s=>s.rawFrames),watches:uc.log.filter(x=>x.kind==='watch').map(x=>({t:x.t,label:x.label})),daemonAlive:alive,results}));}
+  else if(scenario==='fairness-native'){console.log(JSON.stringify({scenario,marks,busyBatches:subs.filter(s=>!s.keepalive&&s.types.some(f=>f.requestId.startsWith('busyLane'))).map(s=>({t:s.t,ids:s.types.map(f=>f.requestId),frames:s.rawFrames})),daemonAlive:alive,results}));}
   else if(scenario==='overflow'){
     const terminal=subs.flatMap(x=>x.rawFrames).filter(x=>x.requestId.startsWith('busy')&&x.message?.throw).map(x=>({requestId:x.requestId,error:x.message.throw.error}));
     const acked=[...new Set(uc.log.filter(x=>x.kind==='poll').flatMap(x=>x.acks||[]).filter(x=>x.startsWith('busy')))];
     const started=Object.keys(data).filter(k=>k.startsWith('busy')&&(data[k]||[]).some(m=>m&&m.shellStream&&m.shellStream.start));
     console.log(JSON.stringify({scenario,marks,acked,terminal,busyStarted:started,keepalives,daemonAlive:alive,results}));
-  } else if(scenario.startsWith('cancel-overflow')){const acked=[...new Set(uc.log.filter(x=>x.kind==='poll').flatMap(x=>x.acks||[]))];const targetData=subs.flatMap(s=>s.rawFrames).filter(f=>f.requestId===CO.target);console.log(JSON.stringify({scenario,marks,firstSubmit:subs.find(s=>!s.keepalive),busyCount:CO.n,queuedTargetTerminal:targetData.map(f=>f.message),targetStarted:targetData.some(f=>f.message?.shellStream?.start),pollItemsAfterCancel:uc.log.filter(x=>x.kind==='poll-items'&&x.t>=marks.cancel),busyAcked:acked.filter(x=>x.startsWith('busy')).length,cancelAcked:acked.includes('cancel-'+CO.target),targetExit:targetData.filter(f=>f.message?.shellStream?.exit).map(f=>f.message),closes,polls,daemonAlive:alive,results}));}else console.log(JSON.stringify({scenario,marks,keepalives,firstNonKeepalive,dataSubmits,dataSeq,sh8,data,watches,closes,polls,daemonAlive:alive,results}));
+  } else if(scenario.startsWith('cancel-overflow')){const acked=[...new Set(uc.log.filter(x=>x.kind==='poll').flatMap(x=>x.acks||[]))];const targetData=subs.flatMap(s=>s.rawFrames).filter(f=>f.requestId===CO.target);console.log(JSON.stringify({scenario,marks,firstSubmit:subs.find(s=>!s.keepalive),busyCount:CO.n,queuedTargetTerminal:targetData.map(f=>f.message),targetStarted:targetData.some(f=>f.message?.shellStream?.start),pollItemsAfterCancel:uc.log.filter(x=>x.kind==='poll-items'&&x.t>=marks.cancel),busyAcked:acked.filter(x=>x.startsWith('busy')).length,cancelAcked:acked.includes('cancel-'+CO.target),targetExit:targetData.filter(f=>f.message?.shellStream?.exit).map(f=>f.message),closes,polls,daemonAlive:alive,results}));}else console.log(JSON.stringify({scenario,marks,keepalives,firstNonKeepalive,dataSubmits,dataSeq,sh8,data,watches,closes,polls,...(ctl.holdKind?{boundary:uc.log.filter(x=>x.kind?.startsWith('boundary-')),submits:subs.map(x=>({t:x.t,keepalive:x.keepalive,ids:x.types.map(f=>f.requestId)}))}:{}),daemonAlive:alive,results}));
   if(!alive)process.exitCode=3;
  }finally{killedByProbe=true;child.kill('SIGTERM');await Promise.race([ended,delay(2500)]);if(child.exitCode===null)child.kill('SIGKILL');uc.closeWatch();await uc.close();if(process.env.DEBUG_OUT||scenario.startsWith('retry-'))console.error(out)}
 })().catch(e=>{console.error(e);process.exitCode=1});

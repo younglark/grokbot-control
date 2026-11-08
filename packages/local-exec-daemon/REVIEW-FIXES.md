@@ -400,7 +400,43 @@ file 1 MiB / UC file streams / heartbeat / approvals out of scope. Real backend 
 ### Backlog full-run failure (kept, not masked)
 - Independent full run: third KA at 6382 ms with ids [sh3, sh8]; golden has 2 KAs [sh8]. Evidence kept at /tmp/independent-t110/full-backlog-failure.
 - Serial reruns (bounded): ours 8/8 and official 8/8 match golden (2 KAs, [sh8]). Contended (3 ours + 3 official concurrently + 4 busy-loop CPUs, ×3): ours 9/9, official 9/9 match. Not reproduced.
-- Analysis: KA eligibility is identical to official (backlog ∪ lanes.keys() ∪ submitting-not-stuck). Official emits per-shell heartbeat frames at ~3.3 s and ~6.3 s (dataSeq), which refresh each request's heard time, so sh3 is not due when its exit burst is in flight. Ours does not emit heartbeats (out of scope), so sh3's due time is ~start+3 s, already passed at exit. In the failing run sh3's exit frames were queued/in flight from 6380 ms (burst lasted 6380–6512 ms under parallel load vs ~25–50 ms serial), and a KA tick at 6382 included it. This is a latent divergence from the heartbeat deviation, exposed by load. Not fixed (heartbeat excluded by scope). Test scheduling was not changed.
+- Analysis: KA eligibility is identical to official (backlog ∪ lanes.keys() ∪ submitting-not-stuck). Official emits per-shell heartbeat frames at ~3.3 s and ~6.3 s (dataSeq), which refresh each request's heard time, so sh3 is not due when its exit burst is in flight. Ours does not emit heartbeats (out of scope), so sh3's due time is ~start+3 s, already passed at exit. In the failing run sh3's **stdout** frame (not exit — corrected in Round 9) was in the 1-frame submit at 6380 ms (burst lasted 6380–6512 ms under parallel load vs ~25–50 ms serial), and a KA at 6382 included sh3. The client-side due time of sh3 is an inference from the submit log, not a recorded value. This is a latent divergence from the heartbeat deviation, exposed by load. Not fixed (heartbeat excluded by scope). Test scheduling was not changed.
 
 ### Counts (this round, author run — not independent)
 - Targeted: 6/6. Full npm test: 142 tests, 142 pass, 0 fail, rc 0 (single run; the independent run of the previous HEAD was 140/1, and the backlog race above can still fail under load).
+
+## Round 9 (t112 independent review of b48082b) — pending independent re-verification
+
+Scope per t112: official exec heartbeat (now in scope), strict retry/expiry/fair gates, Watch-startup failure. No file/approval work.
+
+### Reproduction first (HEAD b48082b, before changes)
+- Peer-side control (daemon unchanged) added as scenarios `hb-hold-exit` (`sleep 6.4`, hold first Submit with sh3 exit 1500 ms) and `hb-hold-burst` (`sleep 6; echo`, hold first Submit with sh3 stdout). b48082b: KA at 6817/6794 named sh0–sh8 incl. sh3; official: only [sh8]. Recorded b48082b runs kept as `scripts/oracles/keepalive-negative/*-b48082b.json` (they now FAIL the gate).
+- Reviewer gate files (/tmp/independent-t112/gates): previously PASSING expiry negatives (1 non-terminal attempt, 4 attempts, early closing, +100 attempts) and the real 0325924 early retry all FAIL under the new check-mechanism.
+
+### P2 heartbeat (official wE.handle L98140–98153, finally L98187–98193, zHt=3000 L98040)
+- `withExecHeartbeat` wraps read/ls/shellStream (handlers that run inside the official exec manager; permission refusals and unsupported types get no heartbeat, as official). First heartbeat 3000 ms after handler start; next timer armed only after the previous write settled; failed write (sync or async) swallowed and ends the chain without aborting the job; completion/throw/cancel/shutdown clear the timer. Heartbeat is an ordinary control frame in the reply lane; keepalive credit only via successful Submit → noteHeard (unchanged). Deviation: the wrapper stops on emitting streamClose/throw (official clears in finally; a write after close would reject there).
+- Tests `test/exec-heartbeat.test.cjs` (7): cadence (mock timers), slow consumer, async+sync error, no frame after close, real shell sleep 3.4, cancel + shutdown, no heartbeat for refused/unsupported.
+- keepalive-diff no longer filters official heartbeats; heartbeat frames are compared like data. New negatives: heartbeat removed / one missing / after streamClose / wrong id → FAIL.
+- Found by the stricter fair gate (no busyLane filter): ours ordered start frames by child 'spawn' event and by async settings/stat completion, so active lanes were reordered (3/3 FAIL). Official yields `start` before spawning (L130994) and reads permission from memory. Fix: emit start before spawn; settings reads chained FIFO; cwd stat synchronous. fairness-native 5/5 PASS after.
+
+### P3 check-mechanism (rewritten)
+- retry/expiry: each side must satisfy the official model — rounds of exactly 3 attempts 200±50 ms apart (or ending in 200); next scheduled round after closing backoff 500·2^k capped 4000 ±50 ms from the exhausted round; a shorter gap only as a wake round with a Watch request ≤150 ms before it (harness now records `watches`); wake rounds do not move the timer and must repeat the preceding frames. Scheduled rounds compared to official: count, (status, normalized frames), start offset ±300 ms. No collapsing.
+- fair: every batch ≤256 frames, full id sequence and every frame's normalized content equal official (harness now records frames); busyLane multiset exact.
+- Goldens retry-probe / retry-expiry / fairness-native re-recorded (official 0.79.3, same sha256) because the old ones lacked watches/frames.
+- 20 negatives in `check-mechanism: full-content negatives` all FAIL with the intended reason (listed in test).
+
+### KA gate for hb-hold (evidence-based)
+- First version (“no KA may name sh0–sh7”) was wrong: under load the official daemon also named running execs (one loaded official run: KA 8069 [sh8, sh0..sh7]). Replaced by the official A9r rule evaluated on each side's own submit log: named id must still have frames queued/in flight, due (last successful Submit carrying it + 3000) ≤ T+1500, some named id due; plus strict pre-hold KAs and the sh8 rule.
+- Serial: ours 6/6 SAME, fresh official 6/6 SAME. Loaded (3 rounds × 2+2 with CPU hogs): all 12 SAME under the evidence rule, but ours 3/6 named sh6/sh7 at ~6.8 s while official 0/6 did in that set. **Unresolved distribution difference**: ours' heartbeats leave in separate 1-frame submits (timers spread by admission), so late execs' heartbeats get queued behind the held batch more often than official's (which batched 7). Not fixed.
+
+### Watch-startup failure (independent full run 141/1, overflow `deadline`)
+- Wait condition: first Watch request within 8000 ms after the key handoff. The old harness discarded daemon output on that path, so the cause cannot be reconstructed from the record; the 40 s test duration exceeds 8 s + 2.5 s cleanup, i.e. the whole probe stalled, consistent with host contention but not proven.
+- Not reproduced: 16 overflow runs (8 concurrent ×2) all opened Watch at 330–549 ms.
+- Change: harness now emits a structured `startupFailure` (spawn/key marks, first HTTP rows, daemon exit/diedEarly, loadavg/freemem, output tail). Deadline unchanged. (It immediately diagnosed a real case while preparing the b48082b worktree: `Cannot find module 'zod'`, exit 1 at 99 ms.)
+
+### Counts (author runs, not independent)
+- r3: 46 cases, 36 same / 10 allowed / 0 diff, lifecycle PASS (no heartbeats in r3 probes on either side).
+- rotation 10/10, backlog 3/3, cancel 3/3 SAME (heartbeats compared, 16=16).
+- Full npm test (no external probes in parallel): run1 148/1 (P3 test still stripped heartbeats; fixed), run2/run3 151/1 (fairness-native: start order, fixed), run4/run5 151/1 (hb-hold-burst under suite load, first KA rule; rule replaced). Final run (run6, after all changes): 152 tests, 151 pass, **1 fail**, rc 1 — `oracle cancel-overflow-backlog (ours)`: no `throw` terminal for the cancelled backlog target within the observation window (only a keepalive frame for it); daemon alive, all 488 busy ACKed, cancel ACKed. Evidence /tmp/t112/full6.tap, /tmp/t112/full6-cancel-overflow-backlog-ours.json. Serial reruns 2/2 PASS; cause under suite load not determined; not masked, not fixed.
+- Not claimed: a stable green suite. Every full run this round had exactly one failure.
+- Historical records kept: t110 backlog failure, author pair-4 rotation FAIL, independent t112 141/1 overflow failure.

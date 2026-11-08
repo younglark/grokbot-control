@@ -98,7 +98,7 @@ test('keepalive-diff negative: missing keepalives / wrong id / late offset / mis
 });
 
 const lab = '/workspace/local-exec-offline-lab-0793/input/main.cjs';
-for (const s of ['backlog', 'cancel', 'stall', 'exhausted', 'pressure', 'rotation', 'stall-cancel', 'overflow']) {
+for (const s of ['backlog', 'cancel', 'stall', 'exhausted', 'pressure', 'rotation', 'stall-cancel', 'overflow', 'hb-hold-exit', 'hb-hold-burst']) {
   test(`oracle: ours vs official golden, scenario ${s} (bwrap, real daemon process)`, { skip: !(fs.existsSync('/usr/bin/bwrap') && fs.existsSync(lab)) }, () => {
     const r = spawnSync('python3', [path.join(dir, 'run-background.py'), 'uc-keepalive.cjs', s], { env: { ...process.env, REPO: path.resolve(__dirname, '..', '..', '..') }, encoding: 'utf8', timeout: 70000 });
     assert.equal(r.status, 0, r.stdout + r.stderr);
@@ -108,6 +108,13 @@ for (const s of ['backlog', 'cancel', 'stall', 'exhausted', 'pressure', 'rotatio
     assert.equal(d.status, 0, d.stdout);
   });
 }
+
+test('t112 heartbeat boundary control: recorded b48082b runs (no exec heartbeat; KA named all running execs) FAIL the gate', () => {
+  for (const s of ['hb-hold-exit', 'hb-hold-burst']) {
+    const r = spawnSync('python3', [path.join(dir, 'keepalive-diff.py'), path.join(dir, 'keepalive-official', `${s}.json`), path.join(dir, 'keepalive-negative', `${s}-b48082b.json`)], { encoding: 'utf8' });
+    assert.notEqual(r.status, 0, r.stdout); assert.match(r.stdout, /sh3: data differs: .*heartbeat/);
+  }
+});
 
 // ---- t104 review regressions (P2-1..P2-4, P3) ----
 test('P2-1 closing replies: held by lane or bounded deferral, otherwise the work stays retryable (never ACK-then-drop)', async () => {
@@ -217,13 +224,18 @@ test('ReplyQueue merge: queued frames go out in one submit (official replies.tak
 test('P3 keepalive-diff semantic data rules (negative + allowed-difference cases)', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kad3-'));
   const run = (s, mut) => { const o = JSON.parse(fs.readFileSync(path.join(dir, 'keepalive-official', `${s}.json`)));
-    const u = JSON.parse(JSON.stringify(o)); for (const k of Object.keys(u.data)) u.data[k] = u.data[k].filter((m) => !(m && Object.keys(m).length === 1 && m.heartbeat));
+    // t112: ours now emits the official exec heartbeat; the official data is compared as-is (no heartbeat filtering).
+    const u = JSON.parse(JSON.stringify(o));
     mut(u);
     const a = path.join(tmp, 'o.json'), b = path.join(tmp, 'u.json'); fs.writeFileSync(a, JSON.stringify(o)); fs.writeFileSync(b, JSON.stringify(u));
     return spawnSync('python3', [path.join(dir, 'keepalive-diff.py'), a, b], { encoding: 'utf8' }); };
   const ok = (r) => assert.equal(r.status, 0, r.stdout); const no = (r) => assert.notEqual(r.status, 0, r.stdout);
   ok(run('backlog', () => {}));
   no(run('backlog', (u) => { u.data = {}; u.dataSubmits = {}; u.dataSeq = []; }));             // all data submits deleted
+  no(run('backlog', (u) => { for (const k of Object.keys(u.data)) u.data[k] = u.data[k].filter((m) => !m.heartbeat); })); // t112: no heartbeat (pre-t112 ours) fails
+  no(run('backlog', (u) => { const i = u.data.sh3.findIndex((m) => m.heartbeat); u.data.sh3.splice(i, 1); }));        // one heartbeat missing
+  no(run('backlog', (u) => { u.data.sh3.push({ heartbeat: { id: u.data.sh3[0].id } }); }));                             // heartbeat after streamClose
+  no(run('backlog', (u) => { u.data.sh3.find((m) => m.heartbeat).heartbeat.id = 99; }));                                // heartbeat with another exec id
   no(run('backlog', (u) => { delete u.data.sh3; }));                                           // one request's data missing
   no(run('backlog', (u) => { u.data.sh3 = u.data.sh3.filter((m) => !m.streamClose); }));        // lifecycle: no streamClose
   no(run('backlog', (u) => { u.data.sh3 = u.data.sh3.filter((m) => !m.shellStream?.exit); }));  // lifecycle: no exit
@@ -450,7 +462,9 @@ test('check-mechanism: full-content negatives FAIL (lane identity/order, exit co
   const load = (n) => JSON.parse(fs.readFileSync(gold(n), 'utf8'));
   const run = (mode, g, obj) => { const f = path.join(tmp, `${Math.random()}.json`); fs.writeFileSync(f, JSON.stringify(obj)); return spawnSync('python3', [py, mode, gold(g), f], { encoding: 'utf8' }); };
   for (const [m, g] of [['retry', 'retry-probe.json'], ['expiry', 'retry-expiry.json'], ['fair', 'fairness-native.json']]) assert.equal(run(m, g, load(g)).status, 0, `${m} positive`);
-  const mapIds = (fn) => { const d = load('fairness-native.json'); d.busyBatches.forEach((b) => { b.ids = b.ids.map(fn); }); return d; };
+  const mapIds = (fn) => { const d = load('fairness-native.json'); d.busyBatches.forEach((b) => { b.ids = b.ids.map(fn); b.frames.forEach((f) => { f.requestId = fn(f.requestId); }); }); return d; };
+  const exp = (fn) => { const d = load('retry-expiry.json'); fn(d); return d; };
+  const shiftFrom = (a, i, dt) => { for (let j = i; j < a.length; j++) a[j].t += dt; };
   const neg = {
     'lane1->lane2': ['fair', 'fairness-native.json', mapIds((i) => (i === 'busyLane1' ? 'busyLane2' : i))],
     'lane1->999': ['fair', 'fairness-native.json', mapIds((i) => (i === 'busyLane1' ? 'busyLane999' : i))],
@@ -460,6 +474,19 @@ test('check-mechanism: full-content negatives FAIL (lane identity/order, exit co
     'accepted streamClose.id 999': ['retry', 'retry-probe.json', (() => { const d = load('retry-probe.json'); d.accepted.forEach((f) => { if (f.message?.streamClose) f.message.streamClose.id = 999; }); return d; })()],
     'empty attempts': ['retry', 'retry-probe.json', (() => { const d = load('retry-probe.json'); d.attempts = []; return d; })()],
     'retarget accepted': ['retry', 'retry-probe.json', (() => { const d = load('retry-probe.json'); d.accepted.forEach((f) => { f.requestId = 'other'; }); return d; })()],
+    // t112 independent review: model gates (fixed 3×200 ms, closing backoff, wake only with Watch evidence)
+    'retry early re-submit (0325924: 2 ms after exhaustion)': ['retry', 'retry-probe.json', (() => { const d = load('retry-probe.json'); d.attempts[4].t = d.attempts[3].t + 2; return d; })()],
+    'retry gap 350 ms inside a round': ['retry', 'retry-probe.json', (() => { const d = load('retry-probe.json'); shiftFrom(d.attempts, 2, 150); return d; })()],
+    'expiry only one failure in round 2': ['expiry', 'retry-expiry.json', exp((d) => { d.attempts.splice(2, 2); })],
+    'expiry 4 attempts instead of 34': ['expiry', 'retry-expiry.json', exp((d) => { d.attempts = d.attempts.slice(0, 4); })],
+    'expiry early closing re-submit (2 ms)': ['expiry', 'retry-expiry.json', exp((d) => { shiftFrom(d.attempts, 4, d.attempts[3].t + 2 - d.attempts[4].t); })],
+    'expiry 100 extra identical attempts': ['expiry', 'retry-expiry.json', exp((d) => { const last = d.attempts.at(-1); for (let i = 1; i <= 100; i++) d.attempts.push({ ...JSON.parse(JSON.stringify(last)), t: last.t + 200 * i }); })],
+    'expiry 99 extra attempts as 33 rounds': ['expiry', 'retry-expiry.json', exp((d) => { const last = d.attempts.at(-1); let t = last.t; for (let r = 0; r < 33; r++) { t += 4000; for (let i = 0; i < 3; i++) d.attempts.push({ ...JSON.parse(JSON.stringify(last)), t: t + 200 * i }); t += 400; } })],
+    'expiry wake round without Watch evidence': ['expiry', 'retry-expiry.json', exp((d) => { d.watches = d.watches.slice(0, 1); })],
+    'expiry frame content changed in a late round': ['expiry', 'retry-expiry.json', exp((d) => { const f = d.attempts.at(-1).frames.find((x) => x.message?.shellStream?.exit); f.message.shellStream.exit.code = 37; })],
+    'fair 257-frame batch with unknown id': ['fair', 'fairness-native.json', (() => { const d = load('fairness-native.json'); const b = d.busyBatches[1]; b.ids.push('mystery'); b.frames.push({ ...JSON.parse(JSON.stringify(b.frames[0])), requestId: 'mystery' }); return d; })()],
+    'fair unknown id replaces non-busy frame': ['fair', 'fairness-native.json', (() => { const d = load('fairness-native.json'); const b = d.busyBatches[0]; const i = b.ids.findIndex((x) => !x.startsWith('busyLane')); b.ids[i] = 'mystery'; b.frames[i].requestId = 'mystery'; return d; })()],
+    'fair frame content changed': ['fair', 'fairness-native.json', (() => { const d = load('fairness-native.json'); const f = d.busyBatches[2].frames[5]; f.message = { changed: true }; return d; })()],
   };
   for (const [k, [m, g, d]] of Object.entries(neg)) { const r = run(m, g, d); assert.notEqual(r.status, 0, `${k} must FAIL: ${r.stdout}`); }
 });

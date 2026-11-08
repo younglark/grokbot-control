@@ -14,10 +14,16 @@ Semantic data evidence (P3; replaces "ignore all data submits"):
   * exception 'pressure': streaming content is cut at a timing-dependent point and which identical
     shell lands in the first delayed submit races, so only the number of ids with data and their
     first message kinds are compared (must be non-empty iff official is).
-  * named deviation EXEC-HEARTBEAT: official writes an inner control {"heartbeat":{"id":N}} periodically
-    while an exec runs (D:L98140–98153, zHt); ours does not implement it yet. Only messages that are
-    exactly {"heartbeat":{"id":<that request's exec id>}} are removed from the official side, and the
-    count is printed; any other difference still fails.
+  * EXEC-HEARTBEAT (t112): ours now implements the official per-exec heartbeat (D:L98140–98153, zHt=3000);
+    heartbeat frames are compared like every other data message (no filtering); counts are printed.
+  * hb-hold-exit / hb-hold-burst (t112 independent control, peer holds the first Submit carrying sh3's
+    exit/stdout 1500 ms): both sides must hold a batch containing sh3; no keepalive on either side may name
+    an id unless that side's own submit log justifies it (official A9r: the id still has frames queued/in flight,
+    its due = last successful Submit carrying it + 3000 is <= T + 1500, and some named id is due); a running exec
+    whose heartbeats were heard is therefore never named in an unloaded run; keepalives
+    for sh8 are compared per side against that side's own evidence: a keepalive for sh8 after the hold is
+    required iff sh8's first data is in the held batch or submitted after the hold began (not heard until release),
+    and the shared prefix (the two backlog keepalives) is compared strictly with the tolerance.
   * named rule EXEC-ID: the inner exec `id` is a local sequence assigned at admission (it differs
     between fresh official runs when admissions in one poll race). Each side must use exactly one
     id per request and distinct ids across requests; the value itself is then replaced by '#'.
@@ -39,6 +45,7 @@ Lifecycle:
 """
 import json, sys
 
+TOL_EVID = 60     # evidence timing tolerance (submit log vs client clock)
 TICK_MS = 500       # official keep-alive tick c9r (serial hc/yre cadence)
 TICK_BAND_MS = 50
 
@@ -106,10 +113,8 @@ def main(argv):
         return 1 if bad else 0
     do, du = dict(o.get('data') or {}), dict(u.get('data') or {})
     hb = hbu = 0
-    for k in list(do):
-        do[k], n = strip_heartbeats(do[k]); hb += n
-    for k in list(du):
-        du[k], n = strip_heartbeats(du[k]); hbu += n
+    hb = sum(1 for v in do.values() for m in v if isinstance(m, dict) and 'heartbeat' in m)
+    hbu = sum(1 for v in du.values() for m in v if isinstance(m, dict) and 'heartbeat' in m)
     for side, d in (('official', do), ('ours', du)):
         seen = {}
         for k, msgs in d.items():
@@ -140,6 +145,37 @@ def main(argv):
         if late: bad.append(f'cancelled ids keepalived after cancel: {late}')
     elif sc == 'stall-cancel':
         if ko or ku: bad.append(f'unexpected keepalives {ko} / {ku}')
+    elif sc.startswith('hb-hold'):
+        for side, d, ks, m in (('official', o, ko, mo), ('ours', u, ku, mu)):
+            b = d.get('boundary') or []
+            hold = next((x for x in b if x['kind'] == 'boundary-hold'), None)
+            rel = next((x for x in b if x['kind'] == 'boundary-release'), None)
+            if hold is None or rel is None or 'sh3' not in hold['ids']:
+                bad.append(f'{side}: no valid boundary hold containing sh3: {b}'); continue
+            subs = d.get('submits')
+            if not subs: bad.append(f'{side}: submit evidence missing (re-record)'); continue
+            # Evidence-based official rule (A9r/noteHeard, D:L178604–178650): a keepalive at T may name X only if
+            # X is eligible (a frame of X is still queued/in flight at T) and X's due (last successful Submit
+            # carrying X + u9r 3000) is <= T + p9r 1500, and at least one named id is due (<= T).
+            def resp(sub): return rel['t'] if (sub['t'] == hold['t'] and not sub['keepalive']) else sub['t']
+            for k in ks:
+                T = k['t']; dues = {}
+                for X in k['ids']:
+                    heard = [resp(x) for x in subs if X in x['ids'] and resp(x) <= T and x['t'] < T]
+                    eligible = any(X in x['ids'] and not x['keepalive'] and resp(x) >= T for x in subs)
+                    if not eligible: bad.append(f'{side}: keepalive at {T} names {X} with nothing queued/in flight'); continue
+                    if heard: dues[X] = max(heard) + 3000
+                for X, due in dues.items():
+                    if due > T + 1500 + TOL_EVID: bad.append(f'{side}: keepalive at {T} names {X} due {due} (> T+1500)')
+                if dues and not any(due <= T + TOL_EVID for due in dues.values()): bad.append(f'{side}: keepalive at {T} with no id due: {dues}')
+            late = [k for k in ks if k['t'] > hold['t'] and 'sh8' in k['ids']]
+            sh8_first = (d.get('firstNonKeepalive') or {}).get('sh8')
+            need = sh8_first is not None and (sh8_first > hold['t'] or 'sh8' in hold['ids'])
+            if need != bool(late): bad.append(f'{side}: sh8 post-hold keepalive {late} inconsistent with sh8 first data {sh8_first} vs hold {hold["t"]}')
+        pre_o = [k for k in ko if k['t'] - mo < 6000]; pre_u = [k for k in ku if k['t'] - mu < 6000]
+        if [k['ids'] for k in pre_o] != [k['ids'] for k in pre_u]: bad.append(f'pre-hold keepalives differ: {pre_o} vs {pre_u}')
+        for x, y in zip(pre_o, pre_u):
+            if abs((y['t'] - mu) - (x['t'] - mo)) > tol: bad.append(f'keepalive offset {x["t"] - mo} vs {y["t"] - mu} > {tol}ms')
     else:
         if [k['ids'] for k in ko] != [k['ids'] for k in ku]: bad.append(f'keepalive ids differ: {[k["ids"] for k in ko]} vs {[k["ids"] for k in ku]}')
         else:
