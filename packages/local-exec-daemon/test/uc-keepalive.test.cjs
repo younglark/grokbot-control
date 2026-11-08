@@ -321,17 +321,6 @@ for (const [sc, c] of Object.entries(coCases)) for (const who of ['official', 'o
     const a = spawnSync('python3', [path.join(dir, c.check), f], { encoding: 'utf8' }); assert.equal(a.status, 0, a.stdout);
   });
 }
-test('UC reply lane matches official oee: unbounded storage (producers never wait), take limited to 256 frames, one frame per request per round', async () => {
-  const sent = []; let release; const q = new ReplyQueue(async (b) => { sent.push(b); if (sent.length === 1) await new Promise((r) => { release = r; }); }, () => {}, Infinity, Infinity, (b) => b, { frames: 256, bytes: 8 << 20 });
-  await q.enqueue(Buffer.from('first'), ['s']);
-  for (let i = 0; i < 2000; i++) await q.enqueue(Buffer.from('o' + i), ['out']);
-  for (let i = 0; i < 600; i++) assert.equal(q.offer(Buffer.from('c' + i), ['busy' + i]), true);
-  assert.equal(q.available, true);
-  release(); await new Promise((r) => setTimeout(r, 20));
-  const second = sent[1]; assert.equal(second.length, 256);
-  assert.deepEqual(second.slice(0, 3).map(String), ['o0', 'c0', 'c1'], 'round-robin across request lanes');
-  assert.equal(second.filter((b) => String(b).startsWith('o')).length, 1, 'one frame of a lane per round');
-});
 // ---- t108 atomic cancel of backlog entries (reserve actual frames before removal/ACK) ----
 test('cancel of backlog entries is atomic: reserved by actual frame cost, else nothing removed and cancel stays unACKed', async () => {
   const { GrokBotUserComputerQueuedRequest } = require('../dist/generated/aiserver.v1_pb.js');
@@ -352,3 +341,71 @@ test('cancel of backlog entries is atomic: reserved by actual frame cost, else n
   assert.equal(p.backlog.length, 0); assert.equal(p.pendingClosings.filter((f) => f.requestId === target).length, 2);
   assert.deepEqual(acks.at(-1), ['cancel-target']);
 });
+
+// ---- t109 original reply lanes: submit retry/drop, closing budget, cross-batch lane order ----
+const lanesMod = require('../dist/uc/reply-lanes.js');
+const { HttpStatusError } = require('../dist/transport/replies.js');
+const pbm = require('../dist/generated/aiserver.v1_pb.js');
+const ucFrame = (id, msg, control = false) => new pbm.GrokBotUserComputerResponseFrame({ requestId: id, frame: control
+  ? { case: 'control', value: new pbm.GrokBotUserComputerControlMessage({ messageJson: JSON.stringify(msg) }) }
+  : { case: 'client', value: new pbm.GrokBotUserComputerClientMessage({ messageJson: JSON.stringify(msg) }) } });
+const stdoutF = (id) => ucFrame(id, { id: 1, shellStream: { stdout: { data: 'PAYLOAD' } } });
+const exitF = (id) => ucFrame(id, { id: 1, shellStream: { exit: { code: 0 } } });
+const closeF = (id) => ucFrame(id, { streamClose: { id: 1 } }, true);
+function mkLanes(send, extra = {}) {
+  let t = 0; const logs = []; const sleeps = [];
+  const l = new lanesMod.UcReplyLanes({ send, reject: extra.reject ?? (() => true), isCancelled: extra.isCancelled ?? (() => false),
+    now: () => t, sleep: async (ms, signal) => { sleeps.push(ms); t += ms; if (signal.aborted) throw new Error('aborted'); await new Promise((r) => setImmediate(r)); if (signal.aborted) throw new Error('aborted'); }, log: (m) => logs.push(m) });
+  return { l, logs, sleeps, adv: (ms) => { t += ms; } };
+}
+const kindsOf = (fs) => fs.map((f) => f.frame.case === 'control' ? 'streamClose' : Object.keys(JSON.parse(f.frame.value.messageJson).shellStream)[0]);
+test('submit: 3 attempts 200 ms apart, then only closing frames are kept (stdout dropped), as official', async () => {
+  const calls = []; let fail = 3;
+  const { l, logs, sleeps } = mkLanes(async (fs) => { calls.push(kindsOf(fs)); if (fail-- > 0) throw new Error('503'); });
+  l.push([stdoutF('r'), exitF('r'), closeF('r')]); await l.flush(); while (l.readyCount || calls.length < 4) await new Promise((r) => setImmediate(r));
+  assert.deepEqual(calls.slice(0, 3).map((c) => c.length), [3, 3, 3]); assert.deepEqual(calls[3], ['exit', 'streamClose']);
+  assert.deepEqual(sleeps.slice(0, 2), [200, 200]); assert.equal(sleeps[2], 500, 'closing backoff 500 ms');
+  assert.match(logs[0], /keeping 2 of 3 response frames that close requests and dropping the rest/);
+});
+test('closing frames expire 30 s after their first submit; backoff 500→4000 ms', async () => {
+  const sent = []; const { l, logs, sleeps } = mkLanes(async (fs) => { sent.push(fs.length); throw new Error('503'); });
+  l.push([exitF('r'), closeF('r')]); await l.flush();
+  for (let k = 0; k < 2000 && !logs.some((m) => /past their retry budget/.test(m)); k++) await new Promise((r) => setImmediate(r));
+  assert.ok(logs.at(-1).includes('keeping 0 of 2') && logs.at(-1).includes('2 closing frames past their retry budget'));
+  const backoff = sleeps.filter((ms) => ms !== 200); assert.deepEqual(backoff.slice(0, 5), [500, 1000, 2000, 4000, 4000]);
+  assert.equal(l.readyCount, 0);
+});
+test('take(): lanes keep Map order across batches (taken lanes move to the end), requeue goes to the front', () => {
+  const { l } = mkLanes(async () => {});
+  for (let i = 0; i < 257; i++) l.push([closeF('L' + i), closeF('L' + i), closeF('L' + i)]);
+  const batches = []; for (let b; (b = l.take()).length;) batches.push(b);
+  assert.deepEqual(batches.map((b) => b.length), [256, 256, 256, 3]);
+  assert.equal(batches.findIndex((b) => b.some((f) => f.requestId === 'L256')) + 1, 2, 'late lane in batch 2 (official), not 4');
+  l.push([closeF('a')]); l.push([closeF('b')]); const t = l.take(); l.requeue(t.slice(1)); assert.deepEqual(l.laneOrder(), ['b']);
+  l.push([closeF('c')]); l.requeue([closeF('z')]); assert.deepEqual(l.laneOrder(), ['z', 'b', 'c']);
+});
+test('retry boundaries: cancel aborts a retrying batch (gone), stale 401 retries on the current channel, current 401 pauses, stop ends the wait', async () => {
+  // cancel during retry wait
+  let cancelled = false; const a = mkLanes(async () => { throw new Error('503'); }, { isCancelled: () => cancelled });
+  a.l.push([stdoutF('c'), exitF('c')]); const p = a.l.flush(); await new Promise((r) => setImmediate(r)); cancelled = true; a.l.drop((id) => id === 'c'); await p;
+  assert.equal(a.l.readyCount, 0); assert.equal(a.logs.length, 0, 'aborted batch is not classified');
+  // stale 401 → requeue and retry at once
+  let n = 0; const b = mkLanes(async () => { if (n++ === 0) throw new HttpStatusError(401, 'old'); }, { reject: () => false });
+  b.l.push([stdoutF('s')]); await b.l.flush(); assert.equal(n, 2); assert.equal(b.l.readyCount, 0); assert.equal(b.l.failure, undefined);
+  // current 401 → requeued and paused until resume()
+  let m = 0; const c = mkLanes(async () => { if (m++ === 0) throw new HttpStatusError(401, 'cur'); }, { reject: () => true });
+  c.l.push([stdoutF('p')]); await c.l.flush(); assert.equal(c.l.readyCount, 1); assert.ok(c.l.failure); c.l.resume(); await new Promise((r) => setImmediate(r)); assert.equal(c.l.readyCount, 0);
+  // stop during the retry wait: batch requeued (held), no further attempts
+  let k = 0; const d = mkLanes(async () => { k++; throw new Error('503'); }); d.l.push([exitF('x')]); const q = d.l.flush(); d.l.stop(); await q;
+  assert.ok(k <= 1); assert.equal(d.l.readyCount, 1);
+});
+for (const [sc, mode] of [['retry-probe', 'retry'], ['retry-expiry', 'expiry'], ['fairness-native', 'fair']]) {
+  test(`oracle ${sc}: ours vs official golden (${mode})`, { skip: !(fs.existsSync('/usr/bin/bwrap') && fs.existsSync(lab)) }, () => {
+    const r = spawnSync('python3', [path.join(dir, 'run-background.py'), 'uc-keepalive.cjs', sc], { env: { ...process.env, REPO: path.resolve(__dirname, '..', '..', '..') }, encoding: 'utf8', timeout: 70000, maxBuffer: 256 << 20 });
+    assert.equal(r.status, 0, r.stderr.slice(-2000));
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mech-')); const f = path.join(tmp, 'ours.json');
+    fs.writeFileSync(f, r.stdout.split('\n').find((l) => l.startsWith('{"scenario')));
+    const c = spawnSync('python3', [path.join(dir, 'check-mechanism.py'), mode, path.join(dir, 'keepalive-official', `${sc}.json`), f], { encoding: 'utf8' });
+    assert.equal(c.status, 0, c.stdout);
+  });
+}

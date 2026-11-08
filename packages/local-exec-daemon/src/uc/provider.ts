@@ -1,5 +1,6 @@
 import { loadSettings } from "../settings";
-import { HttpStatusError, ReplyQueue } from "../transport/replies";
+import { HttpStatusError, type ReplyQueue } from "../transport/replies";
+import { UcReplyLanes } from "./reply-lanes";
 import { requestError } from "../exec/handlers";
 import * as crypto from "node:crypto";
 import { Code, ConnectError, createClient, type Client } from "@connectrpc/connect";
@@ -155,7 +156,7 @@ export class UserComputerProvider implements UserComputerTransport {
   private seen = new Set<string>();
   private inflight = 0;
   private pollBusy = false;
-  private replies?: ReplyQueue;
+  private replies?: ReplyQueue | UcReplyLanes;
   private backlog: Queued[] = [];
   private active = new Set<string>();
   private activeJobs = new Set<Promise<void>>();
@@ -201,40 +202,35 @@ export class UserComputerProvider implements UserComputerTransport {
       machineId: this.opts.machineId,
       credential: this.opts.credential,
     };
-    this.replies = new ReplyQueue(async (body, signal) => {
-      const ch = this.channel!;
-      // Queue bodies retain response payloads, not the authority of expired creds.
-      const request = SubmitGrokBotUserComputerResponsesRequest.fromBinary(body);
-      request.machineId = ch.machineId; request.credential = ch.credential;
-      let res;
-      // Official dataDeadline E0 = 120s (daemon.formatted.cjs L97389, L177954). A 2s cap re-submitted the
-      // same frames every ~2.4s while the peer was slow (oracle uc-keepalive stall).
-      try { res = await this.client.submitGrokBotUserComputerResponses(request, {timeoutMs: UC_DATA_SUBMIT_DEADLINE_MS, signal}); }
-      catch (error) {
-        // Channel fencing: a rejection of a credential that has since been rotated is retried on the
-        // current channel instead of closing it (official rejectCredential checks channel identity).
-        if (authError(error)) throw new HttpStatusError(401, ch);
-        throw error;
-      }
-      this.noteHeard(request.frames.map(f => f.requestId));
-      const accepted = res.acceptedCount;
-      const submitted = request.frames.length;
-      // Official successful Submit is terminal even when the machine rejected
-      // some frames. Only transport/HTTP errors are retried, never accepted_count.
-      if (accepted < submitted) console.error(
-        `[user-computer-provider] server accepted ${accepted} of ${submitted} response frames; the rest were not queued for this machine`,
-      );
-    }, (e) => {
-      // Fenced where the failure is set (not only when the RPC returned): a stale channel's 401 never
-      // closes admission of a channel that rotated in between (official rejectCredential: channel===e).
-      if (e.epoch !== undefined && e.epoch !== this.channel) return false;
-      this.admissionClosed = true; this.abort.abort(); return true;
-    },
-    // Official replies.take() submits every ready frame in one batch; encoded protobuf requests
-    // merge by concatenation (repeated `frames`; machineId/credential are reset per submit above).
-    // Official reply lanes (oee) have no storage cap: every frame is held in memory until submitted,
-    // producers never wait, and every polled item is ACKed. Only one submit is limited (256 / 8 MiB).
-    Infinity, Infinity, bodies => Buffer.concat(bodies), { frames: 256, bytes: 8 * 1024 * 1024 });
+    // Official reply lanes + flush/submit retry (oee, L177276; flush/submit L178671–178760): see reply-lanes.ts.
+    this.replies = new UcReplyLanes({
+      send: async (frames, signal) => {
+        const ch = this.channel!;
+        // Frames carry no authority: machineId/credential come from the current channel at each attempt.
+        const request = new SubmitGrokBotUserComputerResponsesRequest({ machineId: ch.machineId, credential: ch.credential, frames });
+        let res;
+        // Official dataDeadline E0 = 120s per attempt (daemon.formatted.cjs L97389, L177954).
+        try { res = await this.client.submitGrokBotUserComputerResponses(request, {timeoutMs: UC_DATA_SUBMIT_DEADLINE_MS, signal}); }
+        catch (error) {
+          // Channel fencing: a rejection of a credential that has since been rotated is retried on the
+          // current channel instead of closing it (official rejectCredential checks channel identity).
+          if (authError(error)) throw new HttpStatusError(401, ch);
+          throw error;
+        }
+        this.noteHeard(frames.map(f => f.requestId));
+        const accepted = res.acceptedCount;
+        // Official successful Submit is terminal even when the machine rejected some frames.
+        if (accepted < frames.length) console.error(
+          `[user-computer-provider] server accepted ${accepted} of ${frames.length} response frames; the rest were not queued for this machine`,
+        );
+      },
+      // Fenced where the failure is set: a stale channel's 401 never closes a channel that rotated in between.
+      reject: (e) => {
+        if (e.epoch !== undefined && e.epoch !== this.channel) return false;
+        this.admissionClosed = true; this.abort.abort(); return true;
+      },
+      isCancelled: (id) => this.cancelledIds.has(id),
+    });
     this.lastPolledAt = Date.now();
     // Official polls on Watch connected / notify / heartbeat plus a 30 s safety poll (S9r, D:L177858,
     // L177943, L178389–178403). A former 250 ms poll setInterval here put extra timer wake-ups next

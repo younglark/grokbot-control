@@ -192,13 +192,16 @@ function startUcServer(){
           const types=(fields[3]||[]).map(it=>{const ff=pb.decodeFields(it.v);return {requestId:pb.firstStr(ff,1),type:Number(Object.keys(ff).find(k=>k!=='1'))}});
           const keepalive=types.length>0&&types.every(f=>f.type===9);
           const t=Date.now()-T0;
-          log.push({kind:'submit',t,keepalive,types,count:frames.length,frames,rawFrames});
+          const entry={kind:'submit',t,keepalive,types,count:frames.length,frames,rawFrames};log.push(entry);
           res.on('close',()=>log.push({kind:'response-close',t:Date.now()-T0,ids:types.map(f=>f.requestId),ended:res.writableEnded}));
           if(keepalive&&ctl.rotation&&pb.firstStr(fields,2)===SYN_CRED){setTimeout(()=>{log.push({kind:'old-ka-401',t:Date.now()-T0});try{res.writeHead(401,{'content-type':'application/json'});res.end(JSON.stringify({code:'unauthenticated',message:'synthetic old credential'}))}catch{}},2000);return;}
           if(keepalive&&ctl.keepaliveError){
             res.writeHead(429,{'content-type':'application/json'});res.end(JSON.stringify({code:'resource_exhausted',message:'synthetic'}));return;
           }
+          // retry-probe (t108 review): attempts 2–4 → 503 then recover; retry-expiry: every attempt ≥2 → 503.
+          if(ctl.retryProbe&&!keepalive){ctl.attempt=(ctl.attempt||0)+1;entry.attempt=ctl.attempt;if(ctl.attempt>=2&&(ctl.retryForever||ctl.attempt<=4)){entry.status=503;res.writeHead(503,{'content-type':'application/json'});res.end(JSON.stringify({code:'unavailable',message:'synthetic retry probe'}));return;}entry.status=200;}
           const respond=()=>{try{res.writeHead(200,{'content-type':'application/proto'});res.end(buildSubmitAccepted(frames.length))}catch{}};
+          if(ctl.retryProbe&&!keepalive&&ctl.attempt===1){setTimeout(respond,500);return;}
           if(!keepalive&&ctl.submitDelayMs){setTimeout(respond,ctl.submitDelayMs);return;}
           respond();
           return;
@@ -245,7 +248,7 @@ function startUcServer(){
  assert(!fs.existsSync('/home/box')&&!fs.existsSync('/workspace'),'isolation');
  const scenario=process.argv[2]||'backlog';
  if(scenario.startsWith('cancel-overflow')||scenario==='overflow'||scenario==='pressure')ctl.submitDelayMs=10000;else if(scenario==='stall'||scenario==='exhausted'||scenario==='stall-cancel') ctl.submitDelayMs=7000;
- if(scenario==='rotation') ctl.rotation=true;
+ if(scenario==='rotation') ctl.rotation=true;if(scenario==='fairness-native')ctl.submitDelayMs=2000;
  if(scenario==='exhausted') ctl.keepaliveError=true;
  const uc=startUcServer();await uc.listen();const base=mkBase('ka-'+scenario);
  const cred={backendUrl:'http://127.0.0.1:'+uc.port(),userComputer:{credential:SYN_CRED,machineId:SYN_MACHINE,accountScope:'lab:scope',serverAuthoritative:false}};
@@ -261,7 +264,15 @@ function startUcServer(){
   // cancel-overflow: 200 busy (t106 review); -long: 520 busy with 1024-char ids, active cancel (t107 over-budget);
   // -backlog: 488 long busy, cancel of a 2000-char-id backlog entry, its terminal must survive (t107 terminal loss).
   const CO=scenario==='cancel-overflow-long'?{n:520,id:i=>'busy'+String(i).padStart(4,'0')+'x'.repeat(1016),target:'target',obs:3000}:scenario==='cancel-overflow-backlog'?{n:488,id:i=>'busy'+String(i).padStart(4,'0')+'x'.repeat(1016),target:'backlogTarget'.padEnd(2000,'z'),obs:9000}:{n:200,id:i=>'busy'+i,target:'target',obs:3000};
-  if(scenario.startsWith('cancel-overflow')){
+  if(scenario==='retry-probe'||scenario==='retry-expiry'){ctl.retryProbe=true;ctl.retryForever=scenario==='retry-expiry';uc.enqueueExec('retry-target',{id:1,shellStreamArgs:{command:'printf PAYLOAD; sleep .05',timeout:10000}});marks.enqueued=Date.now()-T0;await delay(scenario==='retry-expiry'?37000:5000);
+  }else if(scenario==='fairness-native'){
+    // t108 review: 257 lanes × 3 frames behind a slow submit; lane order must persist across batches.
+    const m={id:1,shellStreamArgs:{command:'sleep 15',timeout:20000}};uc.enqueueExec('target',m);marks.enqueued=Date.now()-T0;await until(()=>uc.log.some(x=>x.kind==='submit'&&!x.keepalive));
+    for(let i=1;i<8;i++)uc.enqueueExec('active'+i,m);await delay(100);
+    for(let i=0;i<64;i++)uc.enqueueExec('bk'+i,{id:1,shellStreamArgs:{command:'echo BACKLOG',timeout:5000}});await delay(100);
+    for(let i=0;i<257;i++)for(let j=0;j<3;j++)uc.enqueueRaw('q'+i+'-'+j,buildExecFrame('busyLane'+i,{id:1,shellStreamArgs:{command:'echo SHOULD_NOT_START',timeout:5000}}));marks.flood=Date.now()-T0;
+    await delay(1000);ctl.submitDelayMs=0;await delay(1400);
+  }else if(scenario.startsWith('cancel-overflow')){
     const command=`/usr/bin/python3 -c 'import os,time
 for _ in range(1000): os.write(1,b"x"*4096); time.sleep(.003)
 time.sleep(20)'`;
@@ -320,12 +331,14 @@ time.sleep(10)'`,timeout:20000}});marks.enqueued=Date.now()-T0;await delay(1000)
   // Death gate (P2-4): the daemon must still be alive when the scenario ends (before probe cleanup).
   const alive=child.exitCode===null&&child.signalCode===null&&!diedEarly;
   const results=[{name:scenario,status:alive?'pass':'fail',error:alive?undefined:'daemon died before cleanup: '+JSON.stringify(diedEarly||{code:child.exitCode,signal:child.signalCode})}];
-  if(scenario==='overflow'){
+  if(scenario==='retry-probe'||scenario==='retry-expiry'){console.log(JSON.stringify({scenario,marks,attempts:subs.filter(s=>!s.keepalive).map(s=>({t:s.t,status:s.status,frames:s.rawFrames})),accepted:subs.filter(s=>!s.keepalive&&s.status===200).flatMap(s=>s.rawFrames),daemonAlive:alive,results}));}
+  else if(scenario==='fairness-native'){console.log(JSON.stringify({scenario,marks,busyBatches:subs.filter(s=>!s.keepalive&&s.types.some(f=>f.requestId.startsWith('busyLane'))).map(s=>({t:s.t,ids:s.types.map(f=>f.requestId)})),daemonAlive:alive,results}));}
+  else if(scenario==='overflow'){
     const terminal=subs.flatMap(x=>x.rawFrames).filter(x=>x.requestId.startsWith('busy')&&x.message?.throw).map(x=>({requestId:x.requestId,error:x.message.throw.error}));
     const acked=[...new Set(uc.log.filter(x=>x.kind==='poll').flatMap(x=>x.acks||[]).filter(x=>x.startsWith('busy')))];
     const started=Object.keys(data).filter(k=>k.startsWith('busy')&&(data[k]||[]).some(m=>m&&m.shellStream&&m.shellStream.start));
     console.log(JSON.stringify({scenario,marks,acked,terminal,busyStarted:started,keepalives,daemonAlive:alive,results}));
   } else if(scenario.startsWith('cancel-overflow')){const acked=[...new Set(uc.log.filter(x=>x.kind==='poll').flatMap(x=>x.acks||[]))];const targetData=subs.flatMap(s=>s.rawFrames).filter(f=>f.requestId===CO.target);console.log(JSON.stringify({scenario,marks,firstSubmit:subs.find(s=>!s.keepalive),busyCount:CO.n,queuedTargetTerminal:targetData.map(f=>f.message),targetStarted:targetData.some(f=>f.message?.shellStream?.start),pollItemsAfterCancel:uc.log.filter(x=>x.kind==='poll-items'&&x.t>=marks.cancel),busyAcked:acked.filter(x=>x.startsWith('busy')).length,cancelAcked:acked.includes('cancel-'+CO.target),targetExit:targetData.filter(f=>f.message?.shellStream?.exit).map(f=>f.message),closes,polls,daemonAlive:alive,results}));}else console.log(JSON.stringify({scenario,marks,keepalives,firstNonKeepalive,dataSubmits,dataSeq,sh8,data,watches,closes,polls,daemonAlive:alive,results}));
   if(!alive)process.exitCode=3;
- }finally{killedByProbe=true;child.kill('SIGTERM');await Promise.race([ended,delay(2500)]);if(child.exitCode===null)child.kill('SIGKILL');uc.closeWatch();await uc.close();if(process.env.DEBUG_OUT)console.error(out)}
+ }finally{killedByProbe=true;child.kill('SIGTERM');await Promise.race([ended,delay(2500)]);if(child.exitCode===null)child.kill('SIGKILL');uc.closeWatch();await uc.close();if(process.env.DEBUG_OUT||scenario.startsWith('retry-'))console.error(out)}
 })().catch(e=>{console.error(e);process.exitCode=1});

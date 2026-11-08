@@ -44,7 +44,7 @@ test('shutdown waits for abort exit and streamClose before disabling reply lane'
 });
 test('same-scope synthetic credential rotation resumes retained replies after 401', {timeout:8000},async()=>{
  const root=temp();setup(root);const old=process.env.SAND_DATA_ROOT;process.env.SAND_DATA_ROOT=root;const peer=startUcFakePeer();await peer.listen();const p=provider(peer,root);const run=p.start();
- try{await until(()=>peer.log.some(x=>x.kind==='watch'));peer.rejectSubmits(true);peer.enqueueExec('rotate',{id:1,readArgs:{path:'probe.txt'}});await until(()=>p.blocked);assert.ok(p.replies.items.length>0,'must retain response bytes');peer.rejectSubmits(false);peer.rotateCredential('synthetic-rotated');assert.equal(p.updateChannel({backendUrl:`http://127.0.0.1:${peer.port()}`,machineId:SYN_MACHINE,credential:'synthetic-rotated'}),true);await until(()=>peer.log.some(x=>x.kind==='submit'&&x.frames.some(f=>f.requestId==='rotate'&&f.message?.readResult)));assert.equal(p.blocked,false)}
+ try{await until(()=>peer.log.some(x=>x.kind==='watch'));peer.rejectSubmits(true);peer.enqueueExec('rotate',{id:1,readArgs:{path:'probe.txt'}});await until(()=>p.blocked);assert.ok(p.replies.readyCount>0,'must retain response frames (UC lanes)');peer.rejectSubmits(false);peer.rotateCredential('synthetic-rotated');assert.equal(p.updateChannel({backendUrl:`http://127.0.0.1:${peer.port()}`,machineId:SYN_MACHINE,credential:'synthetic-rotated'}),true);await until(()=>peer.log.some(x=>x.kind==='submit'&&x.frames.some(f=>f.requestId==='rotate'&&f.message?.readResult)));assert.equal(p.blocked,false)}
  finally{await cleanup(p,peer,run,root,old)}
 });
 test('HTTP-success accepted0 is final refusal; independent r2 and shutdown drain are not blocked', {timeout:7000},async()=>{

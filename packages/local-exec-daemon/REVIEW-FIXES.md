@@ -321,7 +321,7 @@ Risks: bounded ⇒ a flood larger than the budget (~4.7k+ busy during one reply 
 
    Change (this commit): the UC lane is constructed with unbounded storage (Infinity) and a separate per-submit batch limit 256 frames / 8 MiB; batches are filled round-robin per request lane; poll limit is tgt=64. Consequently offer() always succeeds, busy/cancel closings are always held, every polled item is ACKed, producers never wait. Box lane unchanged. Deferral/unACK code remains only as a fallback when the lane is stopped (not reached in normal operation).
 
-   Remaining deviations (documented, not changed): ours retries a failed submit indefinitely instead of the original's retry budget + drop of non-closing frames; cross-batch lane rotation is approximated by first-queued order; file-byte (j2) limit not modelled (UC file streams not implemented).
+   Remaining deviations at t108 (**[t109: the first two were real P2s found by the reviewer — finite 503 kept stdout, persistent 503 retried past 30 s, lane 256 of 257 in batch 4 vs official 2; fixed in Round 6. Listing them was not alignment.]**): ours retries a failed submit indefinitely instead of the original's retry budget + drop of non-closing frames; cross-batch lane rotation is approximated by first-queued order; file-byte (j2) limit not modelled (UC file streams not implemented).
 
 After (final code):
 - cancel-overflow-long (520 × 1024-char busy, active cancel): ours 3/3 probe runs + 1 npm-test run PASS, busy ACK 520, abort 10–11 ms (official 4–5 ms, 3 + 1 runs). Before: ours ACK 489, no cancel.
@@ -329,4 +329,27 @@ After (final code):
 - cancel-overflow (200): official/ours PASS in npm test. Atomic component: no loss.
 - npm test 133/133; r3 46/36/10/0, lifecycle PASS; 8 UC scenarios vs golden pass; overflow 3 fresh pairs 200/200; rotation 5 fresh strict pairs SAME, TICK-BOUNDARY=0.
 
-Risk (same as the original): reply memory is unbounded while the backend is slow/stalled (a flood of polled items or chatty stdout accumulates in RAM; no producer backpressure). Real backend untested.
+Risk (limited to the reply-queue storage mechanism above; at t108 the retry/order mechanisms still differed, see Round 6; not a claim about the whole UC transport): reply memory is unbounded while the backend is slow/stalled (a flood of polled items or chatty stdout accumulates in RAM; no producer backpressure). Real backend untested.
+
+
+## Round 6 (t109, on 7fd03de) — submit retry/drop and cross-batch lane order aligned with the original
+
+Reviewer evidence (/tmp/independent-t108): P2-R finite 503 ×3 → official keeps only exit+streamClose ("keeping 2 of 3"), ours re-sent stdout; persistent 503 → official stops at ~32.1 s (30 s closing budget), ours still sending all 3 frames at 35.6 s. P2-F 257 lanes × 3 frames → lane 256 first in batch 2 (official) vs 4 (ours); batches 256/256/256/10 on both.
+
+Original mechanism (daemon.formatted.cjs):
+- submitRetry `Pu({maxAttempts: sxe=3, initialDelayMs=maxDelayMs=egt=200})` (L177931, L78223 runWithRetry): 3 attempts, fixed 200 ms; dataDeadline E0=120 s per attempt.
+- submit (L178707–178760): Unauthenticated → requeue whole batch + rejectCredential(channel), not counted as an attempt; aborted (cancel submitAbort) → return 0, batch gone; exhausted → for each frame skip cancelled ids, x9r budget (L178795: shellStream exit/rejected/permissionDenied/sandboxUnsupported/backgrounded, any other client message case, control throw/streamClose → oxe 30 s; fileError/urlTransfer/last seq-0 file → E0 120 s; messages* → Gpe 180 s; localToolResult → a9r 180 s; stdout/stderr/accepted/… → undefined = drop); budget measured from `closingSince.get(frame) ?? submittingSince` (first submit of that frame object, kept across requeues); expired frames dropped; kept frames requeued at the front; log "keeping K of N … dropping the rest[, including X closing frames past their retry budget]".
+- flush (L178671): serial; if kept>0 and readyCount===kept → closingRetry `Pu(until-signal, 500 ms → ×2 → 4 s)` then flush; any new enqueue flushes immediately; closingRetryAttempt reset on a successful submit.
+- oee take/requeue (L177289–177330): lanes Map persists across batches; lanes taken from are deleted and re-inserted at the end; requeue inserts at the front.
+
+Change: new `src/uc/reply-lanes.ts` (UcReplyLanes) implements the above (UC only; Box keeps transport/replies.ts, whose earlier t108 batch changes were reverted). Boundaries: cancel → drop lanes + abort the in-flight batch when all its ids are cancelled (batch gone, not classified); stale-channel 401 → requeue and retry at once on the current channel (fencing kept); current 401 → requeue and pause until resume() (rotation); stop() during an attempt or a retry wait requeues the batch (held for drain), never treated as a cancel. Generated proto/runtime unchanged; safe-cwd deviation untouched.
+
+After (final code):
+- Reviewer probes re-run with ours: retry-drop accepted [start, exit, streamClose] (official same; before: + stdout); retry-expiry last data attempt 32 378 ms (official 32 476; before: still sending at 35.6 s), accepted [start] both; fairness-native and -fast: lane 256 in batch 2 (official 2; before 4), sizes 256/256/256/10 (official -native run 256/256/256/18 — batch tail count differs with timing, first-batch position equal).
+- New repo scenarios retry-probe / retry-expiry / fairness-native + official goldens + check-mechanism.py; attempt times retry-probe ours 301/805/1008/1212/1716 vs official 321/824/1027/1231/1735 ms. Independent ours runs with the final reply-lanes code: retry-probe 5/5 PASS (1 manual + 2 loop + 2 npm test), fairness-native 5/5, retry-expiry 3/3 (1 manual + 2 npm test); plus 4 reviewer-probe re-runs above.
+- Observed difference not addressed: in retry-expiry the official made one extra closing round at ~15.7 s (an early flush, likely its Watch silence watchdog t9r=15 s reconnect, which ours does not implement); the final expiry time is the same.
+- Unit regressions (deterministic clock): 3×200 ms then keep 2 of 3; 30 s expiry with backoff 500/1000/2000/4000/4000; 257-lane take order + requeue front; cancel/stale 401/current 401/stop boundaries.
+- npm test 139/139 (133 − 1 replaced lane test + 4 unit + 3 oracle); r3 46/36/10/0, lifecycle PASS; overflow 3 fresh pairs 200/200.
+- Rotation: 5 fresh strict pairs → 4 SAME, **1 FAIL** (ours keepalives 1063/3570/6577 ms after enqueue vs official 1453/3957/6961, the whole ours schedule ~390 ms early; cause not determined). 10 further ours runs: first keepalive 1467–1484 ms after enqueue (normal). Reported as an unexplained 1/15, not rerun to green.
+
+Not done (later): file 1 MiB / UC file streams, heartbeat, approvals. Real backend untested.
