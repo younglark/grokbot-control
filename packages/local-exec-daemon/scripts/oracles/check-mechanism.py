@@ -1,87 +1,76 @@
-"""Mechanism gates (t108/t109). Strict: identity, full frame sets, attempt evidence, fair batches.
-Usage: check-mechanism.py MODE official.json ours.json
-Negative (must FAIL): empty attempts; retargeted accepted requestId; fair with trailing batches dropped.
+"""Mechanism gates (t108–t110): full-content comparison after explicit normalization.
+Usage: check-mechanism.py MODE official.json ours.json   (MODE: retry | expiry | fair)
+Normalization (only legitimately varying values): `localExecutionTimeMs` at any depth, attempt wall
+times `t` (expiry compares the last attempt time within ±1.5 s). Everything else — requestIds, frame
+kinds, exit codes, abort fields, exec ids, cwd, frame order, per-attempt status — must be identical, and
+each side's `accepted` must equal the concatenation of that side's HTTP-200 attempt frames.
+Fair: the busyLane frames of every batch, in order, must equal official's, and the lane multiset must be
+exactly busyLane0..busyLane256 × 3.
 """
 import json, sys
 
 mode, o, u = sys.argv[1], json.load(open(sys.argv[2])), json.load(open(sys.argv[3]))
+VOLATILE = {"localExecutionTimeMs"}
 
-def kind(f):
-  m = f.get("message") or {}
-  if "shellStream" in m: return next(iter(m["shellStream"]))
-  if "streamClose" in m: return "streamClose"
-  if "throw" in m: return "throw"
-  return "other"
+def norm(x):
+  if isinstance(x, dict): return {k: norm(v) for k, v in sorted(x.items()) if k not in VOLATILE}
+  if isinstance(x, list): return [norm(v) for v in x]
+  return x
 
-def sig(f): return (f.get("requestId"), kind(f))
-def accepted(d): return [sig(f) for f in d.get("accepted") or []]
-def attempt_rows(d):
-  rows = []
-  for a in d.get("attempts") or []:
-    if "status" not in a or "frames" not in a or "t" not in a: return None
-    rows.append((a["status"], [sig(f) for f in a["frames"]], a["t"]))
-  return rows
+def fail(msg): print("FAIL", msg); sys.exit(1)
 
-def fail(msg):
-  print("FAIL", msg); sys.exit(1)
+def attempts(d, side):
+  a = d.get("attempts")
+  if not isinstance(a, list) or not a: fail(f"{side}: attempts missing/empty")
+  for x in a:
+    if not {"t", "status", "frames"} <= set(x): fail(f"{side}: attempt lacks t/status/frames")
+  return a
+
+def check_side(d, side):
+  a = attempts(d, side)
+  acc = norm(d.get("accepted") or [])
+  ok200 = norm([f for x in a if x["status"] == 200 for f in x["frames"]])
+  if acc != ok200: fail(f"{side}: accepted differs from its HTTP-200 attempt frames")
+  return a, acc
 
 if mode in ("retry", "expiry"):
-  oa, ua = attempt_rows(o), attempt_rows(u)
-  if not oa or not ua: fail("attempts missing or incomplete (status/frames/t required)")
-  if accepted(o) != accepted(u): fail(f"accepted mismatch official={accepted(o)} ours={accepted(u)}")
-  if any(rid != "retry-target" for rid, _ in accepted(u)):
-    fail(f"accepted requestId must be retry-target: {accepted(u)}")
-  for side, rows in ("official", oa), ("ours", ua):
-    for st, fr, _t in rows:
-      if any(rid != "retry-target" for rid, _ in fr): fail(f"{side} attempt frames retargeted: {fr}")
-  if [st for st, _, _ in oa] != [st for st, _, _ in ua]:
-    fail(f"status sequence official={[st for st,_,_ in oa]} ours={[st for st,_,_ in ua]}")
-  if [fr for _, fr, _ in oa] != [fr for _, fr, _ in ua]:
-    fail(f"attempt frame sets differ official={[fr for _,fr,_ in oa]} ours={[fr for _,fr,_ in ua]}")
+  oa, oacc = check_side(o, "official"); ua, uacc = check_side(u, "ours")
   if mode == "retry":
-    if accepted(u) != [("retry-target", "start"), ("retry-target", "exit"), ("retry-target", "streamClose")]:
-      fail(f"retry recovered set must be start/exit/streamClose: {accepted(u)}")
-    print("accepted", accepted(u), "attempts", len(ua), "statuses", [st for st, _, _ in ua])
+    if [x["status"] for x in oa] != [x["status"] for x in ua]:
+      fail(f"status sequence official={[x['status'] for x in oa]} ours={[x['status'] for x in ua]}")
+    for i, (x, y) in enumerate(zip(oa, ua)):
+      if norm(x["frames"]) != norm(y["frames"]): fail(f"attempt {i} frames differ")
   else:
-    lo, lu = oa[-1][2], ua[-1][2]
-    if abs(lo - lu) > 1500 or lu >= 34000: fail(f"last attempt official={lo} ours={lu}")
-    if accepted(u) != [("retry-target", "start")]: fail(f"expiry accepted={accepted(u)}")
-    print("last attempt official=", lo, "ours=", lu, "accepted", accepted(u))
+    # Expiry: the number of identical closing-retry rounds may differ (official makes one extra early
+    # flush when its Watch silence watchdog t9r=15 s reconnects, which ours does not implement; see
+    # REVIEW-FIXES). Compared exactly: the run-length-collapsed sequence of (status, full frames).
+    def collapse(a):
+      out = []
+      for x in a:
+        k = (x["status"], json.dumps(norm(x["frames"]), sort_keys=True))
+        if not out or out[-1] != k: out.append(k)
+      return out
+    if collapse(oa) != collapse(ua): fail("collapsed (status, frames) sequence differs")
+    print("attempt rounds official=", len(oa), "ours=", len(ua), "(collapsed equal)")
+  if oacc != uacc: fail("accepted frames differ (full content)")
+  if mode == "expiry":
+    lo, lu = oa[-1]["t"], ua[-1]["t"]
+    if abs(lo - lu) > 1500: fail(f"last attempt official={lo} ours={lu}")
+    print("last attempt official=", lo, "ours=", lu)
+  print("attempts", len(ua), "statuses", [x["status"] for x in ua], "accepted", len(uacc))
 elif mode == "fair":
-  def busy_batches(d):
-    out = []
-    for b in d.get("busyBatches") or []:
-      if "ids" not in b: fail("busyBatches entry missing ids")
-      out.append([i for i in b["ids"] if str(i).startswith("busyLane")])
+  want = sorted(f"busyLane{i}" for i in range(257) for _ in range(3))
+  def lanes(d, side):
+    bb = d.get("busyBatches")
+    if not isinstance(bb, list) or not bb: fail(f"{side}: busyBatches missing")
+    out = [[i for i in b["ids"] if str(i).startswith("busyLane")] for b in bb]
+    if sorted(i for b in out for i in b) != want: fail(f"{side}: busyLane multiset is not busyLane0..256 ×3")
     return out
-  ob, ub = busy_batches(o), busy_batches(u)
-  if len(ob) < 4 or len(ub) < 4: fail(f"need ≥4 busy batches official={len(ob)} ours={len(ub)}")
-  if [len(b["ids"]) for b in o["busyBatches"][:3]] != [256, 256, 256]:
-    fail(f"official first-3 sizes {[len(b['ids']) for b in o['busyBatches'][:3]]}")
-  if [len(b["ids"]) for b in u["busyBatches"][:3]] != [256, 256, 256]:
-    fail(f"ours first-3 sizes {[len(b['ids']) for b in u['busyBatches'][:3]]}")
-  if sum(len(x) for x in ob) != 257 * 3 or sum(len(x) for x in ub) != 257 * 3:
-    fail(f"busyLane frame totals official={sum(len(x) for x in ob)} ours={sum(len(x) for x in ub)} want {257*3}")
-  def first_batch(batches, lane):
-    for i, b in enumerate(batches):
-      if lane in b: return i + 1
-  for lane in ("busyLane0", "busyLane128", "busyLane255", "busyLane256"):
-    fo, fu = first_batch(ob, lane), first_batch(ub, lane)
-    if fo is None or fu is None or fo != fu:
-      fail(f"{lane} first batch official={fo} ours={fu}")
-  if first_batch(ub, "busyLane256") != 2:
-    fail(f"busyLane256 must appear first in batch 2, got {first_batch(ub, 'busyLane256')}")
-  # same-lane order preserved: for each lane, positions within the concatenation stay sorted by enqueue order
-  def lane_pos(batches, lane):
-    return [j for b in batches for j, x in enumerate(b) if x == lane]
-  # each lane has 3 frames; their batch indices must be non-decreasing (already by construction) —
-  # require ours batch index sequence for lane 0 equals official
-  def batch_seq(batches, lane):
-    return [i + 1 for i, b in enumerate(batches) for x in b if x == lane]
-  if batch_seq(ob, "busyLane0") != batch_seq(ub, "busyLane0"):
-    fail(f"busyLane0 batch sequence official={batch_seq(ob,'busyLane0')} ours={batch_seq(ub,'busyLane0')}")
-  print("late lane first batch official=", first_batch(ob, "busyLane256"), "ours=", first_batch(ub, "busyLane256"),
-        "sizes", [len(b["ids"]) for b in o["busyBatches"]], [len(b["ids"]) for b in u["busyBatches"]])
+  ob, ub = lanes(o, "official"), lanes(u, "ours")
+  if len(ob) != len(ub): fail(f"batch count official={len(ob)} ours={len(ub)}")
+  for i, (x, y) in enumerate(zip(ob, ub)):
+    if x != y: fail(f"batch {i+1} busyLane sequence differs")
+  print("batches", [len(b) for b in ub])
 else:
   raise SystemExit(2)
 print("PASS"); sys.exit(0)

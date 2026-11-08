@@ -444,32 +444,53 @@ test('resume during an in-flight 401 flush is honored after the mutex clears (tw
   } finally { process.env.SAND_DATA_ROOT = old; fs.rmSync(root, { recursive: true, force: true }); }
 });
 
-test('check-mechanism rejects empty attempts, retargeted accepted ids, and fair batches with a truncated tail', () => {
-  const dir = path.join(__dirname, '..', 'scripts', 'oracles');
-  const py = path.join(dir, 'check-mechanism.py');
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mech-neg-'));
-  const gold = (name) => path.join(dir, 'keepalive-official', name);
-  // empty attempts
-  {
-    const bad = JSON.parse(fs.readFileSync(gold('retry-probe.json'), 'utf8')); bad.attempts = [];
-    const f = path.join(tmp, 'empty.json'); fs.writeFileSync(f, JSON.stringify(bad));
-    const r = spawnSync('python3', [py, 'retry', gold('retry-probe.json'), f], { encoding: 'utf8' });
-    assert.notEqual(r.status, 0, r.stdout); assert.match(r.stdout, /attempts missing|FAIL/);
-  }
-  // retargeted accepted requestId
-  {
-    const bad = JSON.parse(fs.readFileSync(gold('retry-probe.json'), 'utf8'));
-    bad.accepted = bad.accepted.map((x) => ({ ...x, requestId: 'other' }));
-    const f = path.join(tmp, 'retarget.json'); fs.writeFileSync(f, JSON.stringify(bad));
-    const r = spawnSync('python3', [py, 'retry', gold('retry-probe.json'), f], { encoding: 'utf8' });
-    assert.notEqual(r.status, 0, r.stdout);
-  }
-  // fair: drop last two batches — busyLane256 still first in batch 2, but totals/batch-count fail
-  {
-    const bad = JSON.parse(fs.readFileSync(gold('fairness-native.json'), 'utf8'));
-    bad.busyBatches = bad.busyBatches.slice(0, 2);
-    const f = path.join(tmp, 'fair-trunc.json'); fs.writeFileSync(f, JSON.stringify(bad));
-    const r = spawnSync('python3', [py, 'fair', gold('fairness-native.json'), f], { encoding: 'utf8' });
-    assert.notEqual(r.status, 0, r.stdout);
-  }
+test('check-mechanism: full-content negatives FAIL (lane identity/order, exit code, streamClose id, attempts, retarget, truncation)', () => {
+  const dir = path.join(__dirname, '..', 'scripts', 'oracles'); const py = path.join(dir, 'check-mechanism.py');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mech-neg-')); const gold = (n) => path.join(dir, 'keepalive-official', n);
+  const load = (n) => JSON.parse(fs.readFileSync(gold(n), 'utf8'));
+  const run = (mode, g, obj) => { const f = path.join(tmp, `${Math.random()}.json`); fs.writeFileSync(f, JSON.stringify(obj)); return spawnSync('python3', [py, mode, gold(g), f], { encoding: 'utf8' }); };
+  for (const [m, g] of [['retry', 'retry-probe.json'], ['expiry', 'retry-expiry.json'], ['fair', 'fairness-native.json']]) assert.equal(run(m, g, load(g)).status, 0, `${m} positive`);
+  const mapIds = (fn) => { const d = load('fairness-native.json'); d.busyBatches.forEach((b) => { b.ids = b.ids.map(fn); }); return d; };
+  const neg = {
+    'lane1->lane2': ['fair', 'fairness-native.json', mapIds((i) => (i === 'busyLane1' ? 'busyLane2' : i))],
+    'lane1->999': ['fair', 'fairness-native.json', mapIds((i) => (i === 'busyLane1' ? 'busyLane999' : i))],
+    'swap lane1/2': ['fair', 'fairness-native.json', mapIds((i) => ({ busyLane1: 'busyLane2', busyLane2: 'busyLane1' }[i] ?? i))],
+    'fair truncated': ['fair', 'fairness-native.json', (() => { const d = load('fairness-native.json'); d.busyBatches = d.busyBatches.slice(0, 2); return d; })()],
+    'exit 37 everywhere': ['retry', 'retry-probe.json', (() => { const d = load('retry-probe.json'); const set = (fs_) => fs_.forEach((f) => { if (f.message?.shellStream?.exit) f.message.shellStream.exit.code = 37; }); set(d.accepted); d.attempts.forEach((a) => set(a.frames)); return d; })()],
+    'accepted streamClose.id 999': ['retry', 'retry-probe.json', (() => { const d = load('retry-probe.json'); d.accepted.forEach((f) => { if (f.message?.streamClose) f.message.streamClose.id = 999; }); return d; })()],
+    'empty attempts': ['retry', 'retry-probe.json', (() => { const d = load('retry-probe.json'); d.attempts = []; return d; })()],
+    'retarget accepted': ['retry', 'retry-probe.json', (() => { const d = load('retry-probe.json'); d.accepted.forEach((f) => { f.requestId = 'other'; }); return d; })()],
+  };
+  for (const [k, [m, g, d]] of Object.entries(neg)) { const r = run(m, g, d); assert.notEqual(r.status, 0, `${k} must FAIL: ${r.stdout}`); }
+});
+
+test('flush state machine: frames queued while the first Submit hangs, then 3×503 → closing backoff 500 ms before re-submit (no immediate re-flush)', async () => {
+  // Manual clock: sleeps resolve only when the test releases them, so a re-submit that skips the
+  // 500 ms closing backoff is observable (send #5 would happen while the 500 ms sleep is pending).
+  const pending = []; const events = []; let releaseFirst; let n = 0;
+  const l = new lanesMod.UcReplyLanes({ reject: () => true, isCancelled: () => false, log: () => {}, now: () => 0,
+    sleep: (ms, signal) => new Promise((res, rej) => { pending.push({ ms, res }); signal.addEventListener('abort', () => rej(new Error('aborted')), { once: true }); }),
+    send: async (fs_) => {
+      n++; events.push({ n, kinds: kindsOf(fs_), pendingSleeps: pending.map((p) => p.ms) });
+      if (n === 1) return new Promise((r) => { releaseFirst = r; });
+      if (n >= 2 && n <= 4) throw new Error('503');
+    } });
+  const tick = async (k = 20) => { for (let i = 0; i < k; i++) await new Promise((r) => setImmediate(r)); };
+  l.push([ucFrame('r', { id: 1, shellStream: { start: {} } })]); const f = l.flush(); await tick();
+  l.push([stdoutF('r')]); void l.flush(); l.push([exitF('r')]); void l.flush(); l.push([closeF('r')]); void l.flush();
+  releaseFirst(); await tick();
+  for (let a = 0; a < 2; a++) { assert.equal(pending.at(-1).ms, 200); pending.pop().res(); await tick(); } // 200 ms between attempts
+  await f; await tick();
+  assert.equal(n, 4, 'no re-submit before the closing backoff elapses');
+  assert.deepEqual(pending.map((p) => p.ms), [500], 'closing backoff 500 ms pending');
+  pending.pop().res(); await tick();
+  assert.equal(n, 5);
+  assert.deepEqual(events.map((e) => e.kinds), [['start'], ['stdout', 'exit', 'streamClose'], ['stdout', 'exit', 'streamClose'], ['stdout', 'exit', 'streamClose'], ['exit', 'streamClose']]);
+  // a frame enqueued during the backoff flushes immediately (official enqueue → flush)
+  // a resume that clears a pause while the owner is inside submit() is observed by the owner (not swallowed)
+  let m = 0; let rel; const b = mkLanes(async () => { m++; if (m === 1) return new Promise((_, rej) => { rel = rej; }); });
+  b.l.push([closeF('x')]); const g = b.l.flush(); await new Promise((r) => setImmediate(r));
+  rel(new HttpStatusError(401, 'cur')); queueMicrotask(() => queueMicrotask(() => b.l.resume())); await g;
+  for (let k = 0; k < 20 && b.l.readyCount; k++) await new Promise((r) => setImmediate(r));
+  assert.equal(m, 2); assert.equal(b.l.readyCount, 0); assert.equal(b.l.failure, undefined);
 });

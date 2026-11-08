@@ -377,8 +377,30 @@ After (final code):
 - Reviewer race probe 3/3: beforeNudge drained=true, creds=["old","new"], ready=0 (was drained=false, creds=["old"], ready=1). assert-rotation.py exit 0.
 - Unit: 3× real start/stop two-microtask rotation drain; check-mechanism negatives FAIL as required.
 - Mechanism oracles vs golden: retry-probe PASS, fairness-native PASS (1 each this round + covered in npm test).
-- npm test 141/141 (139 + resume race + comparator negatives).
+- npm test 141/141 (139 + resume race + comparator negatives) — author run only. **Corrected in Round 8:** the independent full run was 140 pass / 1 fail (backlog), and the `flushRequested` design above broke the closing backoff; both superseded below.
 - r3 46/36/10/0, lifecycle PASS; overflow 2 fresh pairs 200/200.
 - Rotation this round: 5/5 fresh strict SAME (TICK-BOUNDARY=0). Author Round 6 pair-4 FAIL (~390 ms early) remains on record; not erased, gate not loosened. Cumulative fresh pairs this agent since that FAIL: 5 SAME + prior 4 SAME + 1 FAIL = 1 FAIL / 10 in the post-FAIL window (Round 6 reported 1/15 including the 10 solo ours runs).
 
 file 1 MiB / UC file streams / heartbeat / approvals out of scope. Real backend untested. No drop-in claim.
+
+## Round 8 (t110 independent review of 0325924) — pending independent re-verification
+
+### P2: flush state transitions mirrored from official (L178671)
+- Removed `flushRequested`. Root cause: a flag set by frames queued during a hanging first Submit survived the 3×503 exhaustion, so after `closingRetryWait` (500 ms) was scheduled the owner re-flushed immediately: recovery delay 2/3/3 ms vs official 504/505/503 ms, and extra early terminal frames in expiry.
+- Now identical to official: `if (flushing) return`; loop { re-check stopped/failure; take; submit; if kept>0 && readyCount===kept → `closingRetryWait ??= backoff`; return }; `finally flushing=false`. kept<0 (current-credential 401) leaves the loop; the resume after a credential fix calls flush again. Watch `connected` → `proven=true; flush()` (official L178388–178403) instead of resume().
+- Frames enqueued after the batch is taken are picked up by the same loop's next take (official immediate behaviour); frames enqueued during backoff call flush (not flushing) → immediate.
+- Regression `flush state machine: frames queued while the first Submit hangs, then 3×503 …` uses a manual clock (sleeps resolve only when released). It **FAILS on 0325924** ("no re-submit before the closing backoff elapses") and passes now. The t110 resume race test still passes.
+- Original probe retry-probe ×3: recovery delays 504/505/504 ms; check-mechanism PASS ×3; retry-expiry PASS; fairness-native PASS.
+
+### P3: check-mechanism compares full content
+- Normalization (explicit): drop `localExecutionTimeMs` recursively; times compared only where stated. Everything else (requestId, ids, exit codes, payloads) is compared exactly.
+- accepted must equal the concatenation of the HTTP-200 attempts' frames (both sides); retry: status sequence + per-attempt frames equal; expiry: run-length-collapsed (status, frames) sequence equal (official makes one extra flush at a ~15 s Watch silence reconnect: 34 vs 31 attempts) and last attempt within ±1.5 s; fair: busyLane multiset exactly busyLane0..256 ×3, batch count and each batch's lane sequence equal.
+- Negatives that previously PASSED now FAIL: lane1→lane2, lane1→999, swapped lanes 1/2, retry exit.code 37, accepted streamClose.id 999; plus empty attempts, retarget, truncation (8/8 FAIL, test `check-mechanism: full-content negatives FAIL`).
+
+### Backlog full-run failure (kept, not masked)
+- Independent full run: third KA at 6382 ms with ids [sh3, sh8]; golden has 2 KAs [sh8]. Evidence kept at /tmp/independent-t110/full-backlog-failure.
+- Serial reruns (bounded): ours 8/8 and official 8/8 match golden (2 KAs, [sh8]). Contended (3 ours + 3 official concurrently + 4 busy-loop CPUs, ×3): ours 9/9, official 9/9 match. Not reproduced.
+- Analysis: KA eligibility is identical to official (backlog ∪ lanes.keys() ∪ submitting-not-stuck). Official emits per-shell heartbeat frames at ~3.3 s and ~6.3 s (dataSeq), which refresh each request's heard time, so sh3 is not due when its exit burst is in flight. Ours does not emit heartbeats (out of scope), so sh3's due time is ~start+3 s, already passed at exit. In the failing run sh3's exit frames were queued/in flight from 6380 ms (burst lasted 6380–6512 ms under parallel load vs ~25–50 ms serial), and a KA tick at 6382 included it. This is a latent divergence from the heartbeat deviation, exposed by load. Not fixed (heartbeat excluded by scope). Test scheduling was not changed.
+
+### Counts (this round, author run — not independent)
+- Targeted: 6/6. Full npm test: 142 tests, 142 pass, 0 fail, rc 0 (single run; the independent run of the previous HEAD was 140/1, and the backlog race above can still fail under load).

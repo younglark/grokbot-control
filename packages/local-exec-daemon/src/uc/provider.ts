@@ -585,11 +585,11 @@ export class UserComputerProvider implements UserComputerTransport {
       }, {signal: this.abort.signal});
       for await (const event of events) {
         if (event.event.case === "connected") {
-          // Official (L178388–178403): proven, requestPoll, flush — flush wakes replies held across a
-          // credential rejection once the new Watch is up (resume from updateChannel may have raced
-          // the previous flush's mutex; flushRequested keeps that wake).
+          // Official (L178388–178403): proven, requestPoll, flush — flush wakes held replies once the new Watch is up.
           this.proven = true;
-          this.replies?.resume();
+          // official connected → this.flush() (not a credential resume)
+          const r = this.replies as { flush?: () => Promise<void> } | undefined;
+          if (r && typeof r.flush === "function") void r.flush();
         }
         if (["connected", "notify", "heartbeat"].includes(event.event.case || "")) {
           void this.pollOnce().catch(() => undefined);
