@@ -13,6 +13,7 @@ App 里能做的 Bot 生命周期、发消息、侧边栏、进度与中断，�
 ## Features
 
 - **Bot**：create / list / get（list 筛选）/ update / delete
+- **电脑**：state、reset（`preserve_data:false`）、`--hard`、`--wait` 阶段进度
 - **消息与会话**：send、send status、history、sessions
 - **侧边栏**：SidebarSections CRUD、移动成员（删除分组 ≠ 删除 Bot）
 - **进度**：status、原生 todos / tasks / subagents、interrupt
@@ -81,6 +82,8 @@ gbc --json auth login --timeout 300
 
 gbc --json auth whoami          # 离线本地状态，不打印 token
 gbc --json bot list --limit 20  # 只读
+gbc --json computer state       # 只读
+gbc --json --allow-writes computer reset --confirm=RESET_COMPUTER --wait --timeout 600
 gbc --json sidebar list
 gbc --json auth logout          # 只删本工具本地凭据，不吊销服务端会话
 ```
@@ -123,7 +126,7 @@ stdio；**stdout 仅协议帧**，不要把 CLI 日志打到 stdout。
 GBT_MCP_READONLY=1 npx --yes --package=grokbot-control@0.1.3 gbc-mcp
 ```
 
-主要工具：`list_bots`、`get_bot`、`create_bot`、`update_bot`、`delete_bot`、`send_message`、`get_send_status`、`list_transcript`、`list_sessions`、`get_bot_status`、`list_agent_todos`、`list_agent_tasks`、`list_agent_subagents`、`interrupt_run`、sidebar 系列、`auth_*`、可选 `sync_*`。完整契约见 [docs/protocol-map.md](https://github.com/younglark/grokbot-control/blob/main/docs/protocol/protocol-map.md)。
+主要工具：`list_bots`、`get_bot`、`create_bot`、`update_bot`、`delete_bot`、`get_computer_state`、`reset_computer`、`send_message`、`get_send_status`、`list_transcript`、`list_sessions`、`get_bot_status`、`list_agent_todos`、`list_agent_tasks`、`list_agent_subagents`、`interrupt_run`、sidebar 系列、`auth_*`、可选 `sync_*`。完整契约见 [docs/protocol-map.md](https://github.com/younglark/grokbot-control/blob/main/docs/protocol/protocol-map.md)。
 
 ## Auth
 
@@ -157,12 +160,13 @@ gbc [--json] [--mock] [--allow-writes] [--dry-run] [--base-url URL] [--auth-kind
 |---|---|
 | `auth` | `login-begin` / `complete` / `login` / `whoami` / `poll` / `cancel` / `refresh` / `logout` |
 | `bot` | `create` / `list` / `get` / `update` / `delete` / `status` / `todos` / `tasks` / `subagents` / `interrupt` |
+| `computer` | `state` / `reset`（`--hard`、`--wait`、`--timeout`） |
 | `message` | `send` / `status` / `history` |
 | `session` | `list` |
 | `sidebar` | `list` / `create` / `rename` / `delete` / `move` |
 | `sync` | `pull` / `status` / `render` / `attachments` |
 
-危险写操作（`bot delete`、`sidebar delete`、`interrupt` 等）需要 `--confirm=<resource-id>` 精确匹配。远端写需要 `--allow-writes` 或 `GBT_ALLOW_WRITES=1`；`sync` 的本地归档写由命令本身授权，不要求远端 `--allow-writes`。
+危险写操作（`bot delete`、`sidebar delete`、`interrupt` 等）需要 `--confirm=<resource-id>` 精确匹配。`computer reset` 使用固定 token `--confirm=RESET_COMPUTER`，会重建共享电脑且启动后不可取消；`--hard` 走 `ForceRecreateSandBox`。远端写需要 `--allow-writes` 或 `GBT_ALLOW_WRITES=1`；`sync` 的本地归档写由命令本身授权，不要求远端 `--allow-writes`。
 
 ### 退出码
 
@@ -214,11 +218,19 @@ gbc sync attachments --dir /absolute/private/root \
 ## Development
 
 ```bash
-npm ci
+npm install                    # 开发期；CI 用 npm ci
+npm run dev -- --mock --json computer state
 npm run build
 npm test
 npm run typecheck
 npm run test:protocol-tools   # 可选：协议工具 Python 单测
+```
+
+在仓库根目录等价的快捷命令：
+
+```bash
+npm run dev:gbc -- --mock --json computer state
+npm run dev:mcp
 ```
 
 本地入口：

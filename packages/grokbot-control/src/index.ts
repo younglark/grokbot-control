@@ -1,4 +1,12 @@
 export { ControlPlane } from "./ops/plane.js";
+export { ComputerOps, RESET_CONFIRM } from "./ops/computer.js";
+export type {
+  ComputerState,
+  ComputerMigrationEvent,
+  ComputerResetOpts,
+  ComputerResetData,
+  ComputerResetWait,
+} from "./ops/computer.js";
 export { createGrokBotClient, mapConnectError } from "./connect/client.js";
 export { createAuthProvider, staticTokenProvider } from "./auth/provider.js";
 export { FileCredentialStore, redactCredential } from "./auth/store.js";

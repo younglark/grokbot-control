@@ -33,6 +33,7 @@ export function loadMockState(): MockState {
         tasks: raw.tasks ?? [],
         subagents: raw.subagents ?? [],
         transcript: raw.transcript ?? [],
+        sandbox: raw.sandbox ?? createEmptyMockState().sandbox,
       };
     }
   } catch {

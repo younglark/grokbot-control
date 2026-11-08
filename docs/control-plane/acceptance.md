@@ -12,7 +12,8 @@ App 能做且纳入范围 → MCP 与 CLI **等价完成**（保留服务端权�
 4. sidebar：改 sections→读回 verify；故意冲突→conflict；**删 section 后 bot 仍在**  
 5. delete confirm；token 过期/组织策略拒绝路径  
 6. 丢 send 响应→unknown，禁止自动重发  
-7. 同剧本 CLI 与 MCP 各一遍；无 TTY + `--json`  
+7. 同剧本 CLI 与 MCP 各一遍；无 TTY + `--json`
+8. computer：state 只读；reset 缺 `--confirm=RESET_COMPUTER`/`--allow-writes` → denied；`started=false` → failed_precondition；`--wait` 阶段序列；等待超时 → unknown/exit 10；`--hard` 走 `ForceRecreateSandBox`
 
 ## 证据分层
 

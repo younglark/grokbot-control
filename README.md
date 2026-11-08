@@ -22,7 +22,9 @@ npx --yes --package=grokbot-control@0.1.3 gbc-mcp
 Node >=20; one npm workspace lock at the repository root. No installation inside individual packages.
 
 ```bash
-npm ci
+npm install              # local development; use npm ci in CI
+npm run dev:gbc -- --mock --json computer state
+npm run dev:gbc -- --help
 npm run generate:check
 npm run build
 npm test
@@ -30,7 +32,7 @@ npm run test:protocol-tools
 npm run smoke:uc
 npm run smoke:electron    # optional external lab Electron45.x, not official42.x
 npm run verify:package   # creates actual tarball; isolated npm consumer install/bin/SDK checks
-npm run gbc -- --help
+npm run gbc -- --help    # built dist, requires npm run build first
 ```
 
 Per-package: `npm test -w grokbot-control`, `npm test -w local-exec-daemon`.

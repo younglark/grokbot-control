@@ -96,6 +96,48 @@ async function main(): Promise<number> {
           "gbc auth whoami|login|login-begin|complete|poll|cancel|refresh[--force]|logout",
         );
       }
+    } else if (noun === "computer" && verb === "state") {
+      code = emitResult(await plane.computer.state(), asJson);
+    } else if (noun === "computer" && verb === "reset") {
+      const timeoutRaw = flag(rest, "--timeout");
+      let timeoutSeconds: number | undefined;
+      if (timeoutRaw !== undefined) {
+        const parsed = Number(timeoutRaw);
+        if (
+          !/^\d+$/.test(timeoutRaw) ||
+          !Number.isInteger(parsed) ||
+          parsed < 1 ||
+          parsed > 3600
+        ) {
+          usageExit(
+            "--timeout must be an integer 1..3600 seconds",
+            "--timeout=600",
+          );
+        }
+        timeoutSeconds = parsed;
+      }
+      const ac = new AbortController();
+      const onSig = () => ac.abort();
+      process.once("SIGINT", onSig);
+      process.once("SIGTERM", onSig);
+      try {
+        code = emitResult(
+          await plane.computer.reset(
+            {
+              ...write,
+              confirm: flag(rest, "--confirm"),
+              hard: hasFlag(rest, "--hard"),
+              wait: hasFlag(rest, "--wait"),
+              timeoutSeconds,
+            },
+            ac.signal,
+          ),
+          asJson,
+        );
+      } finally {
+        process.off("SIGINT", onSig);
+        process.off("SIGTERM", onSig);
+      }
     } else if (noun === "bot" && verb === "list") {
       code = emitResult(
         await plane.bot.list({ limit: parseCliLimit(flag(rest, "--limit")) }),

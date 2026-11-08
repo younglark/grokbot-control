@@ -117,6 +117,35 @@ export function buildTools(opts?: {
         }),
     },
     {
+      name: "get_computer_state",
+      description: "Get the Grok Bot computer run state (GetSandBoxRunState)",
+      readOnly: true,
+      inputSchema: z.object({}),
+      handler: (p) => p.computer.state(),
+    },
+    {
+      name: "reset_computer",
+      description:
+        "Recreate the shared Grok Bot computer. Destructive and not cancelable after start; requires confirm=RESET_COMPUTER. hard uses ForceRecreateSandBox. wait_seconds follows migration phases for up to 30s.",
+      inputSchema: z.object({
+        confirm: z.string().min(1),
+        hard: z.boolean().optional(),
+        wait_seconds: z.number().int().min(0).max(30).optional(),
+        ...writeFlags,
+      }),
+      handler: (p, a) => {
+        const waitSeconds = (a.wait_seconds as number | undefined) ?? 0;
+        return p.computer.reset({
+          confirm: String(a.confirm),
+          hard: Boolean(a.hard),
+          wait: waitSeconds > 0,
+          timeoutSeconds: waitSeconds > 0 ? waitSeconds : undefined,
+          dryRun: Boolean(a.dry_run),
+          allowWrite: Boolean(a.allow_writes),
+        });
+      },
+    },
+    {
       name: "send_message",
       description:
         "Send user message directly (SendGrokBotUserMessage). No task_id required. Delivery ≠ success.",

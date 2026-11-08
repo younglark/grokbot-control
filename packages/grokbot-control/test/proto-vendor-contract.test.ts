@@ -20,13 +20,15 @@ const USED_RPCS = [
   "listGrokBotAgentStatuses", "listGrokBotAgentTasks", "listGrokBotAgentTodos",
   "listGrokBotAgents", "listGrokBotSubagents", "listGrokBotTranscriptEntries",
   "sendGrokBotUserMessage", "updateGrokBotAgent", "updateGrokBotUserRuntimeSettings",
+  "getSandBoxRunState", "recreateSandBox", "forceRecreateSandBox",
+  "watchSandBoxMigration",
 ];
 
 const snapshot = JSON.parse(
   gunzipSync(readFileSync(new URL("../../protocol/baselines/schema-0.79.3/snapshot.json.gz", import.meta.url))).toString("utf8"),
 ) as { messages: Record<string, { no: number; name: string }[]>; services: Record<string, { name: string; I: string; O: string }[]> };
 
-test("all 15 used RPCs exist with signatures matching the archived 0.79.3 snapshot", () => {
+test("all used RPCs exist with signatures matching the archived 0.79.3 snapshot", () => {
   const snapRpcs = new Map(snapshot.services["aiserver.v1.GrokBotService"].map((r) => [r.name, r]));
   for (const m of USED_RPCS) {
     const gen = GrokBotService.methods[m];

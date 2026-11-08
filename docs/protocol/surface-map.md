@@ -18,6 +18,10 @@ The RPC list is derived from code (`client.<rpc>(` in `src/`) by `tools/protocol
 | InterruptGrokBotAgentRun | `progress.interrupt` | `bot interrupt --confirm` | `interrupt_run` | yes | S + O |
 | GetGrokBotUserRuntimeSettings | `sidebar.list` | `sidebar list` | `get_sidebar_sections` | no | **L** (2026-11-07) |
 | UpdateGrokBotUserRuntimeSettings (`sidebar_sections` + `sidebar_sections_base`) | `sidebar.*` patch + read-back | `sidebar create/rename/delete/move` | `*_sidebar_section`, `move_bot_to_sidebar_section` | yes | S + O |
+| GetSandBoxRunState | `computer.state` | `computer state` | `get_computer_state` | no | S + O |
+| RecreateSandBox (`preserve_data:false`) | `computer.reset` | `computer reset --confirm=RESET_COMPUTER` | `reset_computer` | yes | S + O |
+| ForceRecreateSandBox | `computer.reset --hard` | `computer reset --hard --confirm=RESET_COMPUTER` | `reset_computer(hard=true)` | yes | S + O |
+| WatchSandBoxMigration | `computer.reset --wait` | `computer reset --wait` | `reset_computer(wait_seconds<=30)` | no | S + O |
 
 Live note (2026-11-07): the three **L** reads succeeded with only `authorization: Bearer`.
 No write RPC has been executed live.
@@ -30,6 +34,9 @@ No write RPC has been executed live.
   the code sends the public `agent_id` — **unverified live**.
 - `SendGrokBotUserMessageRequest` enums `source`(13)/`initiator`(18)/`send_source`(21) are sent as 0 — unverified.
 - `ListGrokBotTranscriptEntriesRequest.limit` (4) is not sent (0); client-side cap only.
+- `computer reset --wait` filters `WatchSandBoxMigration` events by `operation_id` and reports
+  phases only (`backing-up`, `creating`, `moving`, `cleaning-up`, `wiping`, `done`/`failed`);
+  the protocol has no percentage. Live reset/progress is unverified.
 
 ## 0.79.x additive fields relevant to this surface (present in vendor, not used/exposed)
 

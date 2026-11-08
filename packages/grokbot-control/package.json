@@ -21,6 +21,8 @@
     "README.md"
   ],
   "scripts": {
+    "dev": "node --import tsx src/cli/main.ts",
+    "dev:mcp": "node --import tsx src/mcp/main.ts",
     "build": "tsc -p tsconfig.json",
     "prepack": "npm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit",

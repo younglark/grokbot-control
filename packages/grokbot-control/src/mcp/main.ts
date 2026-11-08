@@ -43,7 +43,12 @@ async function main() {
           ? { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true }
           : t.readOnly
           ? { readOnlyHint: true, openWorldHint: true }
-          : { readOnlyHint: false, destructiveHint: t.name.includes("delete"), openWorldHint: true },
+          : {
+              readOnlyHint: false,
+              destructiveHint:
+                t.name.includes("delete") || t.name === "reset_computer",
+              openWorldHint: true,
+            },
       },
       async (args: Record<string, unknown>) => {
         const parsed = t.inputSchema.safeParse(args);
