@@ -8,7 +8,7 @@ import { GrokBotService } from "../generated/svc_aiserver.v1.GrokBotService_conn
 import { GrokBotUserComputerQueuedRequest, GrokBotUserComputerRequestFrame,
   GrokBotUserComputerResponseFrame, GrokBotUserComputerHello,
   GrokBotUserComputerClientMessage, GrokBotUserComputerControlMessage,
-  GrokBotUserComputerMessagesError, GrokBotUserComputerFileError,
+  GrokBotUserComputerMessagesError, GrokBotUserComputerFileError, GrokBotUserComputerMessagesAccepted,
   SubmitGrokBotUserComputerResponsesRequest } from "../generated/aiserver.v1_pb";
 import {
   lastAllocatedExecIdOrZero,
@@ -101,6 +101,29 @@ export const UC_BACKLOG_CLOSED_BEFORE_START =
 export const UC_KEEPALIVE_INTERVAL_MS = 500;
 /** Official rgt / _9r (daemon.formatted.cjs L177859–177860). */
 export const UC_INFLIGHT_MAX = 8;
+/**
+ * Official keepalive constants (daemon.formatted.cjs L177848–177854, L97389, L177276):
+ * l9r admit→first due 1s; u9r heard→next due 3s; d9r keepalive submit deadline 3s;
+ * f9r ResourceExhausted pause 5s; p9r batching window 1.5s; E0 stuck-submit cutoff 120s; X7e 256 ids.
+ */
+export const UC_KEEPALIVE_ADMIT_MS = 1_000;
+export const UC_KEEPALIVE_HEARD_MS = 3_000;
+export const UC_KEEPALIVE_SUBMIT_DEADLINE_MS = 3_000;
+export const UC_KEEPALIVE_EXHAUSTED_PAUSE_MS = 5_000;
+export const UC_KEEPALIVE_WINDOW_MS = 1_500;
+export const UC_KEEPALIVE_STUCK_SUBMIT_MS = 120_000;
+export const UC_KEEPALIVE_MAX_IDS = 256;
+export const UC_DATA_SUBMIT_DEADLINE_MS = 120_000;
+/** Official Kce (daemon.formatted.cjs L81192). */
+export const UC_CANCELLED_BEFORE_START = "Cancelled before it started on the user's computer.";
+
+/** Official A9r: if any eligible id is due, send every eligible id due within the window, earliest first. */
+export function selectKeepAliveIds(dueAt: Map<string, number>, eligible: Set<string>, now: number): string[] {
+  const e = [...dueAt].filter(([id]) => eligible.has(id));
+  if (!e.some(([, d]) => d <= now)) return [];
+  return e.filter(([, d]) => d <= now + UC_KEEPALIVE_WINDOW_MS).sort(([, a], [, b]) => a - b)
+    .slice(0, UC_KEEPALIVE_MAX_IDS).map(([id]) => id);
+}
 export const UC_BACKLOG_MAX = 64;
 export const UC_BUSY_TEXT =
   "The user's computer is busy with other requests right now; try again shortly.";
@@ -122,6 +145,12 @@ export class UserComputerProvider implements UserComputerTransport {
   private pollTimer?: NodeJS.Timeout;
   private keepAliveTimer?: NodeJS.Timeout;
   private admissionClosed = false;
+  /** Official keepAliveDueAt / cancelledIds / keepAlivePausedUntil / proven (Watch `connected` seen). */
+  readonly keepAliveDueAt = new Map<string, number>();
+  private cancelledIds = new Set<string>();
+  private keepAlivePausedUntil = 0;
+  private keepAliveSending = false;
+  private proven = false;
   private announcedStanding?: string;
   /** Official lastPolledAt (monotonic in daemon; wall clock here). */
   lastPolledAt = 0;
@@ -156,8 +185,11 @@ export class UserComputerProvider implements UserComputerTransport {
       const request = SubmitGrokBotUserComputerResponsesRequest.fromBinary(body);
       request.machineId = ch.machineId; request.credential = ch.credential;
       let res;
-      try { res = await this.client.submitGrokBotUserComputerResponses(request, {timeoutMs: 2000}); }
+      // Official dataDeadline E0 = 120s (daemon.formatted.cjs L97389, L177954). A 2s cap re-submitted the
+      // same frames every ~2.4s while the peer was slow (oracle uc-keepalive stall).
+      try { res = await this.client.submitGrokBotUserComputerResponses(request, {timeoutMs: UC_DATA_SUBMIT_DEADLINE_MS}); }
       catch (error) { if (authError(error)) throw new HttpStatusError(401); throw error; }
+      this.noteHeard(request.frames.map(f => f.requestId));
       const accepted = res.acceptedCount;
       const submitted = request.frames.length;
       // Official successful Submit is terminal even when the machine rejected
@@ -169,9 +201,14 @@ export class UserComputerProvider implements UserComputerTransport {
     this.lastPolledAt = Date.now();
     this.pollTimer = setInterval(() => { void this.pollOnce().catch(() => undefined); }, 250);
     // Official keepAliveTick (~500ms) runs superviseBacklog then sendKeepAlives.
-    this.keepAliveTimer = setInterval(() => {
-      this.superviseBacklog();
-    }, UC_KEEPALIVE_INTERVAL_MS);
+    // Official hc/yre tick is serial: the next tick is scheduled UC_KEEPALIVE_INTERVAL_MS after the
+    // previous tick (including its keepalive submit) completes, not on a fixed grid.
+    const tick = async (): Promise<void> => {
+      if (this.closed) return;
+      try { this.superviseBacklog(); await this.sendKeepAlives(); } catch { /* tick failures never stop the loop */ }
+      if (!this.closed) this.keepAliveTimer = setTimeout(() => void tick(), UC_KEEPALIVE_INTERVAL_MS);
+    };
+    this.keepAliveTimer = setTimeout(() => void tick(), UC_KEEPALIVE_INTERVAL_MS);
     let attempts = 0;
     while (!this.closed) {
       if (this.admissionClosed) { await new Promise(r => setTimeout(r, 100)); continue; }
@@ -183,7 +220,7 @@ export class UserComputerProvider implements UserComputerTransport {
       await new Promise(r => setTimeout(r, Math.min(2000, 100 * 2 ** Math.min(attempts++, 4))));
     }
     clearInterval(this.pollTimer);
-    clearInterval(this.keepAliveTimer);
+    clearTimeout(this.keepAliveTimer);
   }
 
   /** Same-machine, same-scope rotation resumes the SAME reply/ack/task state. */
@@ -194,6 +231,7 @@ export class UserComputerProvider implements UserComputerTransport {
     this.channel = { ...this.channel, credential: next.credential };
     // Never relax an authoritative channel by credential file mutation.
     if (next.serverAuthoritative) this.opts.hello.serverAuthoritative = true;
+    this.proven = false;
     this.abort.abort(); this.abort = new AbortController();
     this.admissionClosed = false; this.replies?.resume(); return true;
   }
@@ -207,7 +245,7 @@ export class UserComputerProvider implements UserComputerTransport {
   }
 
   beginShutdown(): void {
-    this.closed = true; clearInterval(this.pollTimer); clearInterval(this.keepAliveTimer); this.abort.abort();
+    this.closed = true; clearInterval(this.pollTimer); clearTimeout(this.keepAliveTimer); this.abort.abort();
   }
   async stop(): Promise<void> {
     if (this.stopped) return;
@@ -244,7 +282,7 @@ export class UserComputerProvider implements UserComputerTransport {
     if (!ch || frames.length === 0 || !this.replies) return Promise.resolve();
     return this.replies.enqueue(Buffer.from(new SubmitGrokBotUserComputerResponsesRequest({
       machineId: ch.machineId, credential: ch.credential, frames: frames.map(responseFrame),
-    }).toBinary()));
+    }).toBinary()), frames.map(f => f.requestId));
   }
 
   async pollOnce(): Promise<void> {
@@ -276,8 +314,13 @@ export class UserComputerProvider implements UserComputerTransport {
         this.seen.add(q.id); this.pendingAcks.push(q.id);
         if (q.parseError) { await this.emit({ kind: "control", requestId: q.requestId, message: { throw: { error: q.parseError } } }); continue; }
         if (q.kind === requestKinds.cancel) {
+          this.cancelledIds.add(q.requestId);
+          // Official (D:L178526–178535, Gl/Kce): each cancelled backlog entry gets a closing error.
+          const dropped = this.backlog.filter(x => x.requestId === q.requestId);
           this.backlog = this.backlog.filter(x => x.requestId !== q.requestId);
-          cancelRequest(q.requestId); continue;
+          cancelRequest(q.requestId);
+          for (const d of dropped) this.emitClosing(d, UC_CANCELLED_BEFORE_START);
+          continue;
         }
         // Promote before admit (official startRequest.finally pulls while inflight<8,
         // D:L178576–178583). Same-poll recoveries with replies.available must free
@@ -296,6 +339,7 @@ export class UserComputerProvider implements UserComputerTransport {
         // no additional result; queue-id ack remains separate. Pending backlog
         // entries are not a durable request-id dedup ledger.
         if (this.active.has(q.requestId)) continue;
+        this.noteAdmitted(q.requestId);
         this.backlog.push(q); this.runBacklog();
       }
       // A previously saturated reply lane may have recovered with no new jobs.
@@ -338,8 +382,64 @@ export class UserComputerProvider implements UserComputerTransport {
     }
   }
 
-  private emitBusy(q: Queued): void {
-    const error = UC_BUSY_TEXT;
+  noteAdmitted(requestId: string, now = performance.now()): void {
+    this.keepAliveDueAt.set(requestId, now + UC_KEEPALIVE_ADMIT_MS);
+  }
+  noteHeard(requestIds: Iterable<string>, now = performance.now()): void {
+    for (const id of requestIds) this.keepAliveDueAt.set(id, now + UC_KEEPALIVE_HEARD_MS);
+  }
+  private heldRequestIds(): Set<string> {
+    const held = new Set<string>(this.active);
+    for (const q of this.backlog) held.add(q.requestId);
+    for (const id of this.replies?.requestIds() ?? []) held.add(id);
+    for (const id of this.replies?.submitting ?? []) held.add(id);
+    return held;
+  }
+  /** Official keepAliveEligibleIds: backlog, queued replies, and a submitting batch unless stuck ≥120s; minus cancelled. Running requests with nothing queued are not eligible. */
+  keepAliveEligibleIds(now: number): Set<string> {
+    const out = new Set<string>();
+    for (const q of this.backlog) out.add(q.requestId);
+    const submitting = this.replies?.submitting ?? [];
+    const stuck = submitting.length > 0 && now - (this.replies?.submittingSince ?? now) >= UC_KEEPALIVE_STUCK_SUBMIT_MS;
+    const stuckIds = new Set(stuck ? submitting : []);
+    for (const id of this.replies?.requestIds() ?? []) if (!stuckIds.has(id)) out.add(id);
+    if (!stuck) for (const id of submitting) out.add(id);
+    for (const id of this.cancelledIds) out.delete(id);
+    return out;
+  }
+  /** Official sendKeepAlives (daemon.formatted.cjs L178625–178661): messagesAccepted frames only. */
+  async sendKeepAlives(now = performance.now()): Promise<string[]> {
+    const ch = this.channel;
+    if (!ch || !this.proven || this.closed || this.admissionClosed || this.keepAliveSending) return [];
+    const held = this.heldRequestIds();
+    for (const id of [...this.keepAliveDueAt.keys()]) if (!held.has(id)) this.keepAliveDueAt.delete(id);
+    for (const id of [...this.cancelledIds]) if (!held.has(id)) this.cancelledIds.delete(id);
+    if (now < this.keepAlivePausedUntil) return [];
+    const ids = selectKeepAliveIds(this.keepAliveDueAt, this.keepAliveEligibleIds(now), now);
+    if (ids.length === 0) return [];
+    this.keepAliveSending = true;
+    try {
+      await this.client.submitGrokBotUserComputerResponses(new SubmitGrokBotUserComputerResponsesRequest({
+        machineId: ch.machineId, credential: ch.credential,
+        frames: ids.map(requestId => new GrokBotUserComputerResponseFrame({ requestId,
+          frame: { case: "messagesAccepted", value: new GrokBotUserComputerMessagesAccepted() } })),
+      }), { timeoutMs: UC_KEEPALIVE_SUBMIT_DEADLINE_MS });
+      this.noteHeard(ids);
+    } catch (error) {
+      if (authError(error)) { this.admissionClosed = true; this.abort.abort(); }
+      else if (error instanceof ConnectError && error.code === Code.ResourceExhausted) {
+        this.keepAlivePausedUntil = performance.now() + UC_KEEPALIVE_EXHAUSTED_PAUSE_MS;
+      }
+    } finally { this.keepAliveSending = false; }
+    return ids;
+  }
+
+  private emitBusy(q: Queued): void { this.emitClosing(q, UC_BUSY_TEXT); }
+  private emitClosing(q: Queued, error: string): void {
+    // A closing reply must never break the poll loop (ack bookkeeping); delivery failures are the lane's.
+    try { this.emitClosingFrame(q, error); } catch { console.error("[user-computer-provider] closing reply failed"); }
+  }
+  private emitClosingFrame(q: Queued, error: string): void {
     if ([requestKinds.upload, requestKinds.download, requestKinds.discoverAiTool].includes(q.kind)) {
       void this.emit({ kind: "file-error", requestId: q.requestId, error });
     } else if (q.kind === requestKinds.messagesOp) {
@@ -379,12 +479,14 @@ export class UserComputerProvider implements UserComputerTransport {
 
   private async watchLoop(hello: UserComputerHello): Promise<void> {
     const ch = this.channel!;
+    this.proven = false;
     try {
       const events = this.client.watchGrokBotUserComputerRequests({
         machineId: ch.machineId, credential: ch.credential, presenceToken: this.presenceToken,
         hello: GrokBotUserComputerHello.fromJsonString(JSON.stringify(hello)),
       }, {signal: this.abort.signal});
       for await (const event of events) {
+        if (event.event.case === "connected") this.proven = true;
         if (["connected", "notify", "heartbeat"].includes(event.event.case || "")) {
           void this.pollOnce().catch(() => undefined);
         }
