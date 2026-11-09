@@ -10,6 +10,8 @@ export type DiscoveryRecord = {
   inflightCount: number;
   filesKeyId?: string;
   generation?: number;
+  /** D:179216: SAND_NODE_PROXY_ENV fingerprint (nke), only when a proxy was applied. */
+  proxyFingerprint?: string;
   /** D:v 179205: sorted rejected account scopes, only when non-empty. */
   rejectedAccountScopes?: string[];
 };
@@ -30,6 +32,7 @@ export async function publishDiscovery(
     inflightCount: partial.inflightCount ?? 0,
     ...(fileKeyB64 ? { filesKeyId: filesKeyIdFromBase64Key(fileKeyB64) } : {}),
     ...(partial.generation != null ? { generation: partial.generation } : {}),
+    ...(partial.proxyFingerprint != null ? { proxyFingerprint: partial.proxyFingerprint } : {}),
     ...(partial.rejectedAccountScopes?.length ? { rejectedAccountScopes: [...partial.rejectedAccountScopes].sort() } : {}),
   };
   // D:CLe 80993 → TLe(path, record, {pretty:true}) → cp without a mode.

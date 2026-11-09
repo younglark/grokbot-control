@@ -66,7 +66,7 @@ function startBackend(opts = {}) {
   });
   const connect = connectNodeAdapter({ routes });
   const server = http.createServer((req, res) => {
-    raw.push({ t: now(), method: req.method, url: req.url, headers: pairs(req.rawHeaders) });
+    raw.push({ t: now(), method: req.method, url: req.url, port: req.socket.remotePort, headers: pairs(req.rawHeaders) });
     if (req.method === 'POST' && req.url === '/sand-box/local-exec-connection') {
       let body = ''; req.on('data', d => body += d); req.on('end', () => {
         exchange.requests.push({ t: now(), headers: req.headers, body: JSON.parse(body) });
@@ -108,7 +108,8 @@ function startBox(opts = {}) {
       }
       if (req.method === 'POST' && req.url === '/local-exec/responses') {
         const b = JSON.parse(body); posts.push({ t: now(), headers: req.headers, raw: pairs(req.rawHeaders), ...b });
-        res.writeHead(200, { 'content-type': 'application/json' }); res.end('{}'); return;
+        const slow = opts.pingDelayMs && b.frames.every(f => f.kind === 'ping');
+        setTimeout(() => { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{}'); }, slow ? opts.pingDelayMs : 0); return;
       }
       res.writeHead(404); res.end();
     });

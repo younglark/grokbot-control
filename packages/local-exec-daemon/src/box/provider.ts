@@ -4,11 +4,7 @@ import { dataRootFromEnv } from "../util";
 import { approvalsPathFor, describeExec, discoverAiToolRefusal, downloadRefusal, execRefusal, retirementsPathFor, standingGrantsPathFor, uploadRefusal } from "../uc/approvals";
 import { UC_MAX_FILE_BYTES, writeUploadFile } from "../uc/file-source";
 import { aiToolConfigDirsFromEnv, describeAiToolDiscovery, discoverAiToolBytes, isAiToolSource, type AiToolConfigDirs } from "../uc/ai-tool-discovery";
-import { StringDecoder } from "node:string_decoder";
 import { ASK_MSG, ExecIdCounter, NEVER_MSG, requestError } from "../exec/handlers";
-import { HttpStatusError } from "../transport/replies";
-import * as http from "node:http";
-import * as https from "node:https";
 import { URL } from "node:url";
 import type { Connection } from "../state/connection";
 import { isSupervised } from "../state/discovery";
@@ -105,10 +101,16 @@ export function uploadFrameTooLarge(maxFileBytes: number): string {
 type JsonFrame = Record<string, unknown>;
 
 
-/** D:137431–137475 SSE reader: event blocks split on a blank line; an event (or an unterminated buffer) longer than
- * maxUploadFrameBytes is handed to onOversized and skipped up to the next blank line. No other size cap.
+/** D:Owr 137205 */
+function hasBody(r: Response): r is Response & { body: ReadableStream<Uint8Array> } { return r.body != null; }
+
+/** D:streamRequests 137396–137475: the requests stream is a plain global `fetch` (so the default undici headers,
+ * redirect "follow", and any `http.setGlobalProxyFromEnv` dispatcher (F4, nke D:79217) apply exactly as in the
+ * original); `!m.ok || !Owr(m)` (any 2xx with a body) is success, else j5e `local-exec requests stream failed: ${status}`.
+ * Body: getReader + TextDecoder({stream:true}); event blocks split on a blank line; an event (or an unterminated
+ * buffer) longer than maxUploadFrameBytes is handed to onOversized and skipped up to the next blank line.
  */
-function openSse(
+async function openSse(
   urlStr: string,
   onConnected: () => void,
   onChunk: () => void,
@@ -118,52 +120,29 @@ function openSse(
   signal: AbortSignal,
   headers: Record<string, string>,
 ): Promise<void> {
-  const u = new URL(urlStr);
-  const lib = u.protocol === "https:" ? https : http;
-  return new Promise((resolve, reject) => {
-    const req = lib.request(
-      {
-        protocol: u.protocol,
-        hostname: u.hostname,
-        port: u.port,
-        path: u.pathname + u.search,
-        method: "GET",
-        headers: { accept: "text/event-stream", ...headers }, // D:cmt 137186
-      },
-      (res) => {
-        if ((res.statusCode || 0) !== 200) { res.resume(); reject(new HttpStatusError(res.statusCode || 0)); return; }
-        onConnected();
-        const decoder = new StringDecoder("utf8");
-        let l = "", skipping = false;
-        res.on("data", (chunk: Buffer) => {
-          onChunk();
-          l += decoder.write(chunk);
-          if (skipping) {
-            const end = l.indexOf("\n\n");
-            if (end < 0) { l = l.slice(-1); return; }
-            l = l.slice(end + 2); skipping = false;
-          }
-          let g = l.indexOf("\n\n");
-          while (g >= 0) {
-            if (g > maxFrame) onOversized(l); else onBlock(l.slice(0, g));
-            l = l.slice(g + 2);
-            g = l.indexOf("\n\n");
-          }
-          if (l.length > maxFrame) { onOversized(l); l = l.slice(-1); skipping = true; }
-        });
-        res.on("end", () => resolve());
-        res.on("error", reject);
-      },
-    );
-    req.on("error", reject);
-    const onAbort = () => {
-      req.destroy();
-      reject(signal.reason instanceof Error ? signal.reason : new Error("local-exec requests stream aborted"));
-    };
-    if (signal.aborted) onAbort();
-    else signal.addEventListener("abort", onAbort, { once: true });
-    req.end();
-  });
+  const m = await fetch(urlStr, { headers: { accept: "text/event-stream", ...headers }, signal }); // D:cmt 137186
+  if (!m.ok || !hasBody(m)) throw new Error(`local-exec requests stream failed: ${m.status}`); // D:j5e 137169/137402
+  onConnected();
+  const a = m.body.getReader(), u = new TextDecoder();
+  let l = "", p = false;
+  for (;;) {
+    const { done, value } = await a.read();
+    if (done) break;
+    onChunk();
+    l += u.decode(value, { stream: true });
+    if (p) {
+      const end = l.indexOf("\n\n");
+      if (end < 0) { l = l.slice(-1); continue; }
+      l = l.slice(end + 2); p = false;
+    }
+    let g = l.indexOf("\n\n");
+    while (g >= 0) {
+      if (g > maxFrame) onOversized(l); else onBlock(l.slice(0, g));
+      l = l.slice(g + 2);
+      g = l.indexOf("\n\n");
+    }
+    if (l.length > maxFrame) { onOversized(l); l = l.slice(-1); p = true; }
+  }
 }
 
 const str = (v: unknown): v is string => typeof v === "string";

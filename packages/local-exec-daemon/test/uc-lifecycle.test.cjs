@@ -90,6 +90,9 @@ async function harness(sa = false, hooks = {}) {
       exitFatal: () => { throw new Error('unexpected exitFatal'); },
     },
     './settings': { loadSettings: async () => ({ permission: 'ask' }) },
+    // t168: sqr's module-load env pass (D:187195–187210): boot-env scrub + SAND_NODE_PROXY_ENV (nke); inert here.
+    './bootstrap/boot-env': { scrubBootEnv: () => ({ inheritedFds: [], closedFds: [] }) },
+    './state/node-proxy': { applyNodeProxyEnv: () => undefined },
     './state/discovery': {
       publishDiscovery: rec => publisher(rec),
       clearDiscovery: async () => {},

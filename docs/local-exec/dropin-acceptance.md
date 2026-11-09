@@ -1,4 +1,4 @@
-# local-exec-daemon 替换验收（t165）
+# local-exec-daemon 替换验收（t165，t168/t169 更新）
 
 Harness：`packages/local-exec-daemon/test/dropin-acceptance.test.cjs`，辅助模块 `test/helpers/dropin-backend.cjs`。
 它启动**我们构建出的** `dist/index.js`，对接一个合成后端，覆盖：生成的 Connect `GrokBotService`
@@ -17,16 +17,22 @@ plain-HTTP 的 `/sand-box/local-exec-connection`。凭据、HOME、数据目录�
   环境变量取 R$e 的形状：`SAND_LOCAL_EXEC_GENERATION`、`NODE_USE_SYSTEM_CA=1`，并去掉 `ELECTRON_RUN_AS_NODE`。
   以上依据来自静态读取的 main-core.cjs，见 scenario-matrix.md §1；t166 已对照 0.79.3 asar 中的 main-core.cjs 核实，见下文。
 
-## 汇总（t166 更新）
+## 第二个门控 harness（t168）
+`packages/local-exec-daemon/test/dropin-extra.test.cjs`，同样由 `DROPIN_ACCEPTANCE=1` 门控；辅助模块 `test/helpers/dropin-launch.cjs`、`test/helpers/ai-tool-fixture.cjs`、`test/helpers/electron-utility-host.cjs`。
+- network-change：自身用 `unshare -rn node <file>` 重新执行（非特权 user+net namespace），在里面加真实 veth/地址；需要 `unshare` 可用。
+- Electron：`DROPIN_ELECTRON=<npm 公开 electron 二进制>` 才跑；有 `xvfb-run` 时额外跑 `utilityProcess.fork`。**从不使用 App 自带的 electron。**
+- 证据写到 `DROPIN_EVIDENCE_DIR`：netns.json、box-heartbeat.json、discover-{uc,box}.json、mb-*.json、electron-headers.json、node-proxy.json。t168 证据在 `/tmp/exec-t168-evidence/{dev1,final}`。
+
+## 汇总（t169 更新）
 
 | 类别 | 数 |
 |---|---|
-| 一致 | 32 |
-| 差异·破坏替换（已修） | 3（F1 t165、F2 t165、F3 t166） |
+| 一致 | 41 |
+| 差异·破坏替换（已修） | 6（F1 t165、F2 t165、F3 t166、F4 t168、F5 t168、F6 t169） |
 | 差异·可观测但无害 | 0 |
-| 差异·仅内部 | 0 |
-| Linux 不可达 | 3 |
-| 未验证 | 6 |
+| 差异·仅内部（App 下不可达，未修） | 1（#48） |
+| Linux 不可达 | 2 |
+| 未验证 | 0 |
 
 ## 逐步对照
 
@@ -67,22 +73,31 @@ plain-HTTP 的 `/sand-box/local-exec-connection`。凭据、HOME、数据目录�
 | 33 | retireApproval | 照常 ACK，持久化退役记录，不发任何回复帧（D:178509–178555，wUe D:81351）；之后同一 approval 不再授权 | 无回复帧；`local-tool-retirements.json` 内容为 `{"retiredIds":["ap-uc-exec"]}`；再用同一 approval 执行 → control throw ASK | 一致 |
 | 34 | Watch 401 + 凭据续期 | Watch 返回 Unauthenticated → s 为 "unauthorized"（D:178256）→ 清空 channel，sleep channelRetry 10 s（D:178280–178284）→ resolveChannel 重新读取凭据 → 用新凭据 Watch；scope 与 SA 不变时 Ve 执行 `continue`（D:179352），不 withdraw、不重建 | 旧凭据 Watch 被拒；发布了 rejectedAccountScopes；窗口内 Box 重拨；**10.007 s** 后用新凭据 Watch；中间没有其他 Watch；withdraw=0 | 一致 |
 | 35 | backendReturn 提前唤醒 | Unavailable 时 noteFailure 判为后端宕机（w8r D:176402）；reconnectBackoff 按 1/2/4/8 s（Q8r D:177834）；standing tick 每 2 s（Rre D:78811）读取 marker（He D:179436）→ noteBackendReturn → 在 random·2 s 内唤醒（g8r D:176381、176445） | 前 3 次故障间隔 1004/2005/4006 ms；第 4 次故障后本应睡 8 s，实际写入 marker 后 **2.56 s** 就重新 Watch（距第 4 次故障 2.87 s） | 一致 |
+| 36 | network-change 续订 | standing tick Rre 2 s（D:78811）比较 D9r 指纹（D:179161–179170，忽略 internal/link-local）→ noteNetworkChange（D:178295–178313）abort Watch，原因 network-change（D:178361）→ renew：新 E9r client，不 sleep（D:178270–178275）；30 s 冷却 n9r（D:177839/177950），冷却期内的变化 deferred，到期再执行 | 真实 OS 变化（`unshare -rn` 里加 veth 10.77.0.1/24）：**1.49 s** 内重新 Watch；3 s 后第二次变化被合并，**30.0 s**（29 999 ms）后才执行；3 个 Watch 来自 3 个不同源端口（新连接）；日志 2 行 `renewed on a new connection after a network change` | 一致 |
+| 37 | Box 10 s 心跳周期 | 立即 ping，此后每次 tick 完成后 10 s（hc/yre D:78435–78530，CJe D:97387）；ping POST 不 await（heartbeat.start D:137435） | 首个 ping 在 hello 后 2 ms；ping POST 人为延迟 3 s，间隔仍为 10 002 / 10 002 / 10 002 ms | 一致 |
+| 38 | discoverAiTool（UC + Box） | VJe（D:97585–97840）：bp 脱敏（D:97102）、上限 pHt 256 KiB/FJe 500/mHt 24/hHt 200/$pe 40/XP 160，schema cHt…fHt（D:97544–97570），未找到 Fpe（D:97081） | 合成 HOME（假 ~/.claude、~/.codex，含 sk-/ghp_/Bearer/token/邮箱/URL/路径/超长串/畸形行）：UC claude/codex 字节与按 D: 手推结果完全相同（7 会话/16 条、2 会话/7 条），last 标志正确；Box claude 相同、codex 为 NOT_FOUND；非法 source → UC fileError z2 / Box 丢弃（`dropping unparseable request frame`） | 一致 |
+| 39 | putFileToUrl / getFileFromUrl | UC：v9r（D:178862–178905）返回 undefined → w9r（D:178785–178793）发 x9 control throw z2；Box：MJe 未知 kind 经 Upe 静默忽略（D:97455） | UC 两种都回 `{throw:{error:z2}}` 且被 ACK；Box 无任何回复帧 | 一致 |
+| 40 | mb 头 e2e，非 dev 环境 | eke/jAt/ese/VPe/BAt/FAt/mb（D:78962–79157）；Box cmt 不带 mb（D:137186） | packaged（0.79.3/prod/sand）、lab（0.79.3-lab/lab/sand-lab）、owner 命名空间（` dev ` → 0.79.3-dev/dev/sand-dev）、isolated（SAND_ISOLATED_DEPLOYMENT=1 → 0.79.3-dev/prod/sand）、版本后缀（` 1.2.3-rc.1 ` → 1.2.3）：交换 = [content-type, …mb]，UC 名称排序，Box 无 mb，hello variant 一致 | 一致 |
+| 41 | Electron 内置 Node 的 undici 默认头 | App 二进制静态字符串：Electron/42.11.16、Node v24.19.0、Chrome/148.0.7778.280 | npm 公开 electron@42.11.16（Node 24.19.0）以 `ELECTRON_RUN_AS_NODE=1` 运行我们的 dist：exchange/Box GET/Box POST/UC Watch 头与本机 Node 24.22.1 完全相同 | 一致 |
+| 42 | `utilityProcess.fork` 主启动路径（M$e） | `fork(entry,{env,stdio:"pipe",serviceName:"sand-local-exec-daemon"})`，handoff 经 parentPort（oqr D:187211） | 公开 electron@42.11.16 在 xvfb-run 下 `utilityProcess.fork` 我们的 dist，postMessage 交接：正常服务；四类请求头与 Node 相同 | 一致 |
+| 43 | SAND_NODE_PROXY_ENV（系统代理模式） | sqr（D:187195–187207）在模块加载时调用 nke（D:79217–79232）：删除变量，`http.setGlobalProxyFromEnv`；VAt 指纹（sha256 前 16 hex）写入 discovery（D:179216）；协调器传 `[Rs]: nodeProxyEnv.raw`（coordinator 66932），按指纹 adopt/replace（Pce 66625–66633） | **修复前**：完全没有 → 开代理时 daemon 直连，discovery 无指纹，协调器认为指纹不匹配。**修复后**：假代理观测到 exchange（CONNECT）、Box GET/POST 经代理；UC 走自带 Agent 不经代理（与 E9r 相同）；discovery `proxyFingerprint` = 期望值 | 差异→已修（F4） |
+| 44 | sqr 的 env 清理 | 删除 SAND_LOCAL_EXEC_INHERITED_FDS（并用 wDe 关闭 /proc 链接仍匹配的 fd，D:79641–79658；App 的 Kre 在 L$e 路径设置它）、SAND_LOCAL_EXEC_FILE_KEY、NODE_USE_SYSTEM_CA（R$e 设为 "1"） | **修复前**：三项都留在 env，传给所有 exec 子进程（用户命令里能看到 NODE_USE_SYSTEM_CA=1），继承 fd 不关闭。**修复后**：按 sqr 顺序删除并关闭（单测） | 差异→已修（F5） |
+| 45 | Box SSE GET 的实现 | 全局 fetch（D:137396–137402）：`fetch(baseUrl+RJe,{headers:cmt({accept:"text/event-stream"},p),signal})`，默认 redirect follow；`!m.ok \|\| !Owr(m)` → j5e `local-exec requests stream failed: ${status}`（Owr D:137205）；`o.body.getReader()` + `TextDecoder` `{stream:true}` 分帧（D:137441–137471） | **t168 时**：用 `http.request`，缺 undici 默认头、只认 200、不跟随重定向、经代理时 http 目标用绝对 URI。**t169 修复后**：改为全局 fetch，线上头为 connection、accept、(token)、authorization、accept-language: *、sec-fetch-mode: cors、user-agent: node、accept-encoding（与 Box POST 同一 undici 栈）；203 视为连接成功；307 被跟随；503 → 失败并 1 s 后重试；跨 chunk 的多字节 UTF-8 正确；经 F4 代理时 Box GET 也走 CONNECT | 差异→已修（F6） |
+| 46 | isolated 部署的出站拒绝 | daemon 中 QPe（D:79103–79130）构造 `{backendUrl, refuses}`，但整个 daemon bundle 里 `refuses` 只有定义（D:79125），没有任何调用；`isolated deployment refused` 文本只在 App main-core 的 Ij/session 守卫里出现 | 我们只移植了 QPe 的校验与 backendUrl（mb、exchange 已 e2e 验证），不做出站拒绝——与 daemon 原版相同（静态核实） | 一致 |
+| 47 | 无 IPC 时的 env 文件密钥 | sqr 读取 SAND_LOCAL_EXEC_FILE_KEY（D:187198、187204）；iqr 在无 parentPort 且 `process.channel == null` 时返回 `{fileKeyBase64: Ly.preIpcFileKeyBase64}`，**不带 computerId**（D:187256–187257）→ cqr 抛 YAe `missing its machine id`（D:187302–187303）→ `fatal: Error`（xt D:78680，exit 1） | 我们无通道时直接 `fatal: Error` exit 1；env 变量已由 F5 删除。可观测行为相同（静态核实）；0.79.3 App 也从不设置该变量 | 一致 |
+| 48 | handoff 消息的容错 | Uae（D:79679–79687）：type 不对的消息被忽略、继续等待；computerId 经 Lae trim（≤127）；key 非 32 字节时 key=null 但仍以 null key 服务 | 我们：第一条消息不合法就 fatal；computerId 不 trim；坏 key 直接 fatal。App 两条启动路径都只发一条合法 handoff，因此 App 下不可达 | 仅内部（未修） |
 
 注：x9 会经过 `oa(...).toJson()`，所以线上 throw 帧是 `{throw:{error}}`，`id:0` 被省略。我们的 Box 输出与之一致，见 t165-dropin-fixes 测试。
 
 ## Linux 上不可达
 - messages sidecar：真实的 iMessage 读写和发送。Linux 上只有 `sidecar_missing`，已验证。
 - macOS 本地工具，例如 mac_read_obsidian 和 computer-use 截图。只验证了 "no tool" 分支。
-- `utilityProcess.fork` 主启动路径（M$e）：需要 Electron 运行时。harness 用的是 fallback L$e 的形状。
+（`utilityProcess.fork` 已在 t168 用公开 Electron + xvfb 观测，移入第 42 行。）
 
 ## 未验证（e2e）
-- network-change 续订：需要 `os.networkInterfaces()` 发生变化，原版没有可注入的 env。已由 t162 单测覆盖。
-- Box 10 s 周期心跳（CJe）：没有等待真实周期，单测用注入的 heartbeatMs 覆盖。
-- UC discoverAiTool：不在本条生命周期里，由既有单测覆盖。
-- putFileToUrl / getFileFromUrl：不在本条生命周期里，由既有单测覆盖。
-- packaged / lab / isolated / owner-namespace 下的 mb 头：e2e 只跑了 dev 环境，其他组合由 t166-mb-headers 单测按 D: 静态推导覆盖。
-- undici 的默认头（`accept: */*`、`user-agent: node`、accept-language、sec-fetch-mode 等）取决于运行时 Node 版本。原版跑在 Electron 自带的 Node 里，与本机 Node 是否逐字节相同未验证；这部分不属于 daemon 代码。
+- 无。t168 剩余的两项已在 t169 静态核实，移入上表第 46–47 行。
 
+（t166 列出的 6 项已在 t168 观测，移入上表第 36–41 行。）
 （t165 列出的 Watch 401、cancel、retireApproval、mb 头、backendReturn 已在 t166 final 运行中观测到，已移入上表第 28–35 行；“真实 App 的 cwd”已由 0.79.3 静态核实，见下节。）
 
 ## localRoot（F2）对 0.79.3 的核实（t166）
@@ -101,3 +116,7 @@ plain-HTTP 的 `/sand-box/local-exec-connection`。凭据、HOME、数据目录�
   依据 D:136309–136332、D:136410、D:137564。
 - **F2** `src/util.ts` 的 `localRootFromEnv` 改为 wft 语义；`src/index.ts` 不再 `path.resolve`。依据 D:132542–132545、D:187320。
 - 测试：`test/t165-dropin-fixes.test.cjs`，共 4 项。
+- **F4**（t168）`src/state/node-proxy.ts`（新）+ `src/index.ts` + `src/state/discovery.ts`：模块加载时按 nke 处理 SAND_NODE_PROXY_ENV，discovery 增加 proxyFingerprint（generation 之后、rejectedAccountScopes 之前）。依据 D:79197–79232、D:179216、D:187195–187207。
+- **F5**（t168）`src/bootstrap/boot-env.ts`（新）+ `src/index.ts`：sqr 的 env 清理与继承 fd 关闭。依据 D:78805–78806、D:79641–79658、D:187194–187210。
+- 测试：`test/t168-node-proxy.test.cjs`，共 5 项；e2e 见 dropin-extra 的 SAND_NODE_PROXY_ENV 用例。
+- **F6**（t169）`src/box/provider.ts`：Box SSE GET 由 `http.request` 改为全局 `fetch`，状态判定、重定向、默认头、TextDecoder 分帧与 streamRequests 一致；其余不变。依据 D:137186、137205、137396–137402、137441–137471。测试 `test/t169-box-sse-fetch.test.cjs`，共 5 项。

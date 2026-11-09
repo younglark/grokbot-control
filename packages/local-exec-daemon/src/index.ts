@@ -22,6 +22,15 @@ import {
   pidAlive,
 } from "./state/lease";
 import { localRootFromEnv, logInfo, delay } from "./util";
+import { applyNodeProxyEnv } from "./state/node-proxy";
+import { scrubBootEnv } from "./bootstrap/boot-env";
+
+// D:sqr 187195–187207 → `var Ly = sqr(process.env)` at module load, before the handoff: SAND_NODE_PROXY_ENV is
+// removed from the env and applied process-wide (nke 79217); its fingerprint goes into discovery.
+// Same pass also drops SAND_LOCAL_EXEC_INHERITED_FDS (closing those fds, wDe D:79653), SAND_LOCAL_EXEC_FILE_KEY and
+// NODE_USE_SYSTEM_CA, in sqr's order (D:187196–187200).
+scrubBootEnv(process.env);
+const nodeProxy = applyNodeProxyEnv(process.env);
 
 async function main(): Promise<void> {
   // D:187322–187325: CLAUDE_CONFIG_DIR / CODEX_HOME captured once at daemon start.
@@ -72,6 +81,7 @@ async function main(): Promise<void> {
             servingAt,
             inflightCount,
             ...(generation !== undefined ? { generation } : {}),
+            ...(nodeProxy === undefined ? {} : { proxyFingerprint: nodeProxy.fingerprint }),
             ...(rejectedScopes.size === 0 ? {} : { rejectedAccountScopes: [...rejectedScopes] }),
           },
           key,
