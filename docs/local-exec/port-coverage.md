@@ -1,4 +1,4 @@
-# 函数级移植覆盖审计（t175–t181 更新）
+# 函数级移植覆盖审计（t175–t184 更新）
 
 对象：0.79.3 原版 daemon bundle `/workspace/grokbot-node-analysis-0793/daemon.formatted.cjs`（下称 D:）与我们的 `packages/local-exec-daemon`。
 方法全部为静态读取：没有执行任何官方代码、worker 或 App 内二进制。脚本与中间产物在 `/tmp/exec-t175/`。
@@ -24,7 +24,7 @@ minimatch；tar；RE2JS；Sentry SDK 与 https-proxy-agent（179470–186500）�
 | 已移植-差异（执行器层重写） | 531 | agent-exec 库（进程/shell 工具、sandbox/zsh/powershell、shell exec/后台 shell、git/env、read/ls/ripgrep、skills）。只经 v_ 执行器的 4 个注册项（Tp shellStream、bE backgroundShell、gk read、mk ls）可达，我们在 `src/exec/handlers.ts`/`shell-session.ts` 以执行器层重写；子差异见 §5 |
 | 有意不移植（Linux 不可达） | 393 | 89 个平台门控命中 + sidecar/macOS native/bplist 62 + computer-use 85 + darwin 本地工具 150 + Box mdfind 应用查找 7（rmt/tmt/Swr/ywr/Ewr/smt/bwr，D:137112–137133） |
 | MISSING（大项，给计划） | 79 | telemetry/redaction 区段：Sentry 崩溃上报 T7t 与 hre 脱敏（§6） |
-| 辅助内部实现，未逐个核验 | 396 | core 179 / catalog 133 / wire 84 中的未映射单元：重试/中止错误类、routeString 深链目录、durable-file 辅助、otel 指标名、disposable stack、hook proto 表等。已对其字符串常量做缺失扫描，结果见 §4 |
+| 辅助内部实现（原「未逐个核验」） | 396→**399 已逐个核验**（t184） | §3 记载 396；对 ba05d14 树重跑 classify 得 399（+3 名称命中漂移）。**should-port 0 / unclear 0**；covered 269 / intentional 130。详见 §10 |
 
 MISSING 发现 4 项并已修复，另有 1 项“已移植-差异”在本轮修为一致（§4）。
 
@@ -76,7 +76,7 @@ MISSING 发现 4 项并已修复，另有 1 项“已移植-差异”在本轮�
 - 新增覆盖：`(kept alive)`、`sand.host.crash_reporter_failed`、`failed to clear discovery record on close`、`durable file damaged/unsupported`。
 - 死常量（声明但无引用）：ein/tin/rin/nin/sin/oin/iin（D:81194–81202）——不移植。
 - `sand.local_exec_daemon.invariant_violation`（CDe）：App 只解析 `watch_outage`，有意不移植。
-- 残余 396 个单元的缺失字符串扫描只命中错误类名、深链目录校验文本、otel 指标描述、`The … file is unreadable.` 系列（我们以 damaged 回退表达，不输出原文）、tree-sitter 降级警告——均不在 Linux 上的线上帧或 App 可解析输出中。
+- 原「残余 396」已由 t184 逐个核验（§10）：缺失字符串均为错误类名、深链 routeString、otel 描述、`The … file is unreadable.`（damaged 回退）、tree-sitter stub 警告、`invariant_violation`（§7）——均无 Linux 线上帧 / App 可解析输出缺口。
 
 ## 8. 依赖（t177）
 denylist 解析直接 `require("tree-sitter")` / `require("tree-sitter-bash")`（`src/exec/denylist.ts`），对应 `packages/local-exec-daemon/package.json` 正式依赖：
@@ -95,3 +95,40 @@ App 侧：0.79.3 asar 中这些符号只出现在 `/dist/local-exec-daemon/main.
 
 顺带修复（同一 wE 分支，范围外但可观测）：jHt（D:98041–98046）为 `computerUseArgs` / `recordScreenArgs` 给出固定拒绝文案，原先我们回通用 `No handler found …`。已改为原文，测试 `t181-background-reachability.test.cjs`。
 
+## 10. 辅助内部实现完整核对（t184，静态）
+
+对象：§3「辅助内部实现，未逐个核验」——core / catalog / wire 三模块中原先未映射的助手单元。
+证据目录：`/tmp/exec-t184/`（`final-audit.json`、`original396.json`、`verdict-evidence.md`）；单元切分仍用 `/tmp/exec-t175/units2.json`。
+**未执行**任何官方二进制 / worker；仅静态读 D: 与 App asar header/文本。
+
+### 方法
+1. 在 **ba05d14**（t175 之前）工作树上重跑 `classify.py` 规则，回收三模块 `unclassified` 全集 **399**（文档原写 396；+3 为 minified 名命中漂移）。
+2. 对每个单元结合：子系统区段、`units2` 反向调用图、可观测字符串（wire/磁盘/stderr/App 可解析日志）、平台门控、以及我们 `src/` 已有行为，归入四类。
+3. 边界项人工打开 D: 原文：`oce`/`RFt`/`eGt`/`WUe`/`keepDamagedCopy`、`d$t`/`CDe`、lgt 对 `N9r` 的用法。
+
+### 判定结果（399）
+
+| 判定 | 数量 | 含义 |
+|---|---|---|
+| already covered（行为已覆盖） | **269** | Linux 可达路径的可观测面已由现有移植覆盖（含 t175–t181 已修的 26 个：crash guard、BDe、settings schema、bE/Tp、denylist tree-sitter 等） |
+| intentionally not ported | **130** | Linux 不可达 / 死常量 / 无 wire·磁盘·App 日志可观测性 / 已知 §7 排除 |
+| should be ported | **0** | — |
+| still unclear | **0** | — |
+
+### 有意不移植（130）主要桶（D:）
+| 桶 | 约数 | 证据摘要 |
+|---|---|---|
+| routeString/deep-link | 45 | D:80100–80500 深链校验；不在 Linux exec/daemon 线上帧 |
+| fs-nofollow（oce/RFt/CFt/_Le…） | 14 | D:80705–80850；仅 `sce`→`WUe`→`keepDamagedCopy`（D:82149,82171,82396+）。lgt 对 settings 只用 getter（D:179280–179412），从不 `loadForWrite`；读路径 `onDamage` 恒 `copyPath: null`（D:82241,82263）→ 日志 `copy=none`（与我们一致） |
+| local-tool-store-files unreadable 原文 | 14 | D:81210–81500；§7 damaged 回退，不输出 `The … file is unreadable.` |
+| invariant-reporter + d$t/CDe | 14 | D:78713–78800、`d$t` D:79751、`CDe` D:79752；App 只解析 `watch_outage`（§7） |
+| exec-unregistered / forceBg 区 | 11 | 与 t181 一致：Tft 未注册 |
+| hook-proto 表 | 10 | 编解码已由 exec-codec 覆盖；无额外可观测面 |
+| dead ein/tin/… | 7 | D:81100–81210；§7 死常量 |
+| 其余 Error/校验/内部助手 | 15 | Retry/AbortError/name must… 等，非 App 可解析输出 |
+
+### 本轮移植
+**无。** should-port = 0，不新增代码路径。
+
+### 测试
+`test/t184-helper-audit.test.cjs`：静态钉住 noFollow 仅经 keepDamaged 链、lgt 只用 settings getter、`invariant_violation` 不在我们 src、damaged 日志为 `copy=none`。
