@@ -54,7 +54,7 @@ test('withdraw begins before drain; close reentry resolves immediately, does not
 });
 
 test('default close leaves Watch until final closed/abort; reentrant explicit withdraw does not upgrade default',async t=>{
- const {p,withdraws}=env(t);p.pollBusy=true;const originalAbort=p.abort;
+ const {p,withdraws}=env(t);p.pollBusy=true;p.abortController=new AbortController();const originalAbort=p.abortController;
  const stop=p.stop();await tick();assert.equal(p.watchStopped,false);assert.equal(originalAbort.signal.aborted,false);await p.stop({withdrawPresence:true});assert.equal(withdraws.length,0);
  p.pollBusy=false;p.onPollIdle();await stop;assert.equal(originalAbort.signal.aborted,true);assert.equal(withdraws.length,0);
 });
@@ -108,13 +108,13 @@ test('a stale in-flight Poll cannot ACK or admit results after channel rotation'
 
 
 test('current credential rejection clears proven so close cannot submit; stale rejection does not close rotated channel',async t=>{
- const {p,submissions}=env(t);const old=p.channel;p.channel=channel('new');p.rejectCredential(old);assert.equal(p.proven,true);assert.equal(p.blocked,false);
- p.rejectCredential(p.channel);assert.equal(p.proven,false);assert.equal(p.blocked,true);p.replies.push([closeFrame('unsent')]);await p.stop();assert.equal(submissions.length,0);
+ const {p,submissions}=env(t);const old=p.channel;p.channel=channel('new');p.rejectCredential(old);assert.equal(p.proven,true);assert.equal(p.credentialRejected,false);
+ p.rejectCredential(p.channel);assert.equal(p.proven,false);assert.equal(p.credentialRejected,true);p.replies.push([closeFrame('unsent')]);await p.stop();assert.equal(submissions.length,0);
 });
 
 
 test('cancel drops old lane before executor cancellation: a synchronous cancel terminal must survive',async t=>{
- const {p}=env(t);p.proven=false;const previous=H.cancelRequest;const order=[];
+ const {p}=env(t);p.proven=true;p.replies.flush=async()=>{};/* poll needs proven (D:178448); keep the lane unflushed */const previous=H.cancelRequest;const order=[];
  H.cancelRequest=id=>{order.push('cancel');void p.emit({kind:'control',requestId:id,message:{streamClose:{id:7}}});return true};t.after(()=>H.cancelRequest=previous);
  const drop=p.replies.drop.bind(p.replies);p.replies.drop=(...args)=>{order.push('drop');return drop(...args)};
  p.replies.push([closeFrame('running')]);
@@ -136,7 +136,7 @@ test('cancel ordering: in-flight cancelled submit is aborted before terminal enq
 
 
 test('cancel B does not erase the retained terminal from previously cancelled A',async t=>{
- const {p}=env(t);p.proven=false;const previous=H.cancelRequest;H.cancelRequest=id=>{void p.emit({kind:'control',requestId:id,message:{streamClose:{id:id==='A'?1:2}}});return true};t.after(()=>H.cancelRequest=previous);
+ const {p}=env(t);p.proven=true;p.replies.flush=async()=>{};/* poll needs proven (D:178448); keep the lane unflushed */const previous=H.cancelRequest;H.cancelRequest=id=>{void p.emit({kind:'control',requestId:id,message:{streamClose:{id:id==='A'?1:2}}});return true};t.after(()=>H.cancelRequest=previous);
  p.client.pollGrokBotUserComputerRequests=async()=>({requests:['A','B'].map(id=>new pb.GrokBotUserComputerQueuedRequest({id:'cancel-'+id,frame:{requestId:id,frame:{case:'cancel',value:{}}}}))});
  p.replies.push([closeFrame('A'),closeFrame('B')]);await p.pollOnce();
  const frames=p.replies.take();assert.deepEqual(frames.map(f=>f.requestId),['A','B']);assert.deepEqual(frames.map(f=>JSON.parse(f.frame.value.messageJson)),[{streamClose:{id:1}},{streamClose:{id:2}}]);

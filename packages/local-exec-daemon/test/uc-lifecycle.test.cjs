@@ -69,6 +69,8 @@ async function harness(sa = false, hooks = {}) {
     }
     beginShutdown() { this.closed = true; }
     updateChannel(c) { this.updated = c; return true; }
+    noteBackendReturn() { events.push('provider:backend-return'); }
+    noteNetworkChange() { events.push('provider:network-change'); }
     async rehelloIfChanged() { this.updated = await this.opts.resolveChannel(); }
   }
   const boxes = [];
@@ -99,6 +101,12 @@ async function harness(sa = false, hooks = {}) {
     './box/provider': { BoxProvider: class { constructor(opts) { this.opts = opts; boxes.push(this); } async start() {} redial() {} wakeFromReconnectBackoff() {} async stop() {} beginShutdown() {} } },
     './state/connection-exchange': require('../dist/state/connection-exchange'),
     './uc/local-tools': { createDeviceTools: () => ({ announced: () => [], offers: () => false }) },
+    // t162: Rt (D:179463) runs He (backend-return marker) and ut (network fingerprint) before Ve each standing tick.
+    './state/standing-signals': { createStandingSignals: o => ({
+      backendReturn: async notify => { events.push('signal:backend-return'); if (hooks.backendReturned?.()) notify(); },
+      networkChange: notify => { events.push('signal:network'); if (hooks.networkChanged?.()) notify(); },
+      startedAt: o.startedAt,
+    }) },
     './uc/provider': { UserComputerProvider: FakeProvider },
     // t154: index captures CLAUDE_CONFIG_DIR/CODEX_HOME once at start (D:187322–187325).
     './uc/ai-tool-discovery': { aiToolConfigDirsFromEnv: () => ({}) },
@@ -582,4 +590,18 @@ test('t160 servingAt starts at startedAt (m = p) and every completed standing ti
   const last = recs.at(-1);
   assert.ok(last.servingAt > last.startedAt, JSON.stringify(recs.map(r => r.servingAt)));
   assert.ok(last.servingAt <= h.now());
+});
+
+test('t162 standing tick (Rt D:179462–179463): backend-return marker, then network fingerprint, then credential/Ve; changes reach the UC provider', async () => {
+  let ret = false, net = false;
+  const h = await harness(false, { backendReturned: () => ret, networkChanged: () => net });
+  const ev = h.events;
+  const first = ev.indexOf('signal:backend-return');
+  assert.ok(first >= 0, ev.join(','));
+  assert.equal(ev[first + 1], 'signal:network');
+  assert.ok(!ev.includes('provider:backend-return') && !ev.includes('provider:network-change'));
+  ret = true; net = true; const n = ev.length;
+  await h.advance(2100);
+  const tail = ev.slice(n);
+  assert.ok(tail.indexOf('provider:backend-return') >= 0 && tail.indexOf('provider:backend-return') < tail.indexOf('provider:network-change'), tail.join(','));
 });

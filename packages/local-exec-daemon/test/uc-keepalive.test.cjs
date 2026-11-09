@@ -58,7 +58,7 @@ test('sendKeepAlives: proven gate, messagesAccepted frames, admit +1s, heard +3s
   assert.deepEqual(await p.sendKeepAlives(heard), ['bk']);
 });
 
-test('ResourceExhausted pauses keepalives 5s; auth error closes admission', async () => {
+test('ResourceExhausted pauses keepalives 5s; auth error rejects the credential (D:sgt → rejectCredential)', async () => {
   const { p, calls, setFail } = mk();
   p.backlog.push({ requestId: 'bk' }); p.noteAdmitted('bk', -1e6);
   setFail(new ConnectError('x', Code.ResourceExhausted));
@@ -69,7 +69,7 @@ test('ResourceExhausted pauses keepalives 5s; auth error closes admission', asyn
   assert.deepEqual(await p.sendKeepAlives(performance.now() + 5001), ['bk']);
   const b = mk(); b.p.backlog.push({ requestId: 'x' }); b.p.noteAdmitted('x', -1e6);
   b.setFail(new ConnectError('x', Code.Unauthenticated));
-  await b.p.sendKeepAlives(1000); assert.equal(b.p.blocked, true);
+  await b.p.sendKeepAlives(1000); assert.equal(b.p.credentialRejected, true); assert.equal(b.p.proven, false);
 });
 
 test('ReplyQueue exposes queued/submitting request ids', async () => {
@@ -157,9 +157,9 @@ test('P2-2 channel fencing: a stale channel\'s 401 (keepalive or rejectCredentia
   p.backlog.push({ requestId: 'bk' }); p.noteAdmitted('bk', -1e6);
   p.client = { submitGrokBotUserComputerResponses: async () => { p.channel = fresh; throw new ConnectError('x', Code.Unauthenticated); } };
   await p.sendKeepAlives(1000);
-  assert.equal(p.blocked, false, 'old-credential keepalive 401 after rotation ignored');
-  p.rejectCredential(old); assert.equal(p.blocked, false);
-  p.rejectCredential(fresh); assert.equal(p.blocked, true, 'current channel 401 still closes');
+  assert.equal(p.credentialRejected, false, 'old-credential keepalive 401 after rotation ignored');
+  p.rejectCredential(old); assert.equal(p.credentialRejected, false);
+  p.rejectCredential(fresh); assert.equal(p.credentialRejected, true, 'current channel 401 still rejects'); assert.equal(p.proven, false);
 });
 
 test('P2-2 fence at the failure site: RPC 401 then rotation in a microtask (before the lane catch) does not block the new channel', async () => {
@@ -180,7 +180,7 @@ test('P2-2 fence at the failure site: RPC 401 then rotation in a microtask (befo
     rejectRPC(new ConnectError('rejected', Code.Unauthenticated));
     queueMicrotask(() => { rotated = p.updateChannel({ backendUrl: 'http://127.0.0.1:9', machineId: 'synthetic-m', credential: 'synthetic-new' }); });
     for (let i = 0; i < 20; i++) await new Promise((r) => setImmediate(r));
-    assert.equal(rotated, true); assert.equal(p.blocked, false); assert.equal(p.abort.signal.aborted, false); assert.equal(p.replies.failure, undefined);
+    assert.equal(rotated, true); assert.equal(p.credentialRejected, false); assert.equal(p.replies.failure, undefined);
     assert.ok(await p.replies.drain(1000)); assert.deepEqual(creds, ['synthetic-old', 'synthetic-new'], 'same reply retried on the new channel');
     // control: a 401 for the current channel still closes admission
     const q = new ReplyQueue(async () => { throw new (require('../dist/transport/replies.js').HttpStatusError)(401, 'cur'); }, (e) => e.epoch === 'cur');
@@ -424,7 +424,7 @@ for (const [sc, mode] of [['retry-probe', 'retry'], ['retry-expiry', 'expiry'], 
 
 
 // ---- t110 resume wake across flush mutex (P2) + mechanism comparator negatives (P3) ----
-test('resume during an in-flight 401 flush is honored after the mutex clears (two microtasks, real start/stop)', { timeout: 15000 }, async () => {
+test('t162: a current-channel Submit 401 requeues without a lane pause; a rotation two microtasks later does not flush before the next connected (real start/stop)', { timeout: 15000 }, async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'uc-')); fs.mkdirSync(path.join(root, 'terminals'));
   const old = process.env.SAND_DATA_ROOT; process.env.SAND_DATA_ROOT = root;
   const { ConnectError, Code } = require('@connectrpc/connect');
@@ -444,13 +444,17 @@ test('resume during an in-flight 401 flush is honored after the mutex clears (tw
       const running = p.start(); while (!p.proven) await turn();
       await p.emit({ kind: 'control', requestId: 'q', message: { throw: { error: 'synthetic' } } });
       rejectRPC(new ConnectError('synthetic', Code.Unauthenticated));
+      // t162: the original has no lane pause/resume. A current-channel 401 requeues the batch and rejects the
+      // credential (D:178734 → 178423); the Watch ends "unauthorized" and the runLoop clears the channel and waits
+      // channelRetry (D:178278–178283). A rotation in between does not flush the batch before the next connected.
       schedule(2, () => p.updateChannel({ backendUrl: 'http://127.0.0.1:9', machineId: 'm', credential: 'new' }));
-      const drained = await p.replies.drain(1200);
-      assert.equal(drained, true, `run ${run}: retained frame must flush on the new channel without a nudge`);
-      assert.deepEqual(creds, ['old', 'new']);
-      assert.deepEqual(sent, [['q'], ['q']]);
-      assert.equal(p.replies.readyCount, 0);
-      assert.equal(p.replies.failure, undefined);
+      const drained = await p.replies.drain(300);
+      assert.equal(drained, false, `run ${run}: no flush before the next Watch is connected`);
+      assert.deepEqual(creds, ['old']);
+      assert.deepEqual(sent, [['q']]);
+      assert.equal(p.replies.readyCount, 1, 'batch requeued');
+      assert.equal(p.replies.failure, undefined, 'no lane pause');
+      assert.equal(p.proven, false);
       await p.stop({ withdrawPresence: true }); await running;
     }
   } finally { process.env.SAND_DATA_ROOT = old; fs.rmSync(root, { recursive: true, force: true }); }

@@ -10,6 +10,7 @@ import { clearDiscovery, isSupervised, loadDiscovery, publishDiscovery } from ".
 import { loadConnection, writeConnection } from "./state/connection";
 import { BOX_IDLE_FOR_UC, BOX_NO_CONNECTION, SandLocalExecConnectionError, backendClientFromEnv, exchangeConnection, variantForNamespace } from "./state/connection-exchange";
 import { createDeviceTools } from "./uc/local-tools";
+import { createStandingSignals } from "./state/standing-signals";
 import { BoxProvider } from "./box/provider";
 import { UserComputerProvider } from "./uc/provider";
 import { aiToolConfigDirsFromEnv } from "./uc/ai-tool-discovery";
@@ -98,6 +99,7 @@ async function main(): Promise<void> {
 
   // D:yre/hc L78435–78587: next cadence is anchored at completion, not at a wall-clock interval.
   // Poke during a tick coalesces into one immediate follow-up; shutdown disposes cadence and awaits w.
+  const standingSignals = createStandingSignals({ startedAt, log: m => console.error(`[local-exec-daemon] ${m}`) });
   let ucRefresh: Promise<void> | undefined;
   let ucFollowUp = false;
   let ucRefreshTimer: NodeJS.Timeout | undefined;
@@ -112,6 +114,9 @@ async function main(): Promise<void> {
         ucFollowUp = false;
         lifecycleTrace("standing:begin");
         try {
+          // D:Rt 179463: (await He(), await ot(), ut()) before Ve — backend-return marker, then network fingerprint.
+          await standingSignals.backendReturn(() => uc?.noteBackendReturn());
+          standingSignals.networkChange(() => uc?.noteNetworkChange());
           await refreshUc();
           await uc?.rehelloIfChanged();
           // D:Rt 179478: y || (m = l(), d && await C()) — every completed standing tick moves servingAt.
@@ -295,6 +300,7 @@ async function main(): Promise<void> {
         if (ev.kind === "connected") { changed = rejectedScopes.delete(scope); box?.redial(); }
         else if (ev.kind === "disconnected" && ev.reason === "unauthorized") { changed = !rejectedScopes.has(scope); rejectedScopes.add(scope); box?.wakeFromReconnectBackoff(); }
         else if (ev.kind === "channel-missing") box?.wakeFromReconnectBackoff();
+        else if (ev.kind === "renewed") console.error(`[local-exec-daemon] user-computer watch renewed on a new connection after ${ev.cause === "silent" ? "15 s of silence" : "a network change"}`);
         if (changed) void publish();
       },
     });

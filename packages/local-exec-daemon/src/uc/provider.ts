@@ -19,6 +19,9 @@ export const UC_WATCH_CONNECT_IDLE_MS = 35_000;
 export const UC_RECONNECT_INITIAL_MS = 1_000; // Q8r D:177834
 const UC_RECONNECT_MAX_MS = 60_000; // X1t D:177835
 const UC_SILENT_RENEWAL_INITIAL_MS = 2_000; // r9r D:177838
+const UC_CHANNEL_RETRY_MS = 10_000; // Q1t D:177841
+const UC_NETWORK_RENEWAL_COOLDOWN_MS = 30_000; // n9r D:177839
+const UC_BACKEND_RETURN_JITTER_MS = 2_000; // g8r D:176381
 const UC_WATCH_SILENCE_MS = 15_000;
 import { GrokBotService } from "../generated/svc_aiserver.v1.GrokBotService_connect";
 import { GrokBotUserComputerQueuedRequest, GrokBotUserComputerRequestFrame,
@@ -65,6 +68,9 @@ export type UcProviderOptions = {
   onInflight?: (n: number) => void;
   /** Max poll limit (official default-ish). */
   pollLimit?: number;
+  random?: () => number;
+  /** D:178321 options.createClient (t.createServerClient): replaces E9r when given. */
+  createClient?: (baseUrl: string) => Client<typeof GrokBotService>;
   accountScope?: string;
   /** D:L179387–179395: live scope lookup, not the construction-time credential snapshot. */
   resolveChannel?: () => Promise<ResolvedUcChannel | null>;
@@ -227,7 +233,8 @@ function responseFrame(frame: ExecFrameOut): GrokBotUserComputerResponseFrame {
   return result;
 }
 function authError(error: unknown): boolean {
-  return error instanceof ConnectError && (error.code === Code.Unauthenticated || error.code === Code.PermissionDenied);
+  // D:sgt 178782: only Unauthenticated rejects a credential (PermissionDenied is an ordinary failure).
+  return error instanceof ConnectError && error.code === Code.Unauthenticated;
 }
 
 /**
@@ -288,6 +295,53 @@ export const UC_BACKLOG_MAX = 64;
 export const UC_BUSY_TEXT =
   "The user's computer is busy with other requests right now; try again shortly.";
 
+const BACKEND_DOWN_HTTP = new Set([502, 503, 504, 520, 521, 522, 523, 524, 525, 526, 527, 530]); // S8r D:176382
+const BACKEND_DOWN_CODES = new Set(["ECONNREFUSED", "ECONNRESET", "ECONNABORTED", "EPIPE", "ETIMEDOUT", "ENETDOWN",
+  "ENETRESET", "ENETUNREACH", "EHOSTDOWN", "EHOSTUNREACH", "ENOTFOUND", "EAI_AGAIN"]); // _8r D:176383–176396
+/** D:un/j7t 78659–78671: first /^E[A-Z_]+$/ code along the cause chain. */
+function errnoCode(t: unknown): string | undefined {
+  const seen = new Set<unknown>();
+  for (let n: any = t; n != null && typeof n === "object" && !seen.has(n); n = n.cause) {
+    seen.add(n);
+    if (typeof n.code === "string" && /^E[A-Z_]+$/.test(n.code)) return n.code;
+  }
+  return undefined;
+}
+/** D:w8r 176402–176416: was this failure the backend being unreachable/down? (qi = this port's deadline errors are not thrown by Watch.) */
+export function backendLooksDown(t: unknown): boolean {
+  if (t instanceof TypeError && t.message === "fetch failed") return true;
+  if (t instanceof ConnectError) {
+    const m = /^HTTP (\d{3})$/.exec(t.rawMessage)?.[1];
+    if (m !== undefined) return BACKEND_DOWN_HTTP.has(Number(m));
+  }
+  const e = errnoCode(t);
+  return e !== undefined ? BACKEND_DOWN_CODES.has(e) : t instanceof ConnectError && t.code === Code.Unavailable;
+}
+/** D:v1t 176417–176450 */
+export function createBackendReturn(random: () => number = Math.random) {
+  let down = false;
+  let slot: { controller: AbortController; wake: NodeJS.Timeout | null } | null = null;
+  return {
+    noteFailure(e: unknown) { down = backendLooksDown(e); },
+    noteSilence() { down = true; },
+    noteAnswered() { down = false; },
+    get down() { return down; },
+    arm() {
+      if (slot?.wake) clearTimeout(slot.wake);
+      const o = { controller: new AbortController(), wake: null as NodeJS.Timeout | null };
+      slot = o;
+      return { signal: o.controller.signal, dispose: () => { if (o.wake) clearTimeout(o.wake); o.wake = null; if (slot === o) slot = null; } };
+    },
+    noteBackendReturn() {
+      const o = slot;
+      if (!down || o === null || o.wake !== null || o.controller.signal.aborted) return;
+      const i = random() * UC_BACKEND_RETURN_JITTER_MS;
+      if (i <= 0) { o.controller.abort(); return; }
+      o.wake = setTimeout(() => o.controller.abort(), i); o.wake.unref();
+    },
+  };
+}
+
 export class UserComputerProvider implements UserComputerTransport {
   private closed = false;
   private stopped = false;
@@ -296,7 +350,17 @@ export class UserComputerProvider implements UserComputerTransport {
   private closeDrained = false;
   private onPollIdle?: () => void;
   private onInflightDrained?: () => void;
-  private abort = new AbortController();
+  /** D:abortController — the running Watch's own controller (undefined between Watches). */
+  private abortController?: AbortController;
+  /** D:pollAbort — the in-flight poll's controller; renew() aborts it. */
+  private pollAbort?: AbortController;
+  private renewRequested = false;
+  private networkRenewalHold?: { dispose(): void };
+  private networkChangeDeferred = false;
+  /** Injectable for tests (original passes options.random to the jittered policies). */
+  private readonly random = (): number => (this.opts.random ?? Math.random)();
+  /** D:v1t 176417–176450 */
+  readonly backendReturn = createBackendReturn(() => this.random());
   private presenceToken = crypto.randomBytes(16).toString("hex");
   private pendingAcks: string[] = [];
   private seen = new Set<string>();
@@ -309,7 +373,6 @@ export class UserComputerProvider implements UserComputerTransport {
   private pollAgain = false;
   private pollTimer?: NodeJS.Timeout;
   private keepAliveTimer?: NodeJS.Timeout;
-  private admissionClosed = false;
   /** Official keepAliveDueAt / cancelledIds / keepAlivePausedUntil / proven (Watch `connected` seen). */
   readonly keepAliveDueAt = new Map<string, number>();
   private cancelledIds = new Set<string>();
@@ -323,7 +386,6 @@ export class UserComputerProvider implements UserComputerTransport {
   private announcedStanding?: string;
   /** Official lastPolledAt (monotonic in daemon; wall clock here). */
   lastPolledAt = 0;
-  get blocked(): boolean { return this.admissionClosed; }
   /**
    * Fixed for the provider's lifetime (official keeps it in the per-scope descriptor and closes/recreates
    * the provider when it changes, D:L179352). Taken only from the local credential record, never from a request.
@@ -345,14 +407,15 @@ export class UserComputerProvider implements UserComputerTransport {
   /**
    * D:E9r 179040–179055 (renewConnection): Connect over HTTP/1.1 with a keep-alive agent (timeout s9r = 5 s) and an
    * interceptor that sets every mb(client) header (D:79034) on every request of this client (Watch, Poll, Submit,
-   * keepalive, withdraw). The 8 MiB read/write limits are this port's own setting, kept from before.
+   * keepalive, withdraw). L1t (D:177268) sets no read/write limit, so connect's defaults apply
+   * (VQ = P7e = 0xFFFFFFFF, D:174740–174748).
    */
   private makeClient(baseUrl: string): Client<typeof GrokBotService> {
+    if (this.opts.createClient) return this.opts.createClient(baseUrl); // D:renewConnection 178321 options.createClient
     const headers = clientHeaders(this.opts.client ??= backendClientFromEnv());
     const agentOpts = { keepAlive: true, timeout: UC_AGENT_TIMEOUT_MS };
     return createClient(GrokBotService, createConnectTransport({
       baseUrl, httpVersion: "1.1", useBinaryFormat: true,
-      readMaxBytes: 8 * 1024 * 1024, writeMaxBytes: 8 * 1024 * 1024,
       nodeOptions: { agent: URL.parse(baseUrl)?.protocol === "https:" ? new https.Agent(agentOpts) : new http.Agent(agentOpts) },
       interceptors: [next => req => { for (const [k, v] of Object.entries(headers)) req.header.set(k, v); return next(req); }],
     }));
@@ -395,10 +458,9 @@ export class UserComputerProvider implements UserComputerTransport {
         );
       },
       // Fenced where the failure is set: a stale channel's 401 never closes a channel that rotated in between.
-      reject: (e) => {
-        if (e.epoch !== undefined && e.epoch !== this.channel) return false;
-        this.proven = false; this.admissionClosed = true; this.credentialRejected = true; this.abort.abort(); return true; // D:rejectCredential 178423
-      },
+      // D:submit 178734: `if (o) return (replies.requeue(n), rejectCredential(e), 0)` — no pause: the flush loop
+      // re-checks `channel/proven` (canFlush) and stops when the channel that sent the batch is still current.
+      reject: (e) => { this.rejectCredential((e.epoch as { credential: string } | undefined) ?? null); return false; },
       isCancelled: (id) => this.cancelledIds.has(id),
     });
     this.lastPolledAt = Date.now();
@@ -426,12 +488,12 @@ export class UserComputerProvider implements UserComputerTransport {
       if (liveChannel === null) {
         this.channel = null; this.proven = false; this.abandonWork();
         this.opts.onLoopEvent?.({ kind: "channel-missing" });
-        await new Promise(r => setTimeout(r, 10_000)); // original channelRetry, even after a resolve error
+        await this.loopSleep(UC_CHANNEL_RETRY_MS); // D:178241 sleep(channelRetry, 1): Q1t = 10 s, not woken by backend return
         continue;
       }
+      // D:178243–178244: (channel === undefined || !ngt(channel, n)) && (channel = n, renewConnection(n), proven = false)
       this.applyResolvedChannel(liveChannel);
       if (this.closed || this.watchStopped) break;
-      if (this.admissionClosed) { await new Promise(r => setTimeout(r, 100)); continue; }
       hello.standing = this.standingFor((await loadSettings()).permission);
       hello.serverAuthoritative = this.opts.hello.serverAuthoritative;
       this.announcedStanding = hello.standing;
@@ -440,24 +502,28 @@ export class UserComputerProvider implements UserComputerTransport {
       if (this.closed || this.watchStopped) break;
       this.helloedLocalTools = JSON.stringify(lt);
       hello.capabilities = this.withLocalToolCapabilities(hello.capabilities, lt);
-      const reason = await this.watchLoop(hello, () => { e = 1; });
+      const reason = await this.watchLoop(hello, () => { e = 1; this.backendReturn.noteAnswered(); });
+      if (reason === "stall" || reason === "silent") this.backendReturn.noteSilence(); // D:178259
       this.opts.onLoopEvent?.({ kind: "disconnected", reason });
       if (this.closed || this.watchStopped) break;
-      // D:178267–178286 per-reason branches (network-change is never produced by this port).
+      // D:178267–178286 per-reason branches.
       r = reason !== "silent" ? 0 : (this.watchHeardAfterConnected ? 1 : r + 1);
       if (reason === "lifetime") continue;
+      if (reason === "network-change") { this.renew(liveChannel, reason); continue; }
       if (reason === "silent") {
-        this.renew(liveChannel, reason); // D:178314 renew → renewConnection (fresh E9r client)
-        await this.loopSleep(Math.random() * Math.min(UC_RECONNECT_MAX_MS, UC_SILENT_RENEWAL_INITIAL_MS * 2 ** (r - 1))); // silentRenewalBackoff, jitter "full"
+        this.renew(liveChannel, reason); // D:178314 renew → pollAbort + renewConnection (fresh E9r client)
+        await this.sleepUnlessBackendReturns(this.random() * Math.min(UC_RECONNECT_MAX_MS, UC_SILENT_RENEWAL_INITIAL_MS * 2 ** (r - 1))); // silentRenewalBackoff, jitter "full"
         continue;
       }
       if (reason === "unauthorized") {
-        // Original: channel = undefined, proven = false, e = 1, channelRetry (10 s). This port keeps its
-        // admission fencing (admissionClosed loop above) and only resets the attempt counter here.
-        e = 1;
+        // D:178278–178283: channel = undefined, proven = false, e = 1, sleep(channelRetry, 1) (Q1t = 10 s, not
+        // woken by a backend return). The next pass re-resolves the scope and, since channel is undefined, applies
+        // it again (new client) — a rotated credential is picked up there; the same one is retried.
+        this.channel = null; this.proven = false; e = 1;
+        await this.loopSleep(UC_CHANNEL_RETRY_MS);
         continue;
       }
-      await this.loopSleep(Math.min(UC_RECONNECT_MAX_MS, UC_RECONNECT_INITIAL_MS * 2 ** (e - 1))); // reconnectBackoff, no jitter
+      await this.sleepUnlessBackendReturns(Math.min(UC_RECONNECT_MAX_MS, UC_RECONNECT_INITIAL_MS * 2 ** (e - 1))); // reconnectBackoff, no jitter
       e += 1;
     }
     clearInterval(this.pollTimer);
@@ -476,7 +542,6 @@ export class UserComputerProvider implements UserComputerTransport {
     this.channel = next;
     this.proven = false;
     this.rehello();
-    this.admissionClosed = false; this.replies?.resume();
     return true;
   }
   /** D:L178180–178220: re-resolve a current scope; missing channel abandons work. */
@@ -484,7 +549,7 @@ export class UserComputerProvider implements UserComputerTransport {
     if (this.channel !== null) {
       const next = await this.resolveChannel();
       if (next === null) {
-        this.channel = null; this.proven = false; this.abandonWork(); this.abort.abort(); return;
+        this.channel = null; this.proven = false; this.abandonWork(); this.rehello(); return; // D:178185–178191
       }
       if (this.applyResolvedChannel(next)) return;
     }
@@ -504,10 +569,12 @@ export class UserComputerProvider implements UserComputerTransport {
     // creates a new one (official D:L179352). Never mutate the mode in place.
     if ((next.serverAuthoritative === true) !== this.serverAuthoritative) return false;
     if (next.credential === this.channel.credential) return false;
+    // Test/compat entry (production rotates through resolveChannel/rehelloIfChanged). Like the !ngt branch of
+    // rehelloWhenInputsChanged (D:178193–178199) minus renewConnection: same backendUrl, so the client is kept.
     this.channel = { ...this.channel, credential: next.credential };
     this.proven = false;
     this.rehello();
-    this.admissionClosed = false; this.replies?.resume(); return true;
+    return true;
   }
 
   // Interface compatibility with earlier stub signature
@@ -519,7 +586,7 @@ export class UserComputerProvider implements UserComputerTransport {
   }
 
   beginShutdown(): void {
-    this.closed = true; clearInterval(this.pollTimer); clearTimeout(this.keepAliveTimer); this.abort.abort(); this.loopWake.abort();
+    this.closed = true; clearInterval(this.pollTimer); clearTimeout(this.keepAliveTimer); this.abortController?.abort(); this.loopWake.abort(); this.networkRenewalHold?.dispose();
   }
   /** D:L178009–178025. Reentrant close returns immediately; it does not join the first close. */
   async stop(options: { withdrawPresence?: boolean } = {}): Promise<void> {
@@ -537,14 +604,15 @@ export class UserComputerProvider implements UserComputerTransport {
     this.onInflightDrained = undefined;
     await this.drainOnClose();
     this.closed = true;
-    this.abort.abort(); this.loopWake.abort();
+    this.networkRenewalHold?.dispose(); // D:178021
+    this.abortController?.abort(); this.loopWake.abort();
     await withdraw;
   }
 
   private async stopWatchingAndWithdraw(): Promise<void> {
     // D:L178027–178049: begin withdrawal BEFORE poll/inflight/flush drain; await it last.
     this.watchStopped = true;
-    this.abort.abort(); this.loopWake.abort();
+    this.abortController?.abort(); this.loopWake.abort();
     const ch = this.channel;
     if (!ch) return;
     try {
@@ -609,7 +677,8 @@ export class UserComputerProvider implements UserComputerTransport {
   async pollOnce(): Promise<void> {
     if (this.pollBusy) { this.pollAgain = true; return; }
     // Official keeps polling at capacity/backpressure so cancel + superviseBacklog nudge stay live.
-    if (this.closed || this.closing || this.admissionClosed || !this.channel) return;
+    // D:pollOnce 178448–178455: channel/client/proven/closed/closing.
+    if (this.closed || this.closing || !this.proven || !this.channel) return;
     this.pollBusy = true;
     const acks = this.pendingAcks.splice(0);
     const pollChannel = this.channel;
@@ -623,12 +692,20 @@ export class UserComputerProvider implements UserComputerTransport {
         this.rehello();
       }
       // Continue polling at capacity: cancel controls must remain reachable.
-      const res = await this.client.pollGrokBotUserComputerRequests({
-        machineId: ch.machineId, credential: ch.credential, ackIds: acks,
-        // Official tgt=64 on every poll regardless of local capacity (D:L177848, L178474).
-        limit: this.opts.pollLimit ?? UC_POLL_LIMIT,
-      }, {timeoutMs: 10_000}); // original controlDeadline ok
-      if (this.channel !== pollChannel) { this.pendingAcks.unshift(...acks); return; }
+      // D:178458–178481: pollAbort lets renew() abandon this poll; an aborted poll requeues its acks and asks again.
+      const pa = new AbortController(); this.pollAbort = pa;
+      let res;
+      try {
+        res = await this.client.pollGrokBotUserComputerRequests({
+          machineId: ch.machineId, credential: ch.credential, ackIds: acks,
+          // Official tgt=64 on every poll regardless of local capacity (D:L177848, L178474).
+          limit: this.opts.pollLimit ?? UC_POLL_LIMIT,
+        }, {timeoutMs: 10_000, signal: pa.signal}); // original controlDeadline ok
+      } catch (error) {
+        if (pa.signal.aborted) { this.pendingAcks.unshift(...acks); this.pollAgain = true; return; }
+        throw error;
+      } finally { if (this.pollAbort === pa) this.pollAbort = undefined; }
+      if (this.channel !== pollChannel || !this.proven) { this.pendingAcks.unshift(...acks); return; } // D:178484
       const queued = res.requests.map(parseQueued).filter(q => q.id);
       trace("poll-items", { n: queued.length, rids: queued.map(q => q.requestId.slice(0, 16)) });
       // Only forget queue ids after the peer confirms receipt of prior acks.
@@ -718,7 +795,7 @@ export class UserComputerProvider implements UserComputerTransport {
    * Exposed for regressions (clock injectable via nowMs).
    */
   superviseBacklog(nowMs = Date.now()): void {
-    if (this.backlog.length === 0 || this.closed || this.closing || this.admissionClosed) return;
+    if (this.backlog.length === 0 || this.closed || this.closing) return; // D:178589
     if (this.lastPolledAt <= 0) return;
     const age = nowMs - this.lastPolledAt;
     if (age > UC_BACKLOG_STALE_MS) {
@@ -762,7 +839,7 @@ export class UserComputerProvider implements UserComputerTransport {
   /** Official sendKeepAlives (daemon.formatted.cjs L178625–178661): messagesAccepted frames only. */
   async sendKeepAlives(now = performance.now()): Promise<string[]> {
     const ch = this.channel;
-    if (!ch || !this.proven || this.closed || this.closing || this.admissionClosed || this.keepAliveSending) return [];
+    if (!ch || !this.proven || this.closed || this.closing || this.keepAliveSending) return [];
     const held = this.heldRequestIds();
     for (const id of [...this.keepAliveDueAt.keys()]) if (!held.has(id)) this.keepAliveDueAt.delete(id);
     for (const id of [...this.cancelledIds]) if (!held.has(id)) this.cancelledIds.delete(id);
@@ -851,16 +928,17 @@ export class UserComputerProvider implements UserComputerTransport {
   }
   /** Official rejectCredential(e): only the channel that is still current may be closed. */
   private rejectCredential(ch: { credential: string } | null): void {
+    // D:178423–178428: only the current channel; aborts the running Watch (if any) so it ends "unauthorized".
     if (!ch || this.channel !== ch) return;
-    this.proven = false; this.admissionClosed = true; this.credentialRejected = true; this.abort.abort();
+    this.proven = false; this.credentialRejected = true; this.abortController?.abort();
   }
-  /** D:rehello 178421: mark the Watch ending as "lifetime" and replace the connection (never tasks). */
-  private rehello(): void { this.rehelloRequested = true; this.abort.abort(); this.abort = new AbortController(); }
+  /** D:rehello 178421: mark the Watch ending as "lifetime" and abort the running Watch (never tasks). */
+  private rehello(): void { this.rehelloRequested = true; this.abortController?.abort(); }
   private credentialRejected = false;
   private rehelloRequested = false;
 
   private runBacklog(): void {
-    while (!this.closed && !this.closing && !this.admissionClosed && this.active.size < UC_INFLIGHT_MAX && this.backlog.length && this.replies?.available) {
+    while (!this.closed && !this.closing && this.active.size < UC_INFLIGHT_MAX && this.backlog.length && this.replies?.available) {
       const q = this.backlog.shift()!;
       if (this.active.has(q.requestId)) continue;
       this.active.add(q.requestId); this.bump(1); trace("admit", { rid: q.requestId.slice(0, 16) });
@@ -1088,23 +1166,55 @@ export class UserComputerProvider implements UserComputerTransport {
       sig.addEventListener("abort", done, { once: true });
     });
   }
+  /** D:sleepUnlessBackendReturns 178334–178341: a backoff sleep that a backend return (after a failure/silence) cuts short. */
+  private async sleepUnlessBackendReturns(ms: number): Promise<void> {
+    const armed = this.backendReturn.arm();
+    try {
+      await new Promise<void>(resolve => {
+        const sigs = [armed.signal, this.loopWake.signal];
+        if (sigs.some(x => x.aborted)) return resolve();
+        const done = () => { clearTimeout(t); for (const x of sigs) x.removeEventListener("abort", done); resolve(); };
+        const t = setTimeout(done, ms); t.unref();
+        for (const x of sigs) x.addEventListener("abort", done, { once: true });
+      });
+    } finally { armed.dispose(); }
+  }
+  /** D:noteBackendReturn 178292–178294 */
+  noteBackendReturn(): void { this.backendReturn.noteBackendReturn(); }
+  /** D:noteNetworkChange 178295–178313 (cooldown n9r = 30 s, D:177839 / 177950). */
+  noteNetworkChange(): void {
+    if (this.networkRenewalHold !== undefined) { this.networkChangeDeferred = true; return; }
+    const t = setTimeout(() => {
+      this.networkRenewalHold = undefined;
+      if (!this.networkChangeDeferred || this.closed) return;
+      this.networkChangeDeferred = false; this.noteNetworkChange();
+    }, UC_NETWORK_RENEWAL_COOLDOWN_MS);
+    t.unref();
+    this.networkRenewalHold = { dispose: () => clearTimeout(t) };
+    if (this.abortController !== undefined) { this.renewRequested = true; this.abortController.abort(); return; }
+    if (this.channel) this.renew(this.channel, "network-change");
+    this.backendReturn.noteBackendReturn();
+  }
   /** D:178314–178318 */
   private renew(ch: ResolvedUcChannel, cause: string): void {
+    this.pollAbort?.abort();
     this.client = this.makeClient(ch.backendUrl);
     this.opts.onLoopEvent?.({ kind: "renewed", cause });
   }
   private async watchLoop(hello: UserComputerHello, onConnected?: () => void): Promise<string> {
     try { return await this.watchOnce(hello, onConnected); }
-    catch (error) { return error instanceof ConnectError && error.code === Code.Unauthenticated ? "unauthorized" : "error"; }
+    catch (error) {
+      this.backendReturn.noteFailure(error); // D:178252
+      return error instanceof ConnectError && error.code === Code.Unauthenticated ? "unauthorized" : "error";
+    }
   }
   private async watchOnce(hello: UserComputerHello, onConnected?: () => void): Promise<string> {
     const ch = this.channel!;
     this.proven = false;
-    this.credentialRejected = false; this.rehelloRequested = false; this.watchHeardAfterConnected = false;
     const s = new AbortController();
-    const outer = this.abort.signal;
-    const onOuter = () => s.abort();
-    if (outer.aborted) s.abort(); else outer.addEventListener("abort", onOuter, { once: true });
+    // D:178347–178351: abortController = s; credentialRejected/rehelloRequested/renewRequested/heard reset.
+    this.abortController = s;
+    this.credentialRejected = false; this.rehelloRequested = false; this.renewRequested = false; this.watchHeardAfterConnected = false;
     let o = false, i = false;
     const fire = () => { i = true; s.abort(); };
     const watchdog = (ms: number) => {
@@ -1117,6 +1227,7 @@ export class UserComputerProvider implements UserComputerTransport {
     const l = (): string | undefined => {
       if (this.closed || this.watchStopped) return "closed";
       if (this.credentialRejected) return "unauthorized";
+      if (this.renewRequested) return "network-change";
       if (this.rehelloRequested) return "lifetime";
       if (i) return o ? "silent" : "stall";
       return undefined;
@@ -1139,7 +1250,9 @@ export class UserComputerProvider implements UserComputerTransport {
           const r = this.replies as { flush?: () => Promise<void> } | undefined;
           if (r && typeof r.flush === "function") void r.flush();
         }
-        if (["connected", "notify", "heartbeat"].includes(event.event.case || "")) {
+        // D:178396–178404: connected/notify → requestPoll; heartbeat only when pendingRequestCount > 0.
+        if (event.event.case === "connected" || event.event.case === "notify" ||
+            (event.event.case === "heartbeat" && event.event.value.pendingRequestCount > 0)) {
           void this.pollOnce().catch(() => undefined);
         }
       }
@@ -1148,11 +1261,10 @@ export class UserComputerProvider implements UserComputerTransport {
       const p = l();
       if (p !== undefined) return p;
       if (error instanceof ConnectError && error.code === Code.Canceled) return "stall";
-      if (authError(error)) this.rejectCredential(ch); // keep this port's admission fencing on a 401
       console.error(`[user-computer-provider] watch stream failed: ${describeError(error)}`);
       throw error;
     } finally {
-      u.dispose(); outer.removeEventListener("abort", onOuter);
+      u.dispose(); if (this.abortController === s) this.abortController = undefined;
     }
   }
 }

@@ -414,7 +414,7 @@ describe('ownership PID superseded + UC admission gate + superviseBacklog', () =
     });
     const got = [];
     const cancelHang = [];
-    p.channel = { backendUrl: `http://127.0.0.1:${port}`, machineId: 'synthetic', credential: 'synthetic' };
+    p.channel = { backendUrl: `http://127.0.0.1:${port}`, machineId: 'synthetic', credential: 'synthetic' }; p.proven = true; // poll requires proven (D:pollOnce 178448–178455)
     p.replies = { available: true };
     p.emit = (f) => got.push(f);
     p.handleQueued = () => new Promise((_, reject) => { cancelHang.push(reject); });
@@ -479,7 +479,7 @@ describe('ownership PID superseded + UC admission gate + superviseBacklog', () =
       },
     });
     const got = [];
-    p.channel = { backendUrl: `http://127.0.0.1:${port}`, machineId: 'synthetic', credential: 'synthetic' };
+    p.channel = { backendUrl: `http://127.0.0.1:${port}`, machineId: 'synthetic', credential: 'synthetic' }; p.proven = true; // poll requires proven (D:pollOnce 178448–178455)
     p.replies = { available: false };
     p.emit = (f) => got.push(f);
     p.active = new Set(['only-three']);
@@ -544,7 +544,7 @@ describe('ownership PID superseded + UC admission gate + superviseBacklog', () =
     });
     const got = [];
     const cancelHang = [];
-    p.channel = { backendUrl: `http://127.0.0.1:${port}`, machineId: 'synthetic', credential: 'synthetic' };
+    p.channel = { backendUrl: `http://127.0.0.1:${port}`, machineId: 'synthetic', credential: 'synthetic' }; p.proven = true; // poll requires proven (D:pollOnce 178448–178455)
     p.replies = { available: true };
     p.emit = (f) => got.push(f);
     p.handleQueued = () => new Promise((_, reject) => { cancelHang.push(reject); });
@@ -608,7 +608,7 @@ describe('ownership PID superseded + UC admission gate + superviseBacklog', () =
       },
     });
     const got = [];
-    p.channel = { backendUrl: `http://127.0.0.1:${port}`, machineId: 'synthetic', credential: 'synthetic' };
+    p.channel = { backendUrl: `http://127.0.0.1:${port}`, machineId: 'synthetic', credential: 'synthetic' }; p.proven = true; // poll requires proven (D:pollOnce 178448–178455)
     p.replies = { available: false };
     p.emit = (f) => got.push(f);
     p.backlog = [

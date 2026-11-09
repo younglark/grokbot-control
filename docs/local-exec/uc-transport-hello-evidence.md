@@ -83,3 +83,7 @@ Not ported:
 - network-change.
 
 Afterwards, the single oracle test ran once and passed. The silent wait uses jitter, so its timing varies by design.
+
+## t162 update
+- The `unauthorized` branch, backendReturn early wake, renew `pollAbort`, and `network-change` are now ported. See `uc-unauthorized-renewal-evidence.md`.
+- The 8 MiB UC transport read/write cap is removed: L1t sets none, so the defaults are 0xFFFFFFFF (D:174740–174748).

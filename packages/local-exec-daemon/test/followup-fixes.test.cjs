@@ -42,15 +42,22 @@ test('shutdown waits for abort exit and streamClose before disabling reply lane'
  try{await until(()=>peer.log.some(x=>x.kind==='watch'));peer.enqueueExec('stop',{id:1,shellStreamArgs:{command:'echo READY; sleep 30'}});await until(()=>JSON.stringify(peer.log).includes('READY'));await p.stop({ withdrawPresence: true });await run;assert.ok(peer.log.some(x=>x.kind==='submit'&&x.frames.some(f=>f.message?.shellStream?.exit?.aborted)));assert.ok(peer.log.some(x=>x.kind==='submit'&&x.frames.some(f=>f.message?.streamClose)));const watch=peer.log.find(x=>x.kind==='watch');const withdraw=peer.log.find(x=>x.kind==='withdraw');assert.equal(withdraw.presence,watch.presence);assert.equal(watch.hello.label,'independent');assert.equal(watch.hello.localRoot,root);assert.equal(watch.hello.kind,'')}
  finally{await cleanup(p,peer,run,root,old)}
 });
-test('same-scope synthetic credential rotation resumes retained replies after 401', {timeout:8000},async()=>{
- const root=temp();setup(root);const old=process.env.SAND_DATA_ROOT;process.env.SAND_DATA_ROOT=root;const peer=startUcFakePeer();await peer.listen();const p=provider(peer,root);const run=p.start();
- try{await until(()=>peer.log.some(x=>x.kind==='watch'));peer.rejectSubmits(true);peer.enqueueExec('rotate',{id:1,readArgs:{path:'probe.txt'}});await until(()=>p.blocked);assert.ok(p.replies.readyCount>0,'must retain response frames (UC lanes)');peer.rejectSubmits(false);peer.rotateCredential('synthetic-rotated');assert.equal(p.updateChannel({backendUrl:`http://127.0.0.1:${peer.port()}`,machineId:SYN_MACHINE,credential:'synthetic-rotated'}),true);await until(()=>peer.log.some(x=>x.kind==='submit'&&x.frames.some(f=>f.requestId==='rotate'&&f.message?.readResult)));assert.equal(p.blocked,false)}
+test('t162 same-scope rotation after a Submit 401: replies retained; unauthorized → channel cleared, 10 s channelRetry, re-resolve picks the rotated credential (D:178278–178283)', {timeout:20000},async()=>{
+ const root=temp();setup(root);const old=process.env.SAND_DATA_ROOT;process.env.SAND_DATA_ROOT=root;const peer=startUcFakePeer();await peer.listen();
+ let cur=SYN_CRED;const events=[];const p=new UserComputerProvider({backendUrl:`http://127.0.0.1:${peer.port()}`,machineId:SYN_MACHINE,credential:SYN_CRED,root,permission:'always',resolveChannel:async()=>({backendUrl:`http://127.0.0.1:${peer.port()}`,machineId:SYN_MACHINE,credential:cur}),onLoopEvent:e=>events.push({...e,t:Date.now()}),hello:{label:'independent',localRoot:root,terminalsFolder:root,standing:'always',variant:'lab',serverAuthoritative:false}});const run=p.start();
+ try{await until(()=>peer.log.some(x=>x.kind==='watch'));peer.rejectSubmits(true);peer.enqueueExec('rotate',{id:1,readArgs:{path:'probe.txt'}});
+  await until(()=>events.some(e=>e.kind==='disconnected'&&e.reason==='unauthorized'));const unauthAt=events.find(e=>e.reason==='unauthorized').t;
+  assert.equal(p.channel,null,'unauthorized clears the channel');assert.equal(p.proven,false);assert.ok(p.replies.readyCount>0,'must retain response frames (UC lanes)');
+  peer.rejectSubmits(false);peer.rotateCredential('synthetic-rotated');cur='synthetic-rotated';
+  await until(()=>peer.log.some(x=>x.kind==='submit'&&x.frames.some(f=>f.requestId==='rotate'&&f.message?.readResult)),15000);
+  const watches=peer.log.filter(x=>x.kind==='watch');assert.equal(watches.length,2,'one re-Watch after the channelRetry');
+  const reconnectAt=events.filter(e=>e.kind==='connected')[1].t;assert.ok(reconnectAt-unauthAt>=9900,`waited channelRetry 10 s (got ${reconnectAt-unauthAt})`);assert.equal(p.credentialRejected,false)}
  finally{await cleanup(p,peer,run,root,old)}
 });
 test('HTTP-success accepted0 is final refusal; independent r2 and shutdown drain are not blocked', {timeout:7000},async()=>{
  const root=temp();setup(root);const old=process.env.SAND_DATA_ROOT;process.env.SAND_DATA_ROOT=root;const peer=startUcFakePeer();await peer.listen();peer.setAcceptedFor('r1',0);const p=provider(peer,root);const run=p.start();
  try{await until(()=>peer.log.some(x=>x.kind==='watch'));peer.enqueueExec('r1',{id:1,readArgs:{path:'probe.txt'}});await until(()=>peer.log.some(x=>x.kind==='submit'&&x.frames.some(f=>f.requestId==='r1')));peer.enqueueExec('r2',{id:2,readArgs:{path:'probe.txt'}});await until(()=>peer.log.some(x=>x.kind==='submit'&&x.frames.some(f=>f.requestId==='r2'&&f.message?.streamClose)),1500);
- const refused=peer.log.filter(x=>x.kind==='submit'&&x.frames.some(f=>f.requestId==='r1'));assert.equal(refused.length,2,'read result + streamClose are final-refused once each');assert.equal(new Set(refused.map(x=>x.rawHex)).size,2);const start=Date.now();await p.stop({ withdrawPresence: true });await run;assert.ok(Date.now()-start<2500,'final refusal must not obstruct shutdown drain');assert.ok(peer.log.some(x=>x.kind==='withdraw'));assert.equal(p.blocked,false)}
+ const refused=peer.log.filter(x=>x.kind==='submit'&&x.frames.some(f=>f.requestId==='r1'));assert.equal(refused.length,2,'read result + streamClose are final-refused once each');assert.equal(new Set(refused.map(x=>x.rawHex)).size,2);const start=Date.now();await p.stop({ withdrawPresence: true });await run;assert.ok(Date.now()-start<2500,'final refusal must not obstruct shutdown drain');assert.ok(peer.log.some(x=>x.kind==='withdraw'));assert.equal(p.credentialRejected,false)}
  finally{await cleanup(p,peer,run,root,old)}
 });
 test('ceiling hot tightening prevents next UC execution', {timeout:6000},async()=>{
@@ -70,7 +77,7 @@ test('six-second normal background matches original five-second drain without la
 });
 test('loopback Submit 503 six times retains acknowledged output and resumes with no execution replay', {timeout:13000},async()=>{
  const root=temp();setup(root);const old=process.env.SAND_DATA_ROOT;process.env.SAND_DATA_ROOT=root;const peer=startUcFakePeer();await peer.listen();peer.failSubmits(6);const p=provider(peer,root);const run=p.start();
- try{await until(()=>peer.log.some(x=>x.kind==='watch'));peer.enqueueExec('retry',{id:1,shellStreamArgs:{command:'echo ran >> count; echo done'}});await until(()=>peer.log.some(x=>x.kind==='submit'&&x.frames.some(f=>f.message?.streamClose)),11000);assert.equal(p.blocked,false);assert.equal(fs.readFileSync(path.join(root,'count'),'utf8'),'ran\n')}
+ try{await until(()=>peer.log.some(x=>x.kind==='watch'));peer.enqueueExec('retry',{id:1,shellStreamArgs:{command:'echo ran >> count; echo done'}});await until(()=>peer.log.some(x=>x.kind==='submit'&&x.frames.some(f=>f.message?.streamClose)),11000);assert.equal(p.credentialRejected,false);assert.equal(fs.readFileSync(path.join(root,'count'),'utf8'),'ran\n')}
  finally{await cleanup(p,peer,run,root,old)}
 });
 test('saturated reply lane backpressures producers then resumes without permanent failure', {timeout:5000},async()=>{
@@ -90,7 +97,7 @@ test('Poll limit is official tgt=64 regardless of capacity; queue IDs acknowledg
  const q=id=>wire.encMsg(1,Buffer.concat([wire.encStr(1,id),wire.encMsg(2,frame)]));
  const server=http.createServer((req,res)=>{let body=[];req.on('data',c=>body.push(c));req.on('end',()=>{const f=wire.decodeFields(Buffer.concat(body));limit=f[4][0].v;res.writeHead(200,{'content-type':'application/proto'});res.end(round++===0?Buffer.concat([q('queue-a'),q('queue-b')]):Buffer.alloc(0))})});await new Promise(r=>server.listen(0,'127.0.0.1',r));
  const p=new UserComputerProvider({backendUrl:`http://127.0.0.1:${server.address().port}`,machineId:SYN_MACHINE,credential:SYN_CRED,root:'/tmp',permission:'ask',hello:{label:'lab',localRoot:'/tmp',terminalsFolder:'/tmp',standing:'ask',variant:'lab',serverAuthoritative:false}});
- p.channel={backendUrl:`http://127.0.0.1:${server.address().port}`,machineId:SYN_MACHINE,credential:SYN_CRED};p.replies={available:true};p.emit=f=>got.push(f);p.active=new Set(['already-running',...Array.from({length:7},(_,i)=>String(i))]);p.backlog=Array.from({length:62},(_,i)=>({requestId:'backlog-'+i}));
+ p.channel={backendUrl:`http://127.0.0.1:${server.address().port}`,machineId:SYN_MACHINE,credential:SYN_CRED};p.proven=true;p.replies={available:true};p.emit=f=>got.push(f);p.active=new Set(['already-running',...Array.from({length:7},(_,i)=>String(i))]);p.backlog=Array.from({length:62},(_,i)=>({requestId:'backlog-'+i}));
  try{await p.pollOnce();assert.equal(limit,64);assert.deepEqual(p.pendingAcks,['queue-a','queue-b']);assert.equal(p.backlog.length,62);assert.equal(got.length,0,'official startRequest suppresses in-flight duplicate without extra response')}finally{await new Promise(r=>server.close(r))}
 });
 test('outer malformed throw-only versus inner unsupported throw+close matches isolated original oracle', {timeout:5000},async()=>{

@@ -84,7 +84,7 @@ test('UC wire cancel field6 removes queued work; Poll confirms ack/clears seen (
  const server=http.createServer((req,res)=>{req.resume();req.on('end',()=>{res.writeHead(200,{'content-type':'application/proto'});res.end(body);body=Buffer.alloc(0)})});
  await new Promise(r=>server.listen(0,'127.0.0.1',r));
  const provider=new UserComputerProvider({backendUrl:`http://127.0.0.1:${server.address().port}`,machineId:'synthetic',credential:'synthetic',root:'/tmp',permission:'ask',hello:{label:'test',localRoot:'/tmp',terminalsFolder:'/tmp',standing:'ask',variant:'test',serverAuthoritative:false}});
- provider.channel={backendUrl:`http://127.0.0.1:${server.address().port}`,machineId:'synthetic',credential:'synthetic'};
+ provider.channel={backendUrl:`http://127.0.0.1:${server.address().port}`,machineId:'synthetic',credential:'synthetic'};provider.proven=true;
  provider.replies={available:true};provider.backlog=[{id:'pending',requestId:'fixture-request',kind:2,serverMessage:{}}];
  const root=workspace();const got=[];
  const job=handleShellStream({root,requestId:'fixture-request',msgId:1,command:'sleep 300 & echo ready > started; wait',emit:f=>got.push(f)});

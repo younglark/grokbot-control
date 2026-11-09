@@ -57,7 +57,7 @@ test('watch reasons (D:178342–178420 / 178247–178256): lifetime, unauthorize
  ({p}=bare(t));p.pollOnce=async()=>{};p.client=script(['connected','hang']);
  r=p.watchLoop(H);await delay(20);p.rejectCredential(p.channel);assert.equal(await r,'unauthorized');
  ({p}=bare(t));p.pollOnce=async()=>{};p.client=script(['hang']);
- r=p.watchLoop(H);await delay(20);p.closed=true;p.abort.abort();assert.equal(await r,'closed');
+ r=p.watchLoop(H);await delay(20);p.closed=true;p.abortController.abort();assert.equal(await r,'closed');
 });
 
 test('watch watchdogs (xh, unref): connect 35 s → "stall"; silence 15 s after connected → "silent"',{timeout:10000},async t=>{

@@ -187,7 +187,7 @@ test('provider: retire-approval is ACKed, persisted, no reply, no slot, no keepa
   const { p, got } = mk(e.root);
   const item = new pb.GrokBotUserComputerQueuedRequest({ id: 'queue-1', frame: { requestId: 'req-1', frame: { case: 'retireApproval', value: { approvalId: 'z1' } } } });
   let calls = 0, acks = [];
-  p.channel = { backendUrl: 'x', machineId: 'synthetic', credential: 'synthetic-1' };
+  p.channel = { backendUrl: 'x', machineId: 'synthetic', credential: 'synthetic-1' }; p.proven = true; // poll requires proven (D:pollOnce 178448–178455)
   p.client = { pollGrokBotUserComputerRequests: async (req) => { calls++; acks.push(...req.ackIds); return { requests: calls === 1 ? [item] : [] }; } };
   try {
     const q = parseQueued(item); assert.equal(q.approvalId, 'z1');
