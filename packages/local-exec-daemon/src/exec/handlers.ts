@@ -1,4 +1,5 @@
 import { trace } from "../trace";
+import { withExecChannelHeartbeat } from "./output-channel";
 import { proto3 } from "@bufbuild/protobuf";
 import {
   ExecClientMessage,
@@ -524,8 +525,13 @@ export async function dispatchExec(args: {
   serverMessage: Record<string, unknown>;
   permission: PermissionMode;
   emit: Emit;
+  /** UC synchronous queue consumer; Box keeps its existing public async admission behavior. */
+  pullOutput?: boolean;
 }): Promise<void> {
   const { root, requestId, serverMessage, permission, emit } = args;
+  const heartbeat = args.pullOutput
+    ? (rid: string, id: number, output: Emit, run: (write: Emit) => Promise<void>) => withExecChannelHeartbeat(rid, id, output, run, () => { cancelRequest(rid); })
+    : withExecHeartbeat;
   // Do not echo serverMessage.id — official maps e.g. server id=7 → local sequential id starting at 1.
   const msgId = allocateExecId();
 
@@ -536,13 +542,13 @@ export async function dispatchExec(args: {
       handleUnsupported(requestId, msgId, "readArgs", emit, { root, serverMessage });
       return;
     }
-    await withExecHeartbeat(requestId, msgId, emit, (e) => handleRead({ root, requestId, msgId, path: p, emit: e }));
+    await heartbeat(requestId, msgId, emit, (e) => handleRead({ root, requestId, msgId, path: p, emit: e }));
     return;
   }
   if (serverMessage.lsArgs && typeof serverMessage.lsArgs === "object") {
     if (refuseByPermission(permission, requestId, emit)) return;
     const p = (serverMessage.lsArgs as { path?: string }).path || root;
-    await withExecHeartbeat(requestId, msgId, emit, (e) => handleLs({ root, requestId, msgId, path: p, emit: e }));
+    await heartbeat(requestId, msgId, emit, (e) => handleLs({ root, requestId, msgId, path: p, emit: e }));
     return;
   }
   if (serverMessage.shellStreamArgs && typeof serverMessage.shellStreamArgs === "object") {
@@ -557,7 +563,7 @@ export async function dispatchExec(args: {
       return;
     }
     const command = a.command;
-    await withExecHeartbeat(requestId, msgId, emit, (e) => handleShellStream({
+    await heartbeat(requestId, msgId, emit, (e) => handleShellStream({
       root,
       requestId,
       msgId,

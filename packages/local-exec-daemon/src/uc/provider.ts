@@ -2,6 +2,7 @@ import { trace } from "../trace";
 import { loadSettings, loadSettingsSync } from "../settings";
 import { HttpStatusError, type ReplyQueue } from "../transport/replies";
 import { UcReplyLanes } from "./reply-lanes";
+import { prepareDownload } from "./file-source";
 import { requestError } from "../exec/handlers";
 import * as crypto from "node:crypto";
 import { Code, ConnectError, createClient, type Client } from "@connectrpc/connect";
@@ -29,7 +30,7 @@ import {
 import type { PermissionMode } from "../settings";
 import { isSupervised } from "../state/discovery";
 import { dataRootFromEnv } from "../util";
-import { approvalsPathFor, authorizationOf, describeExec, execRefusal, retireApproval, retirementsPathFor, type Authorization } from "./approvals";
+import { approvalsPathFor, authorizationOf, describeExec, execRefusal, downloadRefusal, retireApproval, retirementsPathFor, type Authorization } from "./approvals";
 import type { UserComputerHello, UserComputerTransport } from "./types";
 
 export type ResolvedUcChannel = { backendUrl: string; machineId: string; credential: string };
@@ -53,7 +54,7 @@ const requestKinds = Object.fromEntries(GrokBotUserComputerRequestFrame.fields.l
 // Only business mapping remains here. Field numbers, oneof and int64 are runtime-owned.
 export type Queued = { id: string; requestId: string; kind: number; serverMessage: Record<string, unknown>; parseError?: string;
   /** Exec: D v9r (L178863) approvalId + c5 authorization; retire-approval: approvalId. */
-  approvalId?: string; authorization?: Authorization };
+  approvalId?: string; authorization?: Authorization; path?: string };
 export function parseQueued(item: GrokBotUserComputerQueuedRequest): Queued {
   const id = item.id;
   const frame = item.frame;
@@ -64,6 +65,10 @@ export function parseQueued(item: GrokBotUserComputerQueuedRequest): Queued {
     let serverMessage: Record<string, unknown> = {};
     if (frame.frame.case === "retireApproval") {
       return { id, requestId, kind, serverMessage, approvalId: frame.frame.value.approvalId };
+    }
+    if (frame.frame.case === "download") {
+      const value = frame.frame.value;
+      return { id, requestId, kind, serverMessage, path: value.path, approvalId: value.approvalId, authorization: authorizationOf(value) };
     }
     if (frame.frame.case === "exec") {
       const value = frame.frame.value;
@@ -494,8 +499,10 @@ export class UserComputerProvider implements UserComputerTransport {
           this.cancelledIds.add(q.requestId);
           this.backlog = this.backlog.filter(x => x.requestId !== q.requestId);
           // Official replies.drop(requestId) + submitAbort when the in-flight batch is all cancelled.
+          // D:178521–178526 drops old replies/aborts the cancelled submit BEFORE executor cancellation.
+          // Cancellation may synchronously enqueue its terminal: dropping afterwards would erase it.
+          if (typeof this.replies?.drop === 'function') this.replies.drop(id => id === q.requestId, id => this.cancelledIds.has(id));
           cancelRequest(q.requestId);
-          if (typeof this.replies?.drop === 'function') this.replies.drop(id => this.cancelledIds.has(id));
           for (const f of closings) if (!this.storeClosingFrame(f)) throw new Error("reserved closing reply not held");
           continue;
         }
@@ -704,6 +711,25 @@ export class UserComputerProvider implements UserComputerTransport {
   /** Test hook: wait for pending retire-approval writes. */
   async settleRetirements(): Promise<void> { await Promise.all([...this.retireJobs]); }
   private async handleQueued(q: Queued): Promise<void> {
+    if (q.kind === requestKinds.download) {
+      // D:135989–136009: same authorization as exec, but read-file description and file-error refusal.
+      const live = loadSettingsSync(), dataRoot = dataRootFromEnv();
+      const refusal = await downloadRefusal({
+        file: q.path ?? "", permission: live.permission, ceiling: live.settings.localToolPermissionCeiling,
+        serverAuthoritative: this.serverAuthoritative, accountScope: this.opts.accountScope,
+        approvalId: q.approvalId, authorization: q.authorization ?? { kind: "none" },
+        terminalsFolder: this.opts.hello.terminalsFolder,
+        approvalsPath: approvalsPathFor(dataRoot), retirementsPath: retirementsPathFor(dataRoot),
+      });
+      if (refusal !== undefined) { await this.emit({ kind: "file-error", requestId: q.requestId, error: refusal }); return; }
+      try {
+        const chunks = await prepareDownload(this.opts.root, q.path ?? "");
+        if (!(this.replies instanceof UcReplyLanes)) { chunks.close(); throw new Error("Attached file source requires UC reply lanes"); }
+        // Original non-exec branch has no post-authorization cancelled check (unlike exec).
+        this.replies.stream(q.requestId, chunks);
+      } catch (error) { await this.emit({ kind: "file-error", requestId: q.requestId, error: error instanceof Error ? error.message : String(error) }); }
+      return;
+    }
     if (q.kind !== requestKinds.exec) {
       // Frozen oracle dispatch maps unimplemented outer variants to an error.
       // Full variant-specific payloads remain a documented gap (not silent success).
@@ -713,7 +739,7 @@ export class UserComputerProvider implements UserComputerTransport {
       return;
     }
     // t117u: exec approval chain (src/uc/approvals.ts) — server flags only on a serverAuthoritative channel,
-    // local approvals file + retirements + 1h recordedAtMs expiry + Yce. Other request kinds stay unimplemented.
+    // local approvals file + retirements + 1h recordedAtMs expiry + Yce. Upload and other request kinds stay unimplemented.
     // Official re() (D:L179276–179288) calls N.getLocalToolPermission() → load() → readFileSync (L82881/L82271/pue)
     // synchronously inside startRequest, before its first await (v_.handle L135963 → withInflight L136032 →
     // handleExecRequest L136309–136318 have no earlier await). Same here: one synchronous read per request, so execs
@@ -754,7 +780,15 @@ export class UserComputerProvider implements UserComputerTransport {
     await dispatchExec({ root: this.opts.root, requestId: q.requestId,
       // Authorised once above (as official: no second permission gate inside the exec handlers).
       // Approval does not reach back: a later retire/revoke never stops an exec already running (official).
-      serverMessage: q.serverMessage, permission: "always", emit: this.emit });
+      serverMessage: q.serverMessage, permission: "always", pullOutput: true, emit: frame => {
+        if (this.replies instanceof UcReplyLanes) {
+          // Original UC enqueue is synchronous push + flush, not a Promise for Submit success.
+          this.replies.push([responseFrame(frame)]);
+          void this.replies.flush();
+          return;
+        }
+        return this.emit(frame); // Existing public async Emit/test-double contract.
+      } });
   }
 
   private async watchLoop(hello: UserComputerHello): Promise<void> {

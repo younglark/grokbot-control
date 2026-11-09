@@ -1,4 +1,5 @@
 import { trace } from "../trace";
+import type { FileSource } from "./file-source";
 /**
  * UC reply storage + flush, mirroring the original daemon (0.79.3, daemon.formatted.cjs):
  *  - `oee` (L177276–177400): per-request lanes in a Map, unbounded; take() fills one submit by rounds,
@@ -17,6 +18,8 @@ import { ExecClientControlMessage, ExecClientMessage } from "../generated/agent.
 import { HttpStatusError } from "../transport/replies";
 
 type Frame = GrokBotUserComputerResponseFrame;
+type Attached = { chunks: FileSource; seq: number; reading: boolean };
+export const UC_FILE_COPY_STOPPED = "Part of the file did not upload from the user's computer, so the copy stopped. Copy the file again.";
 export const UC_TAKE_MAX_FRAMES = 256;            // X7e
 export const UC_TAKE_MAX_BYTES = 8 * 1024 * 1024; // K_
 export const UC_TAKE_MAX_FILE_BYTES = 1024 * 1024; // j2
@@ -89,6 +92,7 @@ const defaultSleep = (ms: number, signal: AbortSignal) => new Promise<void>((res
 
 export class UcReplyLanes {
   private lanes = new Map<string, Frame[]>();
+  private streams = new Map<string, Attached>();
   private previousCarriedFile = false;
   private closingSince = new WeakMap<Frame, number>();
   private closingRetryAttempt = 0;
@@ -104,8 +108,34 @@ export class UcReplyLanes {
   waitForIdle(): Promise<void> {
     return !this.flushing_ ? Promise.resolve() : new Promise(resolve => this.idleWaiters.add(resolve));
   }
-  /** Current lanes have materialised frames only, not attached async streams (D:oee.dropStreams). */
-  dropStreams(): void { /* no attached stream objects in this implementation */ }
+  /** D:oee.dropStreams: drop only lanes STILL carrying a source, not completed terminal frames. */
+  dropStreams(): void { for (const id of this.streams.keys()) this.dropLane(id); }
+  private dropLane(id: string): void { this.streams.get(id)?.chunks.close(); this.streams.delete(id); this.lanes.delete(id); }
+  /** D:177287: replacement closes old source; late reads require the exact attachment identity. */
+  stream(id: string, chunks: FileSource): void {
+    this.laneOf(id);
+    this.streams.get(id)?.chunks.close();
+    this.streams.set(id, { chunks, seq: 0, reading: false });
+    this.readAhead(id);
+  }
+  private readAhead(id: string): void {
+    const stream = this.streams.get(id);
+    if (!stream || stream.reading || this.lanes.get(id)?.some(f => f.frame.case === "file")) return;
+    stream.reading = true;
+    void this.readNext(id, stream);
+  }
+  private async readNext(id: string, stream: Attached): Promise<void> {
+    // FileSource.read returns structured errors (Ype); this is not an arbitrary async iterable.
+    const result = await stream.chunks.read();
+    if (this.streams.get(id) !== stream) return;
+    stream.reading = false;
+    const frame = result.kind === "error"
+      ? new GrokBotUserComputerResponseFrame({ requestId: id, frame: { case: "fileError", value: { error: result.error } } })
+      : new GrokBotUserComputerResponseFrame({ requestId: id, frame: { case: "file", value: { data: result.data, seq: stream.seq++, last: result.last } } });
+    this.laneOf(id).push(frame);
+    if (result.kind === "error" || result.last) { this.streams.delete(id); stream.chunks.close(); }
+    void this.flush(); // original onReady -> flush, including the existing owner/closing gates.
+  }
   /** D:L178101–178134: one control submit per batch; failure drops that batch, no normal retry/backoff. */
   async drainOnClose(send: (frames: Frame[]) => Promise<void>): Promise<void> {
     this.flushing_ = true;
@@ -167,7 +197,8 @@ export class UcReplyLanes {
     for (let more = true; more;) { more = false; for (const [id, l] of this.lanes) if (one(id, l, false)) more = true; }
     if (out.length === 0 || !this.previousCarriedFile) for (const [id, l] of this.lanes) one(id, l, true);
     this.previousCarriedFile = fbytes > 0;
-    for (const id of touched) { const l = this.lanes.get(id); this.lanes.delete(id); if (l && l.length > 0) this.lanes.set(id, l); }
+    for (const id of touched) { const l = this.lanes.get(id); this.lanes.delete(id); if (l && (l.length > 0 || this.streams.has(id))) this.lanes.set(id, l); }
+    for (const id of this.lanes.keys()) this.readAhead(id);
     return out;
   }
   requeue(frames: Frame[]): void {
@@ -177,11 +208,11 @@ export class UcReplyLanes {
     for (const [id, fs] of by) { const l = this.lanes.get(id) ?? []; l.unshift(...fs); this.lanes.delete(id); front.set(id, l); }
     this.lanes = new Map([...front, ...this.lanes]);
   }
-  /** Official replies.drop(requestId) for every cancelled id, plus submitAbort when the in-flight batch is all cancelled. */
-  drop(isCancelled: (id: string) => boolean): number {
+  /** Drop selected lanes; the submit abort predicate may include previously cancelled requests (D:178521–178526). */
+  drop(isCancelled: (id: string) => boolean, abortIfCancelled: (id: string) => boolean = isCancelled): number {
     let n = 0;
-    for (const id of [...this.lanes.keys()]) if (isCancelled(id)) { n += this.lanes.get(id)!.length; this.lanes.delete(id); }
-    if (this.submittingFrames.length > 0 && this.submittingFrames.every(f => isCancelled(f.requestId))) this.submitAbort?.abort();
+    for (const id of [...this.lanes.keys()]) if (isCancelled(id)) { n += this.lanes.get(id)!.length; this.dropLane(id); }
+    if (this.submittingFrames.length > 0 && this.submittingFrames.every(f => abortIfCancelled(f.requestId))) this.submitAbort?.abort();
     return n;
   }
 
@@ -252,11 +283,11 @@ export class UcReplyLanes {
         }
       }
     }
-    const now = this.now(); const keep: Frame[] = []; let expired = 0;
+    const now = this.now(); const keep: Frame[] = []; const failedFiles = new Set<string>(); let expired = 0;
     for (const f of frames) {
       if (this.o.isCancelled(f.requestId)) continue;
       const budget = closingBudgetMs(f);
-      if (budget === undefined) continue;
+      if (budget === undefined) { if (f.frame.case === "file") failedFiles.add(f.requestId); continue; }
       const since = this.closingSince.get(f) ?? this.submittingSince;
       if (now - since >= budget) { expired++; continue; }
       this.closingSince.set(f, since); keep.push(f);
@@ -267,6 +298,11 @@ export class UcReplyLanes {
       ? `[user-computer-provider] dropping ${frames.length}-frame response batch after ${UC_SUBMIT_ATTEMPTS} failed submits: ${why}`
       : `[user-computer-provider] after ${UC_SUBMIT_ATTEMPTS} failed submits, keeping ${keep.length} of ${frames.length} response frames that close requests and dropping the rest${p}: ${why}`);
     this.requeue(keep);
+    // D:178742–178768: a lost non-replayable file chunk stops the source and replaces its lane.
+    for (const id of failedFiles) {
+      this.dropLane(id);
+      this.requeue([new GrokBotUserComputerResponseFrame({ requestId: id, frame: { case: "fileError", value: { error: UC_FILE_COPY_STOPPED } } })]);
+    }
     return keep.length;
   }
 

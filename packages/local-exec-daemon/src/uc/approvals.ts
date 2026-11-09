@@ -1,7 +1,7 @@
 /**
  * Exec approval chain — static port of local-exec-daemon 0.79.3 (daemon.formatted.cjs, D:).
  *
- * Scope (t117u): UserComputer `exec` only. Upload / download / discover-ai-tool / messages / local-tool,
+ * Scope: UserComputer `exec` and outer `download` (global read-file only). Upload / discover-ai-tool / messages / local-tool,
  * standing grants (subject actions) and send-mail spending are NOT implemented here.
  *
  * What this module does NOT do (no evidence in the daemon bundle, so nothing is invented):
@@ -183,7 +183,7 @@ export type ExecDecisionInput = {
 export type Verdict = { kind: "allow" } | { kind: "refused"; error: string } | { kind: "ask" };
 
 /**
- * D: Qce (L81473) restricted to exec. fUe only yields global actions, so the setting / subject
+ * D: Qce (L81473) restricted to exec + download. Their descriptions only yield global actions, so the setting / subject
  * branches (messagesEnabled, standing grants) are unreachable here; any non-global class is
  * treated as "ask" (fail closed, not extended).
  */
@@ -216,3 +216,9 @@ export async function execRefusal(t: ExecDecisionInput): Promise<string | undefi
 /** D: MDe / NDe (L79817–79822) under Zn(); here under the same data root as settings.json. */
 export function approvalsPathFor(dataRoot: string): string { return path.join(dataRoot, "local-tool-approvals.json"); }
 export function retirementsPathFor(dataRoot: string): string { return path.join(dataRoot, "local-tool-retirements.json"); }
+
+/** D:k6r 136400–136405. Download uses the same GLOBAL Qce/AUe chain, not a default allow. */
+export function describeDownload(file: string): Describes { return { action: "read-file", target: file, attachToResourcePath: file }; }
+export async function downloadRefusal(t: Omit<ExecDecisionInput, "describes"> & { file: string }): Promise<string | undefined> {
+  return execRefusal({ ...t, describes: describeDownload(t.file) });
+}

@@ -111,3 +111,54 @@ test('current credential rejection clears proven so close cannot submit; stale r
  const {p,submissions}=env(t);const old=p.channel;p.channel=channel('new');p.rejectCredential(old);assert.equal(p.proven,true);assert.equal(p.blocked,false);
  p.rejectCredential(p.channel);assert.equal(p.proven,false);assert.equal(p.blocked,true);p.replies.push([closeFrame('unsent')]);await p.stop();assert.equal(submissions.length,0);
 });
+
+
+test('cancel drops old lane before executor cancellation: a synchronous cancel terminal must survive',async t=>{
+ const {p}=env(t);p.proven=false;const previous=H.cancelRequest;const order=[];
+ H.cancelRequest=id=>{order.push('cancel');void p.emit({kind:'control',requestId:id,message:{streamClose:{id:7}}});return true};t.after(()=>H.cancelRequest=previous);
+ const drop=p.replies.drop.bind(p.replies);p.replies.drop=(...args)=>{order.push('drop');return drop(...args)};
+ p.replies.push([closeFrame('running')]);
+ p.client.pollGrokBotUserComputerRequests=async()=>({requests:[new pb.GrokBotUserComputerQueuedRequest({id:'q-cancel',frame:{requestId:'running',frame:{case:'cancel',value:{}}}})]});
+ await p.pollOnce();assert.deepEqual(order,['drop','cancel']);assert.deepEqual(p.pendingAcks,['q-cancel']);
+ const frames=p.replies.take();assert.equal(frames.length,1,'new cancel terminal is not the stale lane being dropped');
+ assert.deepEqual(JSON.parse(frames[0].frame.value.messageJson),{streamClose:{id:7}});
+});
+
+test('cancel ordering: in-flight cancelled submit is aborted before terminal enqueue; late terminal drains on close exactly once',async t=>{
+ const {p,submissions}=env(t),entered=defer();let inSignal;let aborted=false;const previous=H.cancelRequest;
+ p.replies=new UcReplyLanes({canFlush:()=>!p.closing,send:async(frames,signal)=>{inSignal=signal;entered.resolve();await new Promise((resolve,reject)=>signal.addEventListener('abort',()=>{aborted=true;reject(Error('cancelled synthetic submit'))},{once:true}))},reject:()=>{},isCancelled:id=>p.cancelledIds.has(id)});
+ p.replies.push([closeFrame('running')]);const flushing=p.replies.flush();await entered.promise;
+ H.cancelRequest=id=>{assert.equal(inSignal.aborted,true);p.replies.pauseForClose();void p.emit({kind:'control',requestId:id,message:{streamClose:{id:9}}});return true};t.after(()=>H.cancelRequest=previous);
+ p.client.pollGrokBotUserComputerRequests=async()=>({requests:[new pb.GrokBotUserComputerQueuedRequest({id:'q-cancel',frame:{requestId:'running',frame:{case:'cancel',value:{}}}})]});
+ await p.pollOnce();await flushing;assert.equal(aborted,true);await p.stop();
+ const frames=submissions.flatMap(s=>s.req.frames);assert.equal(frames.length,1);assert.deepEqual(JSON.parse(frames[0].frame.value.messageJson),{streamClose:{id:9}});
+});
+
+
+test('cancel B does not erase the retained terminal from previously cancelled A',async t=>{
+ const {p}=env(t);p.proven=false;const previous=H.cancelRequest;H.cancelRequest=id=>{void p.emit({kind:'control',requestId:id,message:{streamClose:{id:id==='A'?1:2}}});return true};t.after(()=>H.cancelRequest=previous);
+ p.client.pollGrokBotUserComputerRequests=async()=>({requests:['A','B'].map(id=>new pb.GrokBotUserComputerQueuedRequest({id:'cancel-'+id,frame:{requestId:id,frame:{case:'cancel',value:{}}}}))});
+ p.replies.push([closeFrame('A'),closeFrame('B')]);await p.pollOnce();
+ const frames=p.replies.take();assert.deepEqual(frames.map(f=>f.requestId),['A','B']);assert.deepEqual(frames.map(f=>JSON.parse(f.frame.value.messageJson)),[{streamClose:{id:1}},{streamClose:{id:2}}]);
+});
+
+test('mixed Submit only aborts once every submitted id is cancelled, without dropping earlier cancel terminals',async t=>{
+ const {p,submissions}=env(t),entered=defer();let signal;const previous=H.cancelRequest;const aborts=[];
+ p.replies=new UcReplyLanes({send:async(frames,s)=>{signal=s;entered.resolve();await new Promise((resolve,reject)=>s.addEventListener('abort',()=>reject(Error('synthetic cancel')),{once:true}))},reject:()=>{},isCancelled:id=>p.cancelledIds.has(id)});
+ p.replies.push([closeFrame('A'),closeFrame('B')]);const flushing=p.replies.flush();await entered.promise;
+ H.cancelRequest=id=>{aborts.push(signal.aborted);p.replies.pauseForClose();void p.emit({kind:'control',requestId:id,message:{streamClose:{id:5}}});return true};t.after(()=>H.cancelRequest=previous);
+ p.client.pollGrokBotUserComputerRequests=async()=>({requests:['A','B'].map(id=>new pb.GrokBotUserComputerQueuedRequest({id:'cancel-'+id,frame:{requestId:id,frame:{case:'cancel',value:{}}}}))});
+ await p.pollOnce();await flushing;assert.deepEqual(aborts,[false,true]);await p.stop();
+ assert.deepEqual(submissions.flatMap(s=>s.req.frames).map(f=>f.requestId),['A','B']);
+});
+
+
+test('UC pull consumer completes before pending Submit; stop/reentry preserves retry and drains new terminal once',async t=>{
+ const {p,root,submissions,withdraws}=env(t),entered=defer(),gate=defer();let attempts=0,signal;
+ p.replies=new UcReplyLanes({canFlush:()=>!p.closing&&!p.closed&&p.proven,send:async(frames,s)=>{attempts++;signal=s;if(attempts===1){entered.resolve();await gate.promise;throw Error('synthetic 503')}},sleep:async()=>{},reject:()=>{},isCancelled:id=>p.cancelledIds.has(id)});
+ const task=q('channel-running');task.serverMessage={lsArgs:{path:root}};p.backlog=[task];p.runBacklog();const work=[...p.activeJobs][0];await entered.promise;await work;
+ assert.equal(p.active.size,0,'consumer acknowledgement is not network receipt');assert.equal(attempts,1);assert.ok(p.replies.readyCount>=1);
+ const stop=p.stop({withdrawPresence:true});await tick();assert.equal(signal.aborted,false);assert.equal(p.closed,false);await p.stop();gate.resolve();await stop;
+ assert.equal(attempts,2,'normal in-flight submit retains its retry');assert.equal(withdraws.length,1);
+ const terminal=submissions.flatMap(s=>s.req.frames).filter(f=>f.frame.case==='control'&&JSON.parse(f.frame.value.messageJson).streamClose);assert.equal(terminal.length,1);
+});
