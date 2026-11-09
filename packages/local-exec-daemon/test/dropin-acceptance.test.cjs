@@ -98,7 +98,11 @@ test('drop-in acceptance: one realistic lifecycle of dist/index.js against synth
 
   // 6. UC requests: exec (local approval), download, upload, messages-op, localTool; heartbeat-triggered poll; ACKs.
   // The connected-triggered poll (D:178396) must land before the queue is filled, so the heartbeat gate is isolated.
-  await until(() => backend.log.some(x => x.kind === 'poll'), 5000, 'connected poll');
+  // t171: connected issues requestPoll and the per-Watch safety poll's leading tick back to back (D:178391–178395);
+  // the second lands as a coalesced re-poll (D:178432–178450). Wait for both, and let the second settle, before filling
+  // the queue, or it would drain the new items and race the heartbeat(0) snapshot below.
+  await until(() => backend.log.filter(x => x.kind === 'poll').length >= 2, 5000, 'connected poll burst');
+  await delay(300);
   const E = (sm, extra = {}) => ({ case: 'exec', value: new pb.GrokBotUserComputerExec({ serverMessageJson: JSON.stringify(sm), ...extra }) });
   backend.enqueue('q-exec', 'uc-exec-1', E({ id: 1, shellStreamArgs: { command: 'echo UC_LOCAL_APPROVED', workingDirectory: '', timeout: 5000 } }, { approvalId: 'ap-uc-exec', authorizedByApproval: true }));
   backend.enqueue('q-dl', 'uc-dl-1', { case: 'download', value: new pb.GrokBotUserComputerDownload({ path: 'probe.txt', approvalId: 'ap-uc-dl', authorizedByApproval: true }) });

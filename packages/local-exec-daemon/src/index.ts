@@ -11,10 +11,10 @@ import { loadConnection, writeConnection } from "./state/connection";
 import { BOX_IDLE_FOR_UC, BOX_NO_CONNECTION, SandLocalExecConnectionError, backendClientFromEnv, exchangeConnection, variantForNamespace } from "./state/connection-exchange";
 import { createDeviceTools } from "./uc/local-tools";
 import { createStandingSignals } from "./state/standing-signals";
-import { BoxProvider } from "./box/provider";
+import { BoxProvider, describeError } from "./box/provider";
 import { UserComputerProvider } from "./uc/provider";
 import { aiToolConfigDirsFromEnv } from "./uc/ai-tool-discovery";
-import { loadSealedCredential, pickUserComputerChannel } from "./uc/credential";
+import { loadSealedCredential } from "./uc/credential";
 import {
   generationFromEnv,
   loadLease,
@@ -29,21 +29,25 @@ import { scrubBootEnv } from "./bootstrap/boot-env";
 // removed from the env and applied process-wide (nke 79217); its fingerprint goes into discovery.
 // Same pass also drops SAND_LOCAL_EXEC_INHERITED_FDS (closing those fds, wDe D:79653), SAND_LOCAL_EXEC_FILE_KEY and
 // NODE_USE_SYSTEM_CA, in sqr's order (D:187196–187200).
-scrubBootEnv(process.env);
+const bootEnv = scrubBootEnv(process.env);
 const nodeProxy = applyNodeProxyEnv(process.env);
+
+class StandingAbort extends Error {}
 
 async function main(): Promise<void> {
   // D:187322–187325: CLAUDE_CONFIG_DIR / CODEX_HOME captured once at daemon start.
   const aiToolConfigDirs = aiToolConfigDirsFromEnv();
-  const handoff = await awaitHandoff(5000);
-  if (!handoff.ok) exitFatal();
+  // D:aqr = iqr() (187285) then cqr 187302–187303: a handoff without a computerId (timeout, disconnect, no channel)
+  // is fatal (YAe → `fatal: Error`); a bad key alone is not: the daemon serves with fileKeyBase64 null (plaintext files).
+  const handoff = await awaitHandoff(5000, bootEnv.preIpcFileKeyBase64);
+  if (handoff.computerId === undefined) exitFatal();
   // D:cqr 187314: eke(process.env, "desktop") runs right after the handoff; QPe may throw IsolatedDeploymentConfigError,
   // which the outer catch reports as `fatal: ${xt(e)}` and exit 1 (D:187341–187348).
   const client = backendClientFromEnv();
   // D:lgt p = l() (179176): startedAt is taken when the daemon body starts, after the handoff; servingAt m = p.
   const startedAt = Date.now();
 
-  const { key, computerId } = handoff.handoff;
+  const { key } = handoff; const computerId: string = handoff.computerId;
   const root = localRootFromEnv(); // raw, as wft → lgt root (D:187320)
   const { permission } = await loadSettings();
   const generation = generationFromEnv();
@@ -53,7 +57,8 @@ async function main(): Promise<void> {
   const rejectedScopes = new Set<string>();
   let inflightCount = 0;
   let box: BoxProvider | undefined;
-  let uc: UserComputerProvider | undefined;
+  // D:V 179246: one UC provider per account scope, with the serverAuthoritative value it was built for.
+  const ucProviders = new Map<string, { serverAuthoritative: boolean | undefined; provider: UserComputerProvider }>();
   let shuttingDown = false;
 
   // D:L179193–179239: pending/running coalesce requests; T tracks the running publication.
@@ -82,10 +87,13 @@ async function main(): Promise<void> {
             inflightCount,
             ...(generation !== undefined ? { generation } : {}),
             ...(nodeProxy === undefined ? {} : { proxyFingerprint: nodeProxy.fingerprint }),
-            ...(rejectedScopes.size === 0 ? {} : { rejectedAccountScopes: [...rejectedScopes] }),
+            ...(rejectedScopes.size === 0 ? {} : { rejectedAccountScopes: [...rejectedScopes].sort() }), // D:179215
           },
-          key,
-        ).catch(error => { written = false; lifecycleTrace("publish:error", { kind: error?.name }); });
+          key ?? undefined,
+        ).catch(error => {
+          written = false; lifecycleTrace("publish:error", { kind: error?.name });
+          console.error(`[local-exec-daemon] discovery publish failed (previous record stands): ${describeError(error)}`); // D:179220–179222
+        });
         if (written) lifecycleTrace("publish:done");
       }
     } finally {
@@ -125,13 +133,18 @@ async function main(): Promise<void> {
         lifecycleTrace("standing:begin");
         try {
           // D:Rt 179463: (await He(), await ot(), ut()) before Ve — backend-return marker, then network fingerprint.
-          await standingSignals.backendReturn(() => uc?.noteBackendReturn());
-          standingSignals.networkChange(() => uc?.noteNetworkChange());
-          await refreshUc();
-          await uc?.rehelloIfChanged();
+          await standingSignals.backendReturn(() => { for (const Z of ucProviders.values()) Z.provider.noteBackendReturn(); });
+          standingSignals.networkChange(() => { for (const Z of ucProviders.values()) Z.provider.noteNetworkChange(); });
+          let dropped: boolean;
+          try { dropped = await refreshUc(); }
+          catch (Y) { console.error(`[local-exec-daemon] standing re-hello check failed: ${describeError(Y)}`); dropped = false; throw new StandingAbort(); }
+          if (dropped) await publish(); // D:179425 Z && d && await C()
+          // D:179467–179476: every provider's rehelloIfChanged in parallel; failures are logged, not fatal.
+          for (const r of await Promise.allSettled([...ucProviders.values()].map(Z => Z.provider.rehelloIfChanged())))
+            if (r.status === "rejected") console.error(`[local-exec-daemon] standing re-hello check failed: ${describeError(r.reason)}`);
           // D:Rt 179478: y || (m = l(), d && await C()) — every completed standing tick moves servingAt.
           if (!shuttingDown) { servingAt = Date.now(); await publish(); }
-        } catch (error) { console.error("[user-computer-provider] standing re-hello check failed"); }
+        } catch (error) { if (!(error instanceof StandingAbort)) console.error(`[local-exec-daemon] standing re-hello check failed: ${describeError(error)}`); }
         lifecycleTrace("standing:end", { ucFollowUp, shuttingDown });
       } while (ucFollowUp && !shuttingDown);
     }).finally(() => {
@@ -141,6 +154,9 @@ async function main(): Promise<void> {
   };
 
   let ownershipTask: Promise<void> | undefined;
+  let ownershipStopped = false;
+  let lastOwnershipTickAt: number | undefined; // D:J 179495
+  let staleHeartbeatToleratedUntilMs: number | undefined; // D:K 179495
   let ownershipFollowUp = false;
   let ownershipTimer: NodeJS.Timeout | undefined;
 
@@ -150,12 +166,15 @@ async function main(): Promise<void> {
     lifecycleTrace("shutdown:begin", { signal });
     clearTimeout(ucRefreshTimer);
     clearTimeout(ownershipTimer);
-    logInfo(`received ${signal}, shutting down`);
+    // D:l$t 79742–79747 / IDe: reason text, then lgt.close under I7t (2 s, D:187191) and exit 0 either way.
+    const reasonText: Record<string, string> = { superseded: "superseded by the daemon the discovery record names", unsupervised: "desktop ownership lost", SIGTERM: "received SIGTERM", SIGINT: "received SIGINT" };
+    logInfo(`${reasonText[signal] ?? `received ${signal}`}, shutting down`);
+    setTimeout(() => { lifecycleTrace("shutdown:deadline"); process.exit(0); }, 2000);
     void (async () => {
       try {
         // Match official process-exit close: withdrawPresence:true (D:IDe L79748–79749).
-        lifecycleTrace("shutdown:close-begin", { uc: !!uc, box: !!box });
-        const ucClose = uc?.stop({ withdrawPresence: true });
+        lifecycleTrace("shutdown:close-begin", { uc: ucProviders.size > 0, box: !!box });
+        const ucClose = Promise.all([...ucProviders.values()].map(Z => Z.provider.stop({ withdrawPresence: true })));
         box?.beginShutdown();
         await shutdownShells();
         lifecycleTrace("shutdown:shells-done");
@@ -183,10 +202,11 @@ async function main(): Promise<void> {
 
   await publish();
 
-  const inflightByTransport = { box: 0, uc: 0 };
-  const onInflight = (transport: "box" | "uc", n: number) => {
-    inflightByTransport[transport] = n;
-    inflightCount = inflightByTransport.box + inflightByTransport.uc;
+  // D:ne/he 179296–179300: one counter per transport ("box", `server:${scope}`), summed.
+  const inflightByTransport = new Map<string, number>();
+  const onInflight = (transport: string, n: number) => {
+    inflightByTransport.set(transport, n);
+    inflightCount = [...inflightByTransport.values()].reduce((a, b) => a + b, 0);
     lifecycleTrace("inflight", { transport, n, inflightCount });
     void publish();
   };
@@ -197,13 +217,14 @@ async function main(): Promise<void> {
   const deviceTools = createDeviceTools({ rootDir: () => dataRootFromEnv(), log: m => console.error(`[local-exec-daemon] ${m}`) });
   /** D:Q 179250–179259: credential channels keyed by accountScope ?? (single → legacy:machineId). */
   const channelsByScope = (payload: Awaited<ReturnType<typeof loadSealedCredential>>) => {
-    const out = new Map<string, { serverAuthoritative?: boolean }>();
+    type Entry = NonNullable<NonNullable<typeof payload>["userComputer"]> & { backendUrl: string };
+    const out = new Map<string, Entry>();
     if (payload == null) return out;
     let list = payload.userComputers ?? [];
     if (list.length === 0 && payload.userComputer !== undefined) list = [payload.userComputer];
     for (const u of list) {
       const scope = u.accountScope ?? (list.length === 1 ? `legacy:${u.machineId}` : undefined);
-      if (scope !== undefined) out.set(scope, u);
+      if (scope !== undefined) out.set(scope, { ...u, accountScope: scope, backendUrl: payload.backendUrl });
     }
     return out;
   };
@@ -251,72 +272,71 @@ async function main(): Promise<void> {
   };
 
   /**
-   * One UC standing/credential pass — official Ve body (D:L179343–179424):
-   * await ae(); SA mismatch → await close() without withdraw; if (y) return; construct; V.set; ye.start();
-   * discovery publish happens after Ve (D:L179425–179427 / Rt L179479), never between set and start.
+   * One UC standing/credential pass — official Ve (D:179343–179424). One provider per account scope (V, D:179246):
+   * scopes gone from the credential close (without withdrawing) and leave the rejected set; a scope whose
+   * `serverAuthoritative` value changed (raw `===`, D:179352) closes and is rebuilt; `if (y) return` before every
+   * construct (D:179356); new scopes get a provider, `V.set` then `start()` with no await between (D:179423).
+   * Returns whether a rejected scope was dropped (`Z && d && await C()`, D:179425).
    */
-  const refreshUc = async () => {
-    if (shuttingDown) return;
-    const payload = await loadSealedCredential(key);
-    if (shuttingDown) return;
-    const ch = payload && pickUserComputerChannel(payload);
-    if (!ch) {
-      const old = uc; uc = undefined;
-      await old?.stop(); // D:L179346–179348: removed scope closes without withdrawing
-      return;
+  const refreshUc = async (): Promise<boolean> => {
+    if (shuttingDown) return false;
+    const Y = channelsByScope(await loadSealedCredential(key));
+    let Z = false;
+    for (const [scope, W] of [...ucProviders]) {
+      if (Y.has(scope)) continue;
+      ucProviders.delete(scope);
+      Z = rejectedScopes.delete(scope) || Z;
+      await W.provider.stop(); // D:179346–179348
     }
-    if (uc) {
-      // D:L179352: same mode keeps provider; rehello/runLoop resolve the current scope dynamically.
-      if (uc.serverAuthoritative === (ch.serverAuthoritative === true)) return;
-      const old = uc;
-      uc = undefined;
-      // SA flip: provider.close() with default withdrawPresence undefined/false (D:L179354).
-      await old.stop();
+    for (const [scope, U] of Y) {
+      const W = ucProviders.get(scope);
+      if (W !== undefined) {
+        if (W.serverAuthoritative === U.serverAuthoritative) continue;
+        ucProviders.delete(scope);
+        await W.provider.stop(); // SA flip: close() with withdrawPresence unset (D:179354)
+      }
+      if (shuttingDown) return Z;
+      const provider = new UserComputerProvider({
+        backendUrl: U.backendUrl,
+        machineId: U.machineId || computerId,
+        credential: U.credential,
+        accountScope: scope,
+        resolveChannel: async () => {
+          // D:179387–179395: resolve this scope afresh; null when it is gone.
+          const pe = channelsByScope(await loadSealedCredential(key)).get(scope);
+          return pe === undefined ? null : { backendUrl: pe.backendUrl, credential: pe.credential, machineId: pe.machineId };
+        },
+        root,
+        permission,
+        aiToolConfigDirs,
+        hello: {
+          // D:v_ 135916–135918: computerLabel unset → hostname().trim() || "this computer".
+          label: os.hostname().trim() || "this computer",
+          localRoot: root,
+          terminalsFolder: path.join(root, "terminals"),
+          standing: permission === "always" ? "always" : permission === "never" ? "never" : "ask",
+          variant: providerVariant,
+          serverAuthoritative: U.serverAuthoritative === true,
+          // capabilities are built by the provider on every Watch (D:hello 178137–178175).
+        },
+        onInflight: n => onInflight(`server:${scope}`, n), // D:he 179296–179300
+        deviceTools,
+        client,
+        // D:onLoopEvent 179404–179420
+        onLoopEvent: ev => {
+          let changed = false;
+          if (ev.kind === "connected") { changed = rejectedScopes.delete(scope); box?.redial(); }
+          else if (ev.kind === "disconnected" && ev.reason === "unauthorized") { changed = !rejectedScopes.has(scope); rejectedScopes.add(scope); box?.wakeFromReconnectBackoff(); }
+          else if (ev.kind === "channel-missing") box?.wakeFromReconnectBackoff();
+          else if (ev.kind === "renewed") console.error(`[local-exec-daemon] user-computer watch renewed on a new connection after ${ev.cause === "silent" ? "15 s of silence" : "a network change"}`);
+          else if (ev.kind === "presence-withdraw-failed") console.error(`[local-exec-daemon] user-computer presence withdraw failed: ${describeError(ev.error)}`);
+          if (changed) void publish();
+        },
+      });
+      ucProviders.set(scope, { serverAuthoritative: U.serverAuthoritative, provider });
+      void provider.start().catch(() => console.error("[user-computer-provider] provider lifecycle failed"));
     }
-    // Official: after await ae() / optional close, always `if (y) return` before construct (D:L179356).
-    if (shuttingDown) return;
-    const provider = new UserComputerProvider({
-      backendUrl: ch.backendUrl,
-      machineId: ch.machineId || computerId,
-      credential: ch.credential,
-      accountScope: ch.accountScope,
-      resolveChannel: async () => {
-        // D:L179387–179395: resolve the provider's scope afresh, without changing its fixed SA mode.
-        const latest = await loadSealedCredential(key);
-        const channels = latest?.userComputers?.length ? latest.userComputers : latest?.userComputer ? [latest.userComputer] : [];
-        const scope = ch.accountScope ?? `legacy:${ch.machineId}`;
-        const live = channels.find(c => (c.accountScope ?? (channels.length === 1 ? `legacy:${c.machineId}` : undefined)) === scope);
-        return live && latest ? { backendUrl: latest.backendUrl, machineId: live.machineId, credential: live.credential } : null;
-      },
-      root,
-      permission,
-      aiToolConfigDirs,
-      hello: {
-        label: os.hostname() || "local-exec-daemon",
-        localRoot: root,
-        terminalsFolder: path.join(root, "terminals"),
-        standing: permission === "always" ? "always" : permission === "never" ? "never" : "ask",
-        variant: providerVariant,
-        serverAuthoritative: ch.serverAuthoritative ?? false,
-        // capabilities are built by the provider on every Watch (D:hello 178137–178175).
-      },
-      onInflight: n => onInflight("uc", n),
-      deviceTools,
-      client,
-      // D:onLoopEvent 179404–179412
-      onLoopEvent: ev => {
-        const scope = ch.accountScope ?? `legacy:${ch.machineId}`;
-        let changed = false;
-        if (ev.kind === "connected") { changed = rejectedScopes.delete(scope); box?.redial(); }
-        else if (ev.kind === "disconnected" && ev.reason === "unauthorized") { changed = !rejectedScopes.has(scope); rejectedScopes.add(scope); box?.wakeFromReconnectBackoff(); }
-        else if (ev.kind === "channel-missing") box?.wakeFromReconnectBackoff();
-        else if (ev.kind === "renewed") console.error(`[local-exec-daemon] user-computer watch renewed on a new connection after ${ev.cause === "silent" ? "15 s of silence" : "a network change"}`);
-        if (changed) void publish();
-      },
-    });
-    // Official: (V.set(...), ye.start()) with no await between (D:L179423).
-    uc = provider;
-    void provider.start().catch(() => console.error("[user-computer-provider] provider lifecycle failed"));
+    return Z;
   };
 
   // Ownership tick: supervisor/lease + discovery PID superseded (official FDe/Jae/hce).
@@ -326,8 +346,15 @@ async function main(): Promise<void> {
     lifecycleTrace("ownership:begin");
     const supervised = await isSupervised();
     const lease = await loadLease();
-    const hb = await readJsonIfExists<{ at: number }>(path.join(dataRootFromEnv(), "local-exec-supervisor.json"));
-    const staleFor = Date.now() - (hb?.at ?? startedAt) - 90_000;
+    // D:pce 81000 + $Ft 80881: a missing/invalid heartbeat ({pid:int>0, at:number}) reads as VFt {pid:0, at:0}.
+    const raw = await readJsonIfExists<{ pid?: unknown; at?: unknown }>(path.join(dataRootFromEnv(), "local-exec-supervisor.json"));
+    const hbAt = raw != null && Number.isInteger(raw.pid) && (raw.pid as number) > 0 && typeof raw.at === "number" ? raw.at : 0;
+    const ue = Date.now();
+    // D:179497: a tick gap longer than ITe (3 × vre = 30 s, e.g. a system sleep) tolerates a stale heartbeat for
+    // Gy (90 s) from now (FDe staleHeartbeatToleratedUntilMs, D:79889–79892).
+    if (lastOwnershipTickAt !== undefined && ue - lastOwnershipTickAt > 30_000) staleHeartbeatToleratedUntilMs = ue + 90_000;
+    lastOwnershipTickAt = ue;
+    const staleFor = ue - hbAt - 90_000;
     const disc = await loadDiscovery();
     if (disc && disc.pid !== process.pid && pidAlive(disc.pid)) {
       supersededSinceMs ??= Date.now();
@@ -337,7 +364,7 @@ async function main(): Promise<void> {
     }
     const supersededForMs = supersededSinceMs == null ? null : Date.now() - supersededSinceMs;
     const decision = ownershipDecision({
-        supervisedFresh: supervised,
+        supervisedFresh: supervised || (staleHeartbeatToleratedUntilMs !== undefined && Date.now() < staleHeartbeatToleratedUntilMs),
         lease,
         inflightCount,
         supervisorStaleForMs: staleFor,
@@ -362,22 +389,24 @@ async function main(): Promise<void> {
         await ownershipTick();
       } while (ownershipFollowUp && !shuttingDown);
     }).catch(error => {
+      // D:yre 78466–78470/78528–78532: a failed tick with no retry policy stops the ownership cadence (reported as
+      // "tick-failed" telemetry); the daemon keeps serving.
       lifecycleTrace("ownership:error", { kind: error?.name });
-      shutdown("ownership-state-error");
+      ownershipStopped = true;
     }).finally(() => {
       ownershipTask = undefined;
-      if (!shuttingDown) {
+      if (!shuttingDown && !ownershipStopped) {
         ownershipTimer = setTimeout(requestOwnershipTick, 10_000);
         ownershipTimer.unref();
       }
     });
   };
 
-  for (let i = 0; i < 50 && !box && !uc && !shuttingDown; i++) {
+  for (let i = 0; i < 50 && !box && ucProviders.size === 0 && !shuttingDown; i++) {
     await tryStartBox();
     requestUcRefresh();
     await ucRefresh;
-    if (!box && !uc) await delay(100);
+    if (!box && ucProviders.size === 0) await delay(100);
   }
 
   // Box retry keeps its existing cadence. UC standing has an independent completion-anchored 2s timer.

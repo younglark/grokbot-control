@@ -23,16 +23,18 @@ plain-HTTP 的 `/sand-box/local-exec-connection`。凭据、HOME、数据目录�
 - Electron：`DROPIN_ELECTRON=<npm 公开 electron 二进制>` 才跑；有 `xvfb-run` 时额外跑 `utilityProcess.fork`。**从不使用 App 自带的 electron。**
 - 证据写到 `DROPIN_EVIDENCE_DIR`：netns.json、box-heartbeat.json、discover-{uc,box}.json、mb-*.json、electron-headers.json、node-proxy.json。t168 证据在 `/tmp/exec-t168-evidence/{dev1,final}`。
 
-## 汇总（t169 更新）
+## 汇总（t171 更新）
 
 | 类别 | 数 |
 |---|---|
 | 一致 | 41 |
-| 差异·破坏替换（已修） | 6（F1 t165、F2 t165、F3 t166、F4 t168、F5 t168、F6 t169） |
+| 差异·破坏替换（已修） | 7（F1 t165、F2 t165、F3 t166、F4 t168、F5 t168、F6 t169、F7 t171） |
 | 差异·可观测但无害 | 0 |
-| 差异·仅内部（App 下不可达，未修） | 1（#48） |
+| 差异·仅内部（App 下不可达，未修） | 0 |
 | Linux 不可达 | 2 |
 | 未验证 | 0 |
+
+矩阵之外的剩余差异（安全轮询生命周期、outageLedger、多账号、ownership 容忍、日志文本等）逐项根因见 `remaining-diffs.md`（t171）。
 
 ## 逐步对照
 
@@ -85,7 +87,7 @@ plain-HTTP 的 `/sand-box/local-exec-connection`。凭据、HOME、数据目录�
 | 45 | Box SSE GET 的实现 | 全局 fetch（D:137396–137402）：`fetch(baseUrl+RJe,{headers:cmt({accept:"text/event-stream"},p),signal})`，默认 redirect follow；`!m.ok \|\| !Owr(m)` → j5e `local-exec requests stream failed: ${status}`（Owr D:137205）；`o.body.getReader()` + `TextDecoder` `{stream:true}` 分帧（D:137441–137471） | **t168 时**：用 `http.request`，缺 undici 默认头、只认 200、不跟随重定向、经代理时 http 目标用绝对 URI。**t169 修复后**：改为全局 fetch，线上头为 connection、accept、(token)、authorization、accept-language: *、sec-fetch-mode: cors、user-agent: node、accept-encoding（与 Box POST 同一 undici 栈）；203 视为连接成功；307 被跟随；503 → 失败并 1 s 后重试；跨 chunk 的多字节 UTF-8 正确；经 F4 代理时 Box GET 也走 CONNECT | 差异→已修（F6） |
 | 46 | isolated 部署的出站拒绝 | daemon 中 QPe（D:79103–79130）构造 `{backendUrl, refuses}`，但整个 daemon bundle 里 `refuses` 只有定义（D:79125），没有任何调用；`isolated deployment refused` 文本只在 App main-core 的 Ij/session 守卫里出现 | 我们只移植了 QPe 的校验与 backendUrl（mb、exchange 已 e2e 验证），不做出站拒绝——与 daemon 原版相同（静态核实） | 一致 |
 | 47 | 无 IPC 时的 env 文件密钥 | sqr 读取 SAND_LOCAL_EXEC_FILE_KEY（D:187198、187204）；iqr 在无 parentPort 且 `process.channel == null` 时返回 `{fileKeyBase64: Ly.preIpcFileKeyBase64}`，**不带 computerId**（D:187256–187257）→ cqr 抛 YAe `missing its machine id`（D:187302–187303）→ `fatal: Error`（xt D:78680，exit 1） | 我们无通道时直接 `fatal: Error` exit 1；env 变量已由 F5 删除。可观测行为相同（静态核实）；0.79.3 App 也从不设置该变量 | 一致 |
-| 48 | handoff 消息的容错 | Uae（D:79679–79687）：type 不对的消息被忽略、继续等待；computerId 经 Lae trim（≤127）；key 非 32 字节时 key=null 但仍以 null key 服务 | 我们：第一条消息不合法就 fatal；computerId 不 trim；坏 key 直接 fatal。App 两条启动路径都只发一条合法 handoff，因此 App 下不可达 | 仅内部（未修） |
+| 48 | handoff 消息的容错 | Uae（D:79679–79687）：type 不对的消息被忽略、继续等待；computerId 经 Lae trim（≤127）；key 非 32 字节时 key=null 但仍以 null key 服务（明文读文件、省略 filesKeyId，lgt D:179177）；IPC disconnect/5 s 超时 → key=null（iqr D:187232–187283） | **修复前**：第一条消息不合法就 fatal；computerId 不 trim；坏 key 直接 fatal。**修复后**（t171）：与 iqr/Uae/oqr 一致，测试 `test/t171-remaining-diffs.test.cjs` | 有差异 → 已修（F7） |
 
 注：x9 会经过 `oa(...).toJson()`，所以线上 throw 帧是 `{throw:{error}}`，`id:0` 被省略。我们的 Box 输出与之一致，见 t165-dropin-fixes 测试。
 
@@ -120,3 +122,4 @@ plain-HTTP 的 `/sand-box/local-exec-connection`。凭据、HOME、数据目录�
 - **F5**（t168）`src/bootstrap/boot-env.ts`（新）+ `src/index.ts`：sqr 的 env 清理与继承 fd 关闭。依据 D:78805–78806、D:79641–79658、D:187194–187210。
 - 测试：`test/t168-node-proxy.test.cjs`，共 5 项；e2e 见 dropin-extra 的 SAND_NODE_PROXY_ENV 用例。
 - **F6**（t169）`src/box/provider.ts`：Box SSE GET 由 `http.request` 改为全局 `fetch`，状态判定、重定向、默认头、TextDecoder 分帧与 streamRequests 一致；其余不变。依据 D:137186、137205、137396–137402、137441–137471。测试 `test/t169-box-sse-fetch.test.cjs`，共 5 项。
+- **F7**（t171）`src/bootstrap/handoff.ts` + `src/bootstrap/boot-env.ts` + `src/index.ts`：handoff 改为 iqr/Uae/oqr 语义（忽略非法消息、trim computerId、坏 key→null key、IPC disconnect/超时→null key、finally 断开 IPC）。依据 D:79662–79687、D:187212–187303。其余 t171 修复见 `remaining-diffs.md`。

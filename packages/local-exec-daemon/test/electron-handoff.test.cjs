@@ -20,6 +20,7 @@ describe('Electron parentPort handoff (simulated)', () => {
       const ee = new EventEmitter();
       process.parentPort = {
         once(ev, cb) { ee.once(ev, cb); },
+        on(ev, cb) { ee.on(ev, cb); },
         emit(ev, data) { ee.emit(ev, data); },
       };
       // Prevent Node IPC path
@@ -36,8 +37,8 @@ describe('Electron parentPort handoff (simulated)', () => {
           }});
         }, 50);
         const r = await p;
-        if (!r.ok) { console.error(JSON.stringify(r)); process.exit(2); }
-        console.log(JSON.stringify({ ok: true, computerId: r.handoff.computerId }));
+        if (r.computerId === undefined || r.key === null) { console.error(JSON.stringify(r)); process.exit(2); }
+        console.log(JSON.stringify({ ok: true, computerId: r.computerId }));
       })().catch((e) => { console.error(e); process.exit(1); });
     `;
     const child = cp.spawn(process.execPath, ['-e', script], { stdio: ['ignore', 'pipe', 'pipe'] });

@@ -138,7 +138,9 @@ test('network-change (D:178295–178313, 178273–178276): Watch ends "network-c
  p.noteNetworkChange();
  await until(()=>events.filter(e=>e.kind==='connected').length===2);
  assert.deepEqual(events.map(e=>e.kind+':'+(e.reason??e.cause??'')),['connected:','disconnected:network-change','renewed:network-change','connected:']);
- assert.equal(made.length,2,'renew → new client');assert.equal(ft.pending(30000).length,1);assert.ok(ft.pending(30000)[0].unrefd);
+ assert.equal(made.length,2,'renew → new client');
+ // t171: [0] is the 30 s network-renewal cooldown; [1] is the second Watch's own safety poll (S9r, D:178393; the first Watch's was disposed, D:178418).
+ assert.equal(ft.pending(30000).length,2);assert.ok(ft.pending(30000)[0].unrefd);
  p.noteNetworkChange();await delay(30);assert.equal(events.filter(e=>e.kind==='connected').length,2,'held: deferred, Watch not aborted');
  ft.pending(30000)[0].fire();
  await until(()=>events.filter(e=>e.kind==='disconnected').length===2);assert.equal(events.filter(e=>e.reason==='network-change').length,2,'deferred change replayed after the cooldown');
@@ -173,7 +175,8 @@ test('heartbeat polls only when pendingRequestCount > 0 (D:178400); connected/no
  const root=dir(t);const p=new UserComputerProvider({backendUrl:'http://127.0.0.1:1',machineId:'m',credential:'c',root,permission:'ask',client:X.backendClientFromEnv({},'linux'),sidecar:()=>undefined,hello:hello(root)});
  p.channel={backendUrl:'http://127.0.0.1:1',machineId:'m',credential:'c'};let polls=0;p.pollOnce=async()=>{polls++};
  p.client=scripted([],[['connected',{case:'heartbeat',value:{pendingRequestCount:0}},{case:'heartbeat',value:{pendingRequestCount:2}},{case:'notify',value:{}}]]);
- assert.equal(await p.watchLoop(H),'lifetime');assert.equal(polls,3);
+ // t171: connected → requestPoll + the safety poll's leading tick (D:178391–178395) = 2, heartbeat(2) = 1, notify = 1.
+ assert.equal(await p.watchLoop(H),'lifetime');assert.equal(polls,4);
 });
 
 test('UC transport has no 8 MiB read cap (L1t sets none; connect default 0xFFFFFFFF, D:174740–174748): a 9 MiB Poll response decodes',{timeout:15000},async t=>{

@@ -1,3 +1,4 @@
+import { createOutageLedger, type OutageLedger } from "./outage-ledger";
 import { trace } from "../trace";
 import { loadSettings, loadSettingsSync } from "../settings";
 import { HttpStatusError, type ReplyQueue } from "../transport/replies";
@@ -11,7 +12,7 @@ import { createConnectTransport } from "@connectrpc/connect-node";
 import * as http from "node:http";
 import * as https from "node:https";
 import { backendClientFromEnv, clientHeaders, type BackendClient } from "../state/connection-exchange";
-import { describeError } from "../box/provider";
+import { DeadlineExceededError, describeError } from "../box/provider";
 /** D:s9r 177840 */
 export const UC_AGENT_TIMEOUT_MS = 5_000;
 /** D:e9r / t9r 177836–177837 */
@@ -83,7 +84,10 @@ export type UcProviderOptions = {
   /** D:lgt q = t.deviceTools ?? Ppt({log: _c}) (179247), shared by every UC provider; default: Linux Ppt. */
   deviceTools?: DeviceTools;
   /** D:onLoopEvent (179404): connected / disconnected{reason} / channel-missing. */
-  onLoopEvent?: (e: { kind: "connected" } | { kind: "disconnected"; reason: string } | { kind: "channel-missing" } | { kind: "renewed"; cause: string }) => void;
+  onLoopEvent?: (e: { kind: "connected" } | { kind: "disconnected"; reason: string } | { kind: "channel-missing" } | { kind: "renewed"; cause: string }
+    | { kind: "presence-withdraw-failed"; error: unknown }) => void;
+  /** D:177908 `this.outageLedger = Y1t(e.outageLedger ?? Z1t())`. */
+  outageLedger?: OutageLedger;
 };
 
 const requestKinds = Object.fromEntries(GrokBotUserComputerRequestFrame.fields.list().map(f => [f.localName, f.no]));
@@ -373,7 +377,7 @@ export class UserComputerProvider implements UserComputerTransport {
   private active = new Set<string>();
   private activeJobs = new Set<Promise<void>>();
   private pollAgain = false;
-  private pollTimer?: NodeJS.Timeout;
+  private loopRunning = false;
   private keepAliveTimer?: NodeJS.Timeout;
   /** Official keepAliveDueAt / cancelledIds / keepAlivePausedUntil / proven (Watch `connected` seen). */
   readonly keepAliveDueAt = new Map<string, number>();
@@ -402,7 +406,11 @@ export class UserComputerProvider implements UserComputerTransport {
 
   private client: Client<typeof GrokBotService>;
   private readonly aiToolConfigDirs: AiToolConfigDirs;
+  /** D:177908 outage ledger (Z1t D:177641–177830), wrapped fault-contained (Y1t). */
+  private readonly outageLedger: OutageLedger;
+  private lastWatchError: unknown;
   constructor(private readonly opts: UcProviderOptions) {
+    this.outageLedger = opts.outageLedger ?? createOutageLedger();
     this.aiToolConfigDirs = opts.aiToolConfigDirs ?? aiToolConfigDirsFromEnv();
     this.client = this.makeClient(opts.backendUrl);
   }
@@ -471,7 +479,8 @@ export class UserComputerProvider implements UserComputerTransport {
     // to the 500 ms keepalive tick: instrumented offline runs showed ours' tick timers firing earlier
     // (mean +0.30 ms vs official +0.47…0.57 ms per tick), so the 6th tick after a heard keepalive
     // (due exactly +3000 ms) sometimes missed by <1 ms and slipped one tick (+500 ms).
-    this.pollTimer = setInterval(() => { void this.pollOnce().catch(() => undefined); }, UC_SAFETY_POLL_MS);
+    // The 30 s safety poll is per connected Watch (startSafetyPoll), not provider-lifetime (D:178393/178418).
+    this.loopRunning = true;
     // Official keepAliveTick (~500ms) runs superviseBacklog then sendKeepAlives.
     // Official hc/yre tick is serial: the next tick is scheduled UC_KEEPALIVE_INTERVAL_MS after the
     // previous tick (including its keepalive submit) completes, not on a fixed grid.
@@ -486,10 +495,11 @@ export class UserComputerProvider implements UserComputerTransport {
     while (!this.closed && !this.watchStopped) {
       let liveChannel: ResolvedUcChannel | null = null;
       try { liveChannel = await this.resolveChannel(); }
-      catch { console.error("[user-computer-provider] channel resolve failed"); }
+      catch (i) { console.error(`[user-computer-provider] channel resolve failed: ${describeError(i)}`); } // D:178229–178232
       if (liveChannel === null) {
         this.channel = null; this.proven = false; this.abandonWork();
         this.opts.onLoopEvent?.({ kind: "channel-missing" });
+        this.outageLedger.channelMissing(); // D:178239
         await this.loopSleep(UC_CHANNEL_RETRY_MS); // D:178241 sleep(channelRetry, 1): Q1t = 10 s, not woken by backend return
         continue;
       }
@@ -507,6 +517,7 @@ export class UserComputerProvider implements UserComputerTransport {
       const reason = await this.watchLoop(hello, () => { e = 1; this.backendReturn.noteAnswered(); });
       if (reason === "stall" || reason === "silent") this.backendReturn.noteSilence(); // D:178259
       this.opts.onLoopEvent?.({ kind: "disconnected", reason });
+      this.outageLedger.ended(reason, this.lastWatchError); // D:178261
       if (this.closed || this.watchStopped) break;
       // D:178267–178286 per-reason branches.
       r = reason !== "silent" ? 0 : (this.watchHeardAfterConnected ? 1 : r + 1);
@@ -528,7 +539,6 @@ export class UserComputerProvider implements UserComputerTransport {
       await this.sleepUnlessBackendReturns(Math.min(UC_RECONNECT_MAX_MS, UC_RECONNECT_INITIAL_MS * 2 ** (e - 1))); // reconnectBackoff, no jitter
       e += 1;
     }
-    clearInterval(this.pollTimer);
     clearTimeout(this.keepAliveTimer);
   }
 
@@ -588,7 +598,7 @@ export class UserComputerProvider implements UserComputerTransport {
   }
 
   beginShutdown(): void {
-    this.closed = true; clearInterval(this.pollTimer); clearTimeout(this.keepAliveTimer); this.abortController?.abort(); this.loopWake.abort(); this.networkRenewalHold?.dispose();
+    this.closed = true; clearTimeout(this.keepAliveTimer); this.abortController?.abort(); this.loopWake.abort(); this.networkRenewalHold?.dispose();
   }
   /** D:L178009–178025. Reentrant close returns immediately; it does not join the first close. */
   async stop(options: { withdrawPresence?: boolean } = {}): Promise<void> {
@@ -597,9 +607,9 @@ export class UserComputerProvider implements UserComputerTransport {
     this.stopped = true; // existing pending-approval guard; do not spawn after close starts
     const withdraw = options.withdrawPresence === true ? this.stopWatchingAndWithdraw() : Promise.resolve();
     clearTimeout(this.keepAliveTimer);
-    clearInterval(this.pollTimer);
     if (this.replies instanceof UcReplyLanes) this.replies.pauseForClose();
     this.abandonWork();
+    this.outageLedger.close(); // D:178018
     if (this.pollBusy) await this.awaitSettledOnClose("the in-flight poll", done => { this.onPollIdle = done; });
     this.onPollIdle = undefined;
     if (this.active.size > 0) await this.awaitSettledOnClose("in-flight requests", done => { this.onInflightDrained = done; });
@@ -617,13 +627,20 @@ export class UserComputerProvider implements UserComputerTransport {
     this.abortController?.abort(); this.loopWake.abort();
     const ch = this.channel;
     if (!ch) return;
+    // D:178031–178049: withdrawDeadline (g9r 750 ms, Gi → qi on expiry); a failure is reported as the
+    // `presence-withdraw-failed` loop event, which lgt logs (D:179415–179419).
+    const ac = new AbortController();
+    let timer: NodeJS.Timeout | undefined;
+    const deadline = new Promise<never>((_, rej) => {
+      timer = setTimeout(() => { const e = new DeadlineExceededError("user-computer-presence-withdraw"); rej(e); ac.abort(e); }, 750);
+    });
     try {
-      await this.client.withdrawGrokBotUserComputerPresence({
+      await Promise.race([this.client.withdrawGrokBotUserComputerPresence({
         machineId: ch.machineId, credential: ch.credential, presenceToken: this.presenceToken,
-      }, { timeoutMs: 750 }); // g9r
-    } catch { /* original reports failure but close still completes */
-      console.error("[user-computer-provider] presence withdraw failed");
-    }
+      }, { signal: ac.signal }), deadline]);
+    } catch (n) {
+      this.opts.onLoopEvent?.({ kind: "presence-withdraw-failed", error: n });
+    } finally { clearTimeout(timer); }
   }
 
   private abandonWork(): void {
@@ -638,7 +655,8 @@ export class UserComputerProvider implements UserComputerTransport {
     let timer: NodeJS.Timeout | undefined;
     await new Promise<void>(resolve => {
       register(resolve);
-      timer = setTimeout(() => { console.error(`[user-computer-provider] close gave up waiting for ${label}`); resolve(); }, 10_000); // ok
+      // D:awaitSettledOnClose 178081–178099: controlDeadline (ok = 10 s) → qi → `…: ${xt(qi)}`.
+      timer = setTimeout(() => { console.error(`[user-computer-provider] close gave up waiting for ${label}: ${describeError(new DeadlineExceededError("user-computer-control"))}`); resolve(); }, 10_000);
     });
     clearTimeout(timer);
   }
@@ -786,9 +804,10 @@ export class UserComputerProvider implements UserComputerTransport {
       if (this.closeDrained) void this.drainOnClose();
       // Official pollOnce loops at once while acks are pending or the page was full
       // (D:L178459–178557), so a burst (e.g. 64 cancels) is drained in back-to-back polls, not one
-      // page per safety-poll tick. Only once the provider loop is running (pollTimer).
-      const drain = polled && this.pollTimer !== undefined && !this.closed && !this.closing && this.pendingAcks.length > 0;
-      if (!this.closing && (this.pollAgain || drain)) { this.pollAgain = false; setTimeout(() => void this.pollOnce().catch(() => undefined), drain ? 0 : 25); }
+      // page per safety-poll tick. Only once the provider loop is running.
+      const drain = polled && this.loopRunning && !this.closed && !this.closing && this.pendingAcks.length > 0;
+      // D:requestPoll 178432–178450: a poll requested while one runs is issued as soon as it completes.
+      if (!this.closing && (this.pollAgain || drain)) { this.pollAgain = false; setTimeout(() => void this.pollOnce().catch(() => undefined), 0); }
     }
   }
   /**
@@ -1204,8 +1223,10 @@ export class UserComputerProvider implements UserComputerTransport {
     this.opts.onLoopEvent?.({ kind: "renewed", cause });
   }
   private async watchLoop(hello: UserComputerHello, onConnected?: () => void): Promise<string> {
+    this.lastWatchError = undefined;
     try { return await this.watchOnce(hello, onConnected); }
     catch (error) {
+      this.lastWatchError = error; // D:178250 o = i, handed to outageLedger.ended(s, o)
       this.backendReturn.noteFailure(error); // D:178252
       return error instanceof ConnectError && error.code === Code.Unauthenticated ? "unauthorized" : "error";
     }
@@ -1213,6 +1234,7 @@ export class UserComputerProvider implements UserComputerTransport {
   private async watchOnce(hello: UserComputerHello, onConnected?: () => void): Promise<string> {
     const ch = this.channel!;
     this.proven = false;
+    this.outageLedger.dialing(); // D:178345
     const s = new AbortController();
     // D:178347–178351: abortController = s; credentialRejected/rehelloRequested/renewRequested/heard reset.
     this.abortController = s;
@@ -1226,6 +1248,7 @@ export class UserComputerProvider implements UserComputerTransport {
       return { kick: arm, dispose: () => clearTimeout(t) };
     };
     let u = watchdog(UC_WATCH_CONNECT_IDLE_MS);
+    let safety: { dispose(): void } | undefined;
     const l = (): string | undefined => {
       if (this.closed || this.watchStopped) return "closed";
       if (this.credentialRejected) return "unauthorized";
@@ -1245,16 +1268,20 @@ export class UserComputerProvider implements UserComputerTransport {
         if (event.event.case === "connected") {
           u.dispose(); u = watchdog(UC_WATCH_SILENCE_MS); o = true;
           onConnected?.(); // D:178249 r(): e = 1
-          // Official (L178388–178403): proven, requestPoll, flush — flush wakes held replies once the new Watch is up.
           this.proven = true;
           this.opts.onLoopEvent?.({ kind: "connected" }); // D:178389
-          // official connected → this.flush() (not a credential resume)
+          this.outageLedger.connected(ch.machineId); // D:178390 (e = the resolved channel)
+          // D:178391–178395: requestPoll(), flush(), then `d ??= safetyPoll.start(requestPoll)` — the safety poll
+          // (S9r = 30 s, hc: leading tick, next tick 30 s after the previous completes) lives only while this Watch
+          // is connected and is disposed when it ends (D:178418). Its leading tick lands while the first poll is
+          // running, so the original polls twice back to back on every connect.
+          void this.pollOnce().catch(() => undefined);
           const r = this.replies as { flush?: () => Promise<void> } | undefined;
           if (r && typeof r.flush === "function") void r.flush();
-        }
-        // D:178396–178404: connected/notify → requestPoll; heartbeat only when pendingRequestCount > 0.
-        if (event.event.case === "connected" || event.event.case === "notify" ||
+          safety ??= this.startSafetyPoll();
+        } else if (event.event.case === "notify" ||
             (event.event.case === "heartbeat" && event.event.value.pendingRequestCount > 0)) {
+          // D:178396–178404: notify → requestPoll; heartbeat only when pendingRequestCount > 0.
           void this.pollOnce().catch(() => undefined);
         }
       }
@@ -1266,7 +1293,18 @@ export class UserComputerProvider implements UserComputerTransport {
       console.error(`[user-computer-provider] watch stream failed: ${describeError(error)}`);
       throw error;
     } finally {
-      u.dispose(); if (this.abortController === s) this.abortController = undefined;
+      safety?.dispose(); u.dispose(); if (this.abortController === s) this.abortController = undefined;
     }
+  }
+  /** D:defaultSafetyPoll 177940–177943 (hc, S9r 30 s) started by the connected branch (D:178393). */
+  private startSafetyPoll(): { dispose(): void } {
+    let t: NodeJS.Timeout | undefined, disposed = false;
+    const tick = () => {
+      if (disposed) return;
+      void this.pollOnce().catch(() => undefined); // async () => { this.requestPoll() } completes at once
+      t = setTimeout(tick, UC_SAFETY_POLL_MS); t.unref();
+    };
+    tick();
+    return { dispose: () => { disposed = true; clearTimeout(t); } };
   }
 }

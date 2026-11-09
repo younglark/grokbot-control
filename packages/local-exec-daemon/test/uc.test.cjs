@@ -335,16 +335,31 @@ describe('ownership PID superseded + UC admission gate + superviseBacklog', () =
       refreshSupervisor();
       const prev = JSON.parse(fs.readFileSync(discoveryPath, 'utf8'));
       lifecycleTrace('fixture:supersede-begin', { target: child.pid, owner: process.pid });
-      fs.writeFileSync(discoveryPath, JSON.stringify({ ...prev, pid: process.pid, generation: 2 }));
+      // t171: atomic fixture write (tmp + rename) so the daemon never reads a torn record (a torn/invalid read makes
+      // both implementations republish: tn → undefined, `W?.pid !== pid && await C()`, D:179202–179207). The original
+      // also keeps a non-CAS window (guard read, then async write/rename D:80644–80654): a publish already in flight can
+      // replace this record. Like a supervisor, re-assert the record if the daemon's in-flight write landed over it.
+      const supersede = () => {
+        const tmp = `${discoveryPath}.fixture-${process.pid}.tmp`;
+        fs.writeFileSync(tmp, JSON.stringify({ ...prev, pid: process.pid, generation: 2 }));
+        fs.renameSync(tmp, discoveryPath);
+      };
+      supersede();
+      let reasserted = 0;
       lifecycleTrace('fixture:supersede-done', { target: child.pid, owner: process.pid });
       const exited = await Promise.race([
         exitPromise,
-        until(() => child.exitCode === 0, 20000, 'superseded-exit').then(() => ({ code: child.exitCode, signal: null })),
+        until(() => {
+          if (child.exitCode === 0) return true;
+          let owner; try { owner = JSON.parse(fs.readFileSync(discoveryPath, 'utf8')).pid; } catch { /* mid-rename */ }
+          if (owner === child.pid && reasserted < 5) { reasserted += 1; lifecycleTrace('fixture:reassert', { reasserted }); supersede(); }
+          return false;
+        }, 20000, 'superseded-exit').then(() => ({ code: child.exitCode, signal: null })),
       ]);
       assert.equal(exited.code, 0, `expected clean superseded exit, got ${JSON.stringify(exited)}; log=${stdout.slice(-500)}`);
       assert.match(
         stdout,
-        /received superseded, shutting down/,
+        /superseded by the daemon the discovery record names, shutting down/,
         `expected superseded shutdown log, got: ${stdout.slice(-500)}`,
       );
     } catch (error) {

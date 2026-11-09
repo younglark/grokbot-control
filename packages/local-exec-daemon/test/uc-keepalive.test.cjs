@@ -286,8 +286,10 @@ test('rotation tick slip root cause: provider keeps no sub-30s poll timer beside
     p.client = { pollGrokBotUserComputerRequests: async () => ({ requests: [] }), submitGrokBotUserComputerResponses: async (r) => ({ acceptedCount: r.frames.length }), withdrawGrokBotUserComputerPresence: async () => ({}),
       watchGrokBotUserComputerRequests: async function* (_, { signal }) { yield { event: { case: 'connected', value: {} } }; await new Promise((r) => { if (signal.aborted) r(); else signal.addEventListener('abort', r, { once: true }); }); } };
     const running = p.start(); while (!p.proven) await new Promise((r) => setImmediate(r));
+    for (let i = 0; i < 50 && !timeouts.includes(uc.UC_SAFETY_POLL_MS); i++) await new Promise((r) => setImmediate(r));
     global.setInterval = oSI; global.setTimeout = oST;
-    assert.deepEqual(intervals, [uc.UC_SAFETY_POLL_MS]); assert.equal(uc.UC_SAFETY_POLL_MS, 30000);
+    // t171: the 30 s safety poll is a per-Watch completion-anchored chain (hc S9r, D:178393/178418), not an interval.
+    assert.deepEqual(intervals, []); assert.ok(timeouts.includes(uc.UC_SAFETY_POLL_MS)); assert.equal(uc.UC_SAFETY_POLL_MS, 30000);
     assert.ok(timeouts.includes(500), 'keepalive tick 500 ms');
     await p.stop({ withdrawPresence: true }); await running;
   } finally { global.setInterval = oSI; global.setTimeout = oST; process.env.SAND_DATA_ROOT = old; fs.rmSync(root, { recursive: true, force: true }); }
@@ -411,9 +413,11 @@ test('retry boundaries: cancel aborts a retrying batch (gone), stale 401 retries
   let k = 0; const d = mkLanes(async () => { k++; throw new Error('503'); }); d.l.push([exitF('x')]); const q = d.l.flush(); d.l.stop(); await q;
   assert.ok(k <= 1); assert.equal(d.l.readyCount, 1);
 });
+// t171: retry-expiry pins our Math.random (test-only preload scripts/oracles/fixed-random.cjs): the reconnect lands at
+// full-jitter random·cap (Pu D:78223–78250), which moved the third Watch across the last scheduled round (11+1 vs 10+2).
 for (const [sc, mode] of [['retry-probe', 'retry'], ['retry-expiry', 'expiry'], ['fairness-native', 'fair']]) {
   test(`oracle ${sc}: ours vs official golden (${mode})`, { skip: !(fs.existsSync('/usr/bin/bwrap') && fs.existsSync(lab)) }, () => {
-    const r = spawnSync('python3', [path.join(dir, 'run-background.py'), 'uc-keepalive.cjs', sc], { env: { ...process.env, REPO: path.resolve(__dirname, '..', '..', '..') }, encoding: 'utf8', timeout: 70000, maxBuffer: 256 << 20 });
+    const r = spawnSync('python3', [path.join(dir, 'run-background.py'), 'uc-keepalive.cjs', sc], { env: { ...process.env, REPO: path.resolve(__dirname, '..', '..', '..'), ...(sc === 'retry-expiry' ? { PROBE_FIXED_RANDOM: '0.9' } : {}) }, encoding: 'utf8', timeout: 70000, maxBuffer: 256 << 20 });
     assert.equal(r.status, 0, r.stderr.slice(-2000));
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mech-')); const f = path.join(tmp, 'ours.json');
     fs.writeFileSync(f, r.stdout.split('\n').find((l) => l.startsWith('{"scenario')));

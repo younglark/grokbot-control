@@ -1,4 +1,5 @@
 import { trace } from "../trace";
+import { describeError } from "../box/provider";
 import type { FileSource } from "./file-source";
 /**
  * UC reply storage + flush, mirroring the original daemon (0.79.3, daemon.formatted.cjs):
@@ -145,7 +146,7 @@ export class UcReplyLanes {
     try {
       for (let frames = this.take(); frames.length > 0; frames = this.take()) {
         try { await send(frames); }
-        catch (error) { this.log(`[user-computer-provider] dropping ${frames.length}-frame response batch on close: ${String(error)}`); return; }
+        catch (error) { this.log(`[user-computer-provider] dropping ${frames.length}-frame response batch on close: ${describeError(error)}` /* D:178128 xt(o) */); return; }
       }
     } finally {
       this.flushing_ = false;

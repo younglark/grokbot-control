@@ -15,7 +15,7 @@ assert.equal(source.split(point).length, 2, 'expected single bootstrap loop anch
 const code = source
   .replace(
     point,
-    '    globalThis.audit = { publish, requestOwnershipTick, awaitOwnershipTick: async () => { await ownershipTask; }, setInflight: value => { inflightCount = value; }, setSuperseded: value => { supersededSinceMs = value; }, refreshUc, requestUcRefresh, shutdown, getUc: () => uc, awaitUcRefresh: async () => { await ucRefresh; } };\n' + point,
+    '    globalThis.audit = { publish, requestOwnershipTick, awaitOwnershipTick: async () => { await ownershipTask; }, setInflight: value => { inflightCount = value; }, setSuperseded: value => { supersededSinceMs = value; }, refreshUc, requestUcRefresh, shutdown, getUc: () => [...ucProviders.values()][0]?.provider, awaitUcRefresh: async () => { await ucRefresh; } };\n' + point,
   )
   .replace('main().catch(error => (0, handoff_1.exitFatal)(error));', 'module.exports = main;'); // t160: fatal now reports xt(e)
 assert.notEqual(code, source);
@@ -86,7 +86,8 @@ async function harness(sa = false, hooks = {}) {
       readJsonIfExists: async () => null,
     },
     './bootstrap/handoff': {
-      awaitHandoff: async () => ({ ok: true, handoff: { key: 'synthetic-key', computerId: 'synthetic-computer' } }),
+      // t171: iqr shape {key, computerId?} (D:187232–187283).
+      awaitHandoff: async () => ({ key: 'synthetic-key', computerId: 'synthetic-computer' }),
       exitFatal: () => { throw new Error('unexpected exitFatal'); },
     },
     './settings': { loadSettings: async () => ({ permission: 'ask' }) },
@@ -101,7 +102,7 @@ async function harness(sa = false, hooks = {}) {
     },
     './state/connection': { loadConnection: async () => null, writeConnection: async (c, k) => { written.push({ c, k }); } },
     // t159: the original always constructs and starts the Box provider (D:Te 179316–179331); this fake never dials.
-    './box/provider': { BoxProvider: class { constructor(opts) { this.opts = opts; boxes.push(this); } async start() {} redial() {} wakeFromReconnectBackoff() {} async stop() {} beginShutdown() {} } },
+    './box/provider': { describeError: require('../dist/box/provider').describeError, BoxProvider: class { constructor(opts) { this.opts = opts; boxes.push(this); } async start() {} redial() {} wakeFromReconnectBackoff() {} async stop() {} beginShutdown() {} } },
     './state/connection-exchange': require('../dist/state/connection-exchange'),
     './uc/local-tools': { createDeviceTools: () => ({ announced: () => [], offers: () => false }) },
     // t162: Rt (D:179463) runs He (backend-return marker) and ut (network fingerprint) before Ve each standing tick.

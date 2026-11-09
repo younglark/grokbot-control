@@ -9,11 +9,11 @@ test('oracle exact official superseded literal accepts actual output, rejects th
  assert.throws(()=>assertSupersededExit(OFFICIAL_LOG,{code:null,signal:'SIGTERM'},'official'));
  assert.throws(()=>assertSupersededExit('prefix '+OFFICIAL_LOG,ok,'official'));
 });
-test('independent daemon log is a separate expectation, not evidence that the official text matched',()=>{
- const text='[sand-local-exec-daemon] received superseded, shutting down\n';
- assert.doesNotThrow(()=>assertSupersededExit(text,{code:0,signal:null},'implementation'));
- assert.throws(()=>assertSupersededExit(OFFICIAL_LOG,{code:0,signal:null},'implementation'));
- assert.throws(()=>assertSupersededExit(text,{code:0,signal:null},'unknown'));
+test('t171: the independent daemon prints the original superseded text (l$t D:79742–79747); the old shortened literal is rejected',()=>{
+ const old='[sand-local-exec-daemon] received superseded, shutting down\n';
+ assert.doesNotThrow(()=>assertSupersededExit(OFFICIAL_LOG+'\n',{code:0,signal:null},'implementation'));
+ assert.throws(()=>assertSupersededExit(old,{code:0,signal:null},'implementation'));
+ assert.throws(()=>assertSupersededExit(OFFICIAL_LOG,{code:0,signal:null},'unknown'));
 });
 test('oracle is opt-in with mandatory explicit artifact/runtime: no-argument invocation refuses before any daemon',()=>{
  const run=cp.spawnSync('python3',[path.join(dir,'launch.py')],{encoding:'utf8'});

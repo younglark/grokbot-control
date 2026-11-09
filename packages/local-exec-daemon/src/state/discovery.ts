@@ -119,7 +119,8 @@ export async function isSupervised(env: NodeJS.ProcessEnv = process.env): Promis
   try {
     const raw = await fs.promises.readFile(supervisorPath(env), "utf8");
     const j = JSON.parse(raw) as SupervisorRecord;
-    if (typeof j.at !== "number") return false;
+    // D:pce/$Ft 80881: {pid:int>0, at:number}; anything else reads as {pid:0, at:0} (never fresh).
+    if (typeof j.at !== "number" || !Number.isInteger(j.pid) || j.pid <= 0) return false;
     return Date.now() - j.at <= SUPERVISOR_FRESH_MS;
   } catch {
     return false;

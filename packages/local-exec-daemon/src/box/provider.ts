@@ -62,7 +62,8 @@ export const boxRealClock: BoxClock = { schedule(ms, fn) { const t = setTimeout(
 export const BOX_DATA_POST_MS = 120_000;
 export const BOX_CONTROL_POST_MS = 10_000;
 /** D:qi 78160 */
-class DeadlineExceededError extends Error {
+/** D:qi 78169–78176 */
+export class DeadlineExceededError extends Error {
   readonly code = "deadline_exceeded";
   constructor(policy: string) { super(`Deadline exceeded for ${policy}`); this.name = "DeadlineExceededError"; }
 }
@@ -358,7 +359,7 @@ export class BoxProvider {
     if (r.length === 0) return;
     let data: unknown;
     try { data = JSON.parse(r.join("\n")); }
-    catch (o) { console.error(`[local-exec-provider] dropping unparseable request frame: ${o instanceof Error ? o.message : String(o)}`); return; }
+    catch (o) { console.error(`[local-exec-provider] dropping unparseable request frame: ${describeError(o)}` /* D:137506 xt(o) */); return; }
     void this.onEvent(data).catch(e => {
       const ev = data as Record<string, unknown>;
       void requestError(String(ev?.requestId || ""), 0, e, this.emitExec)

@@ -6,8 +6,8 @@ import * as fs from "node:fs";
  *   anything else → []), deleted, and wDe (D:79653) closes every listed fd whose `/proc/self/fd/<fd>` link still
  *   points at the listed target (s$t D:79644). The App's spawn wrapper Kre (main-core) sets it on the L$e path.
  * - `SAND_LOCAL_EXEC_FILE_KEY` (R7t D:187194) and `NODE_USE_SYSTEM_CA` (vTe D:78806, set to "1" by R$e) are deleted,
- *   so neither leaks into exec children. (The pre-IPC file key is only read when there is no IPC channel; the
- *   0.79.3 App never sets it — see dropin-acceptance.md.)
+ *   so neither leaks into exec children. The pre-IPC file key is kept (Ly.preIpcFileKeyBase64) for the no-channel
+ *   handoff path (iqr D:187256–187257); the 0.79.3 App never sets it.
  */
 export const INHERITED_FDS_ENV = "SAND_LOCAL_EXEC_INHERITED_FDS";
 export const PRE_IPC_FILE_KEY_ENV = "SAND_LOCAL_EXEC_FILE_KEY";
@@ -42,10 +42,12 @@ export function closeInheritedFds(fds: InheritedFd[], readlink = (fd: number) =>
   return closed;
 }
 
-export function scrubBootEnv(env: NodeJS.ProcessEnv = process.env, close?: (fds: InheritedFd[]) => number[]): { inheritedFds: InheritedFd[]; closedFds: number[] } {
+export function scrubBootEnv(env: NodeJS.ProcessEnv = process.env, close?: (fds: InheritedFd[]) => number[]): { inheritedFds: InheritedFd[]; closedFds: number[]; preIpcFileKeyBase64: string | null } {
   const inheritedFds = parseInheritedFds(env[INHERITED_FDS_ENV]);
   delete env[INHERITED_FDS_ENV];
+  const r = env[PRE_IPC_FILE_KEY_ENV] ?? null; // D:187198, validated with Bae (32 bytes) at D:187204
   delete env[PRE_IPC_FILE_KEY_ENV];
   delete env[SYSTEM_CA_ENV];
-  return { inheritedFds, closedFds: (close ?? closeInheritedFds)(inheritedFds) };
+  return { inheritedFds, closedFds: (close ?? closeInheritedFds)(inheritedFds),
+    preIpcFileKeyBase64: r != null && Buffer.from(r, "base64").length === 32 ? r : null };
 }

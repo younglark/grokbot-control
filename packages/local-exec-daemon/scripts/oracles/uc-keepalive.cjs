@@ -263,7 +263,9 @@ function startUcServer(){
  fs.writeFileSync(base+'/data/local-exec-daemon-credential.json',seal(key,JSON.stringify(cred)));
  const PROBE_MAIN=process.env.PROBE_MAIN||'/input/main.cjs';
  const spawnedAt=Date.now()-T0;const STARTUP_MS=8000;
- const child=cp.spawn('/runtime/node',[PROBE_MAIN],{env:envFor(base,{...(process.env.PROBE_MAIN?{NODE_PATH:'/repo/node_modules'}:{}),...(process.env.UC_TRACE==='1'?{UC_TRACE_FILE:base+'/uc-trace.jsonl'}:{})}),cwd:base,stdio:['ignore','pipe','pipe','ipc']});
+ // t171: test-only deterministic jitter for ours (PROBE_MAIN) via a --require preload; the official run never gets it.
+ const fixedRandom=process.env.PROBE_MAIN&&process.env.PROBE_FIXED_RANDOM?['--require','/scripts/fixed-random.cjs']:[];
+ const child=cp.spawn('/runtime/node',[...fixedRandom,PROBE_MAIN],{env:envFor(base,{...(process.env.PROBE_MAIN?{NODE_PATH:'/repo/node_modules'}:{}),...(fixedRandom.length?{PROBE_FIXED_RANDOM:process.env.PROBE_FIXED_RANDOM}:{}),...(process.env.UC_TRACE==='1'?{UC_TRACE_FILE:base+'/uc-trace.jsonl'}:{})}),cwd:base,stdio:['ignore','pipe','pipe','ipc']});
  let out='';child.stdout.on('data',b=>out=(out+b).slice(-8192));child.stderr.on('data',b=>out=(out+b).slice(-8192));const ended=new Promise(r=>child.on('exit',r));
  async function until(fn,ms=8000){const end=Date.now()+ms;while(Date.now()<end){if(fn())return;await delay(20)}throw Error('deadline')}
  const marksMono={};let marks=new Proxy({},{set(o,k,v){o[k]=v;marksMono[k]=mono();return true}});let killedByProbe=false;let diedEarly=null;child.on('exit',(c,sig)=>{if(!killedByProbe)diedEarly={code:c,signal:sig,t:Date.now()-T0}});

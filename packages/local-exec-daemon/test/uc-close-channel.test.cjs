@@ -46,7 +46,7 @@ test('in-flight Poll is awaited: returned exec is ACKed + A9, never dispatched; 
 
 test('withdraw begins before drain; close reentry resolves immediately, does not repeat or upgrade; first close awaits withdraw last',async t=>{
  const {p}=env(t),poll=defer(),withdraw=defer(),events=[];p.pollBusy=true;
- p.client.withdrawGrokBotUserComputerPresence=async(req,opts)=>{events.push('withdraw');assert.equal(opts.timeoutMs,750);await withdraw.promise};
+ p.client.withdrawGrokBotUserComputerPresence=async(req,opts)=>{events.push('withdraw');assert.ok(opts.signal instanceof AbortSignal,'withdrawDeadline (g9r 750 ms) signal, D:178031–178049');await withdraw.promise};
  const stop=p.stop({withdrawPresence:true});assert.deepEqual(events,['withdraw']);assert.equal(p.watchStopped,true);assert.equal(p.closed,false);
  let firstDone=false;stop.then(()=>firstDone=true);await p.stop({withdrawPresence:true});assert.equal(firstDone,false);
  p.pollBusy=false;p.onPollIdle();await tick();assert.equal(p.closed,true);assert.equal(firstDone,false,'withdraw still pending');withdraw.resolve();await stop;

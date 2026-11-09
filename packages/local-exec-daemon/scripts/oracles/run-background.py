@@ -11,7 +11,7 @@ cmd = ['/usr/bin/bwrap', '--unshare-all', '--die-with-parent', '--new-session',
        '--ro-bind', '/usr', '/usr', '--ro-bind', '/lib', '/lib', '--ro-bind', '/lib64', '/lib64',
        '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp', '--tmpfs', '/state',
        '--ro-bind', '/home/box/.local/node/bin', '/runtime', '--ro-bind', str(lab/'input'), '/input',
-       '--ro-bind', str(root), '/scripts'] + (['--ro-bind', os.environ['REPO'], '/repo'] if os.environ.get('REPO') else []) + ['--clearenv'] + (['--setenv', 'PROBE_MAIN', '/repo/packages/local-exec-daemon/dist/index.js'] if os.environ.get('REPO') else []) + (['--setenv', 'UC_TRACE', '1'] if os.environ.get('UC_TRACE') == '1' else []) + ['--setenv', 'PATH', '/runtime:/usr/bin:/bin',
+       '--ro-bind', str(root), '/scripts'] + (['--ro-bind', os.environ['REPO'], '/repo'] if os.environ.get('REPO') else []) + ['--clearenv'] + (['--setenv', 'PROBE_MAIN', '/repo/packages/local-exec-daemon/dist/index.js'] if os.environ.get('REPO') else []) + (['--setenv', 'UC_TRACE', '1'] if os.environ.get('UC_TRACE') == '1' else []) + (['--setenv', 'PROBE_FIXED_RANDOM', os.environ['PROBE_FIXED_RANDOM']] if os.environ.get('REPO') and os.environ.get('PROBE_FIXED_RANDOM') else []) + ['--setenv', 'PATH', '/runtime:/usr/bin:/bin',
        '--chdir', '/state', '/runtime/node', '/scripts/' + probe] + sys.argv[2:]
 p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True, env={'PATH':'/usr/bin:/bin'})
 timed_out = False
