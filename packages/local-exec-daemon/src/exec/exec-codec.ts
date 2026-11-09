@@ -81,7 +81,16 @@ export function prepareBoxExecFrame(frame: ExecFrameOut): Record<string, unknown
     if (frame.cwdState !== undefined) out.cwdState = frame.cwdState;
     return out;
   }
-  return { kind: frame.kind, requestId: frame.requestId, error: frame.error };
+  if (frame.kind === "file") {
+    return {
+      kind: "file",
+      requestId: frame.requestId,
+      ...(frame.bytes === undefined ? {} : { bytesBase64: Buffer.from(frame.bytes).toString("base64") }),
+    };
+  }
+  if (frame.kind === "file-error" || frame.kind === "messages-error") return { kind: frame.kind, requestId: frame.requestId, error: frame.error };
+  // D:Dwr 137583–137600: messages-result passes through; accepted / consent-result are never sent on Box.
+  return { ...frame } as Record<string, unknown>;
 }
 
 export function isExecServerDecodeError(error: unknown): boolean {

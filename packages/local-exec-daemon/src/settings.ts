@@ -10,6 +10,10 @@ export const SettingsSchema = z
     version: z.literal(1),
     localToolPermission: Permission.optional(),
     localToolPermissionCeiling: Permission.optional(),
+    // D:zqt 82042–82044 defaults false/true/true; aue 82084–82086 on unreadable/invalid.
+    messagesEnabled: z.boolean().optional(),
+    messagesReadEnabled: z.boolean().optional(),
+    messagesSendEnabled: z.boolean().optional(),
   })
   .passthrough();
 
@@ -59,4 +63,10 @@ function parseSettings(raw: unknown): Loaded {
 export function effectivePermission(permission: PermissionMode, ceiling?: PermissionMode): PermissionMode {
   const rank = { never: 0, ask: 1, always: 2 };
   return ceiling !== undefined && rank[ceiling] < rank[permission] ? ceiling : permission;
+}
+
+/** D:getMessagesEnabled 82533 / getMessagesCapabilities 82541 with zod defaults (false / true / true). */
+export function messagesSettings(l: Loaded): { enabled: boolean; read: boolean; send: boolean } {
+  if (l.damaged) return { enabled: false, read: true, send: true };
+  return { enabled: l.settings.messagesEnabled ?? false, read: l.settings.messagesReadEnabled ?? true, send: l.settings.messagesSendEnabled ?? true };
 }

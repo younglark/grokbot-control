@@ -1,8 +1,10 @@
-/** UC outer download -> Ype/oqe, NOT the Ki exec output channel.
- * Static 0.79.3 D:97843–97893 / 132584–132602 / 136384–136392.
+/** UC outer download -> Ype/oqe; UC outer upload -> n9 + approximate cp write.
+ * Static 0.79.3 D:97843–97893 / 132584–132602 / 136374–136392 / 80591–80602.
+ * Box download materializes the same Ype source via iqe (D:97895–97906 / 137534–137544).
  */
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import * as crypto from "node:crypto";
 export const UC_FILE_CHUNK_BYTES = 1024 * 1024;
 export const UC_MAX_FILE_BYTES = 100 * 1024 * 1024;
 export type FileRead = { kind: "data"; data: Uint8Array<ArrayBuffer>; last: boolean } | { kind: "error"; error: string };
@@ -75,4 +77,48 @@ export async function prepareDownload(root: string, requested: string, maxBytes 
   catch (e) { if (!["ENOENT", "ENOTDIR"].includes((e as NodeJS.ErrnoException).code ?? "")) throw e; }
   if (stat?.isFile() && stat.size > maxBytes) throw new Error(fileTooLarge(stat.size, maxBytes));
   return new LocalFileSource(file, maxBytes);
+}
+
+/** Same n9 path gate as download; upload uses it after the byte-length precheck. */
+export async function resolveUploadPath(root: string, requested: string): Promise<string> {
+  return resolveDownloadPath(root, requested);
+}
+/** Approximate D:cp (80591): mkdir parent, sibling temp, write+fsync, rename.
+ * Default mode 0o666 (hLe=438); preserve existing mode when present. Not the original lock table.
+ */
+export async function writeUploadFile(root: string, requested: string, bytes: Uint8Array, maxBytes = UC_MAX_FILE_BYTES): Promise<void> {
+  if (bytes.length > maxBytes) throw new Error(fileTooLarge(bytes.length, maxBytes));
+  const target = await resolveUploadPath(root, requested);
+  await fs.mkdir(path.dirname(target), { recursive: true });
+  let mode = 0o666;
+  try { mode = (await fs.stat(target)).mode; } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+  }
+  const tmp = `${target}.${crypto.randomInt(1 << 30)}`;
+  const handle = await fs.open(tmp, "w", mode);
+  try {
+    await handle.writeFile(bytes);
+    try { await handle.chmod(mode); } catch { /* original ELe swallows chmod failures */ }
+    await handle.sync();
+  } finally { await handle.close(); }
+  try { await fs.rename(tmp, target); }
+  catch (e) { await fs.rm(tmp, { force: true }); throw e; }
+}
+/** D:iqe 97895–97906 — materialize a FileSource for Box JSON bytesBase64 replies. */
+export async function readWholeFile(source: FileSource): Promise<{ bytes: Uint8Array<ArrayBuffer> } | { error: string }> {
+  const parts: Uint8Array<ArrayBuffer>[] = [];
+  try {
+    for (;;) {
+      const next = await source.read();
+      if (next.kind === "error") return { error: next.error };
+      parts.push(next.data);
+      if (next.last) {
+        const total = parts.reduce((n, p) => n + p.length, 0);
+        const out = new Uint8Array(total);
+        let o = 0;
+        for (const part of parts) { out.set(part, o); o += part.length; }
+        return { bytes: out };
+      }
+    }
+  } finally { source.close(); }
 }

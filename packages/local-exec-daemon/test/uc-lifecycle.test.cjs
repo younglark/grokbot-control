@@ -95,6 +95,8 @@ async function harness(sa = false, hooks = {}) {
     './state/connection': { loadConnection: async () => null },
     './box/provider': { BoxProvider: class { constructor() { throw new Error('box prohibited'); } } },
     './uc/provider': { UserComputerProvider: FakeProvider },
+    // t154: index captures CLAUDE_CONFIG_DIR/CODEX_HOME once at start (D:187322–187325).
+    './uc/ai-tool-discovery': { aiToolConfigDirsFromEnv: () => ({}) },
     './uc/credential': {
       loadSealedCredential: async () => {
         const value = await loader();

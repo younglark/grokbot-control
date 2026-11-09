@@ -10,6 +10,7 @@ import { clearDiscovery, isSupervised, loadDiscovery, publishDiscovery } from ".
 import { loadConnection } from "./state/connection";
 import { BoxProvider } from "./box/provider";
 import { UserComputerProvider } from "./uc/provider";
+import { aiToolConfigDirsFromEnv } from "./uc/ai-tool-discovery";
 import { loadSealedCredential, pickUserComputerChannel } from "./uc/credential";
 import {
   generationFromEnv,
@@ -20,6 +21,8 @@ import {
 import { localRootFromEnv, logInfo, delay } from "./util";
 
 async function main(): Promise<void> {
+  // D:187322–187325: CLAUDE_CONFIG_DIR / CODEX_HOME captured once at daemon start.
+  const aiToolConfigDirs = aiToolConfigDirsFromEnv();
   const startedAt = Date.now();
   const handoff = await awaitHandoff(5000);
   if (!handoff.ok) exitFatal();
@@ -171,10 +174,13 @@ async function main(): Promise<void> {
       connection: conn,
       root,
       computerId,
-      label: os.hostname() || "local-exec-daemon",
+      // D:v_ constructor 135918–135920: computerLabel unset for Box → hostname().trim() || "this computer".
+      label: os.hostname().trim() || "this computer",
       variant: process.env.SAND_VARIANT || "sand-dev",
       permission,
       onInflight: n => onInflight("box", n),
+      aiToolConfigDirs,
+      resolveConnection: () => loadConnection(),
     });
     servingAt = Date.now();
     // Box path left as before this round (not part of the UC Ve/start evidence).
@@ -222,6 +228,7 @@ async function main(): Promise<void> {
       },
       root,
       permission,
+      aiToolConfigDirs,
       hello: {
         label: os.hostname() || "local-exec-daemon",
         localRoot: root,

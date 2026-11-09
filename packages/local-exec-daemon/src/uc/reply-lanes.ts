@@ -39,6 +39,9 @@ function frameBytes(f: Frame): number {
     case "file": return v.value.data.length;
     case "client": case "control": return v.value.messageJson.length;
     case "fileError": case "messagesError": return v.value.error.length;
+    // D:B8r 178815–178818
+    case "messagesResult": return v.value.resultJson.length;
+    case "messagesConsentResult": return v.value.reason?.length ?? 0;
     default: return 0;
   }
 }

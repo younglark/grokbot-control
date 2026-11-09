@@ -1,8 +1,8 @@
 /**
  * Exec approval chain — static port of local-exec-daemon 0.79.3 (daemon.formatted.cjs, D:).
  *
- * Scope: UserComputer `exec` and outer `download` (global read-file only). Upload / discover-ai-tool / messages / local-tool,
- * standing grants (subject actions) and send-mail spending are NOT implemented here.
+ * Scope: full Qce/AUe decision incl. setting (messagesEnabled) and subject (standing grants, t155) classes.
+ * Device-tool / send-mail spending (xUe) and consent (decideLocalUse) are NOT implemented here.
  *
  * What this module does NOT do (no evidence in the daemon bundle, so nothing is invented):
  *  - it never WRITES approval records (the writer is outside the daemon bundle; no self-grant API);
@@ -49,6 +49,8 @@ export function authorizationOf(v: { authorizedByApproval?: boolean; authorizedB
 export type Describes = {
   action: LocalToolAction; target: string; resourcePath?: string; attachToResourcePath?: string;
   machineId?: string; outlivesScope?: boolean; targetKind?: string;
+  /** D:nk 97333 — send-imessage recipient key (Vjt), used by standing subject grants (Cqt). */
+  recipient?: string; description?: string;
 };
 const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "");
 /** D: _qt (L81209). */
@@ -179,14 +181,61 @@ export type ExecDecisionInput = {
   approvalsPath: string;
   retirementsPath: string;
   nowMs?: number;
+  /** D:re() 179276–179288: settings messagesEnabled (default false, aue 82084). Only read by setting/subject classes. */
+  messagesEnabled?: boolean;
+  /** D:LDe 79826 local-tool-standing-grants.v1.json. Absent → no standing grants. */
+  standingGrantsPath?: string;
 };
 export type Verdict = { kind: "allow" } | { kind: "refused"; error: string } | { kind: "ask" };
 
-/**
- * D: Qce (L81473) restricted to exec + download. Their descriptions only yield global actions, so the setting / subject
- * branches (messagesEnabled, standing grants) are unreachable here; any non-global class is
- * treated as "ask" (fail closed, not extended).
- */
+/** D:o5 81184 (H4 = grokbot://app/v1/messages, jae/HDe 80074–80104). */
+export const MESSAGES_OFF_MSG = "Messages is turned off in the user's settings, so their Messages cannot be read or sent from here. Do not retry while it stays off. If the user wants this, ask them to turn it back on in [Messages](grokbot://app/v1/messages) (Connect Apps \u2192 Mac \u2192 Messages).";
+/** D:YFt/LLe 81090–81096 */
+export function standingEligible(t: { action: string; ceiling?: PermissionMode; permission: PermissionMode; messagesEnabled?: boolean }): boolean {
+  return (t.ceiling !== undefined && t.ceiling !== "always") || t.permission === "never"
+    ? false : t.messagesEnabled === true || !["read-messages", "send-imessage"].includes(t.action);
+}
+/** D:ULe/QFt/eJt/tJt/rJt/$Le/JLe 81100–81170 — version 1 grants file, subject-class actions only. */
+export type StandingGrant = { scope: "action"; action: LocalToolAction; accountScope: string; grantedAtMs: number }
+  | { scope: "subject"; action: LocalToolAction; recipient: string; recipientName?: string; accountScope: string; grantedAtMs: number };
+const okToken = (e: string) => e.length > 0 && e.length <= 320 && !e.includes("\n") && !e.includes("\r");
+const trimmedToken = (t: unknown) => { if (typeof t !== "string") return null; const e = t.trim(); return okToken(e) ? e : null; };
+function parseGrant(t: unknown): StandingGrant | null {
+  if (!isObj(t) || (t.scope !== "subject" && t.scope !== "action") || !isAction(t.action) || actionClass(t.action) !== "subject") return null;
+  const e = typeof t.accountScope === "string" && t.accountScope.trim().length > 0 ? t.accountScope.trim() : null;
+  const r = typeof t.grantedAtMs === "number" && Number.isFinite(t.grantedAtMs) && t.grantedAtMs >= 0 ? t.grantedAtMs : null;
+  if (e === null || r === null) return null;
+  if (t.scope === "action") return { scope: "action", action: t.action, accountScope: e, grantedAtMs: r };
+  const n = trimmedToken(t.recipient);
+  if (n === null) return null;
+  const s = trimmedToken(t.recipientName);
+  return { scope: "subject", action: t.action, recipient: n, ...(s === null ? {} : { recipientName: s }), accountScope: e, grantedAtMs: r };
+}
+export function grantKey(t: { scope: "action" | "subject"; accountScope: string; action: string; recipient?: string }): string {
+  return t.scope === "subject" ? JSON.stringify([t.accountScope, t.scope, t.action, t.recipient]) : JSON.stringify([t.accountScope, t.scope, t.action]);
+}
+export function parseStandingGrants(raw: unknown): Map<string, StandingGrant> {
+  const out = new Map<string, StandingGrant>();
+  if (!isObj(raw) || raw.version !== 1 || !Array.isArray(raw.grants)) return out;
+  for (const g of raw.grants) { const n = parseGrant(g); if (n !== null && !out.has(grantKey(n))) out.set(grantKey(n), n); }
+  return out;
+}
+/** D:mUe 81263 — read per decision; any read/parse failure → empty. No expiry (grantedAtMs is not compared). */
+export async function readStandingGrants(file: string): Promise<Map<string, StandingGrant>> {
+  let raw: unknown;
+  try { raw = JSON.parse(await fs.promises.readFile(file, "utf-8")); } catch { return new Map(); }
+  return parseStandingGrants(raw);
+}
+/** D:Cqt 81454–81472 */
+async function standingAllows(t: ExecDecisionInput, e: Describes): Promise<boolean> {
+  if ((t.approvalId != null && t.approvalId.length > 0) || t.accountScope === undefined
+    || !standingEligible({ action: e.action, ceiling: t.ceiling, permission: t.permission, messagesEnabled: t.messagesEnabled })) return false;
+  if (t.standingGrantsPath === undefined) return false;
+  const r = await readStandingGrants(t.standingGrantsPath);
+  const n = { accountScope: t.accountScope, action: e.action };
+  return r.has(grantKey({ scope: "action", ...n })) || (e.recipient !== undefined && r.has(grantKey({ scope: "subject", ...n, recipient: e.recipient })));
+}
+/** D: Qce (L81473–81502) — full class handling (global / setting / subject / call). */
 export async function decideExecLocalUse(t: ExecDecisionInput): Promise<Verdict> {
   const e = t.describes;
   const n = e === undefined ? "global" : actionClass(e.action);
@@ -198,7 +247,8 @@ export async function decideExecLocalUse(t: ExecDecisionInput): Promise<Verdict>
     if (t.permission === "always" && n === "global") return { kind: "allow" };
     if (t.permission === "never" && n !== "global") return { kind: "refused", error: NEVER_MSG };
   }
-  if (n !== "global") return { kind: "ask" };
+  if (n === "setting") return t.messagesEnabled === true ? { kind: "allow" } : { kind: "refused", error: MESSAGES_OFF_MSG };
+  if (n === "subject" && e !== undefined && (await standingAllows(t, e))) return { kind: "allow" };
   if (t.approvalId == null || t.approvalId.length === 0 || e === undefined) return { kind: "ask" };
   const o = (await liveApprovals(t.approvalsPath, t.retirementsPath, t.nowMs)).get(t.approvalId);
   if (o === undefined || (s && (t.accountScope === undefined || o.accountScope !== t.accountScope))) return { kind: "ask" };
@@ -214,6 +264,7 @@ export async function execRefusal(t: ExecDecisionInput): Promise<string | undefi
 }
 
 /** D: MDe / NDe (L79817–79822) under Zn(); here under the same data root as settings.json. */
+export function standingGrantsPathFor(dataRoot: string): string { return path.join(dataRoot, "local-tool-standing-grants.v1.json"); }
 export function approvalsPathFor(dataRoot: string): string { return path.join(dataRoot, "local-tool-approvals.json"); }
 export function retirementsPathFor(dataRoot: string): string { return path.join(dataRoot, "local-tool-retirements.json"); }
 
@@ -221,4 +272,16 @@ export function retirementsPathFor(dataRoot: string): string { return path.join(
 export function describeDownload(file: string): Describes { return { action: "read-file", target: file, attachToResourcePath: file }; }
 export async function downloadRefusal(t: Omit<ExecDecisionInput, "describes"> & { file: string }): Promise<string | undefined> {
   return execRefusal({ ...t, describes: describeDownload(t.file) });
+}
+
+/** D:k6r 136398–136399. Upload uses the same GLOBAL Qce/AUe chain as download/exec. */
+export function describeUpload(file: string): Describes { return { action: "write-file", target: file }; }
+export async function uploadRefusal(t: Omit<ExecDecisionInput, "describes"> & { file: string }): Promise<string | undefined> {
+  return execRefusal({ ...t, describes: describeUpload(t.file) });
+}
+
+/** D:k6r 136406–136407 → pJe 97084: discover-ai-tool uses the global read-ai-tool-setup action on the product label. */
+export function describeDiscoverAiTool(target: string): Describes { return { action: "read-ai-tool-setup", target }; }
+export async function discoverAiToolRefusal(t: Omit<ExecDecisionInput, "describes"> & { target: string }): Promise<string | undefined> {
+  return execRefusal({ ...t, describes: describeDiscoverAiTool(t.target) });
 }

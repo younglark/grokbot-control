@@ -2,7 +2,8 @@ import { trace } from "../trace";
 import { loadSettings, loadSettingsSync } from "../settings";
 import { HttpStatusError, type ReplyQueue } from "../transport/replies";
 import { UcReplyLanes } from "./reply-lanes";
-import { prepareDownload } from "./file-source";
+import { prepareDownload, writeUploadFile, UC_FILE_CHUNK_BYTES } from "./file-source";
+import { aiToolConfigDirsFromEnv, describeAiToolDiscovery, discoverAiToolBytes, isAiToolSource, type AiToolConfigDirs, type AiToolSource } from "./ai-tool-discovery";
 import { requestError } from "../exec/handlers";
 import * as crypto from "node:crypto";
 import { Code, ConnectError, createClient, type Client } from "@connectrpc/connect";
@@ -11,7 +12,8 @@ import { GrokBotService } from "../generated/svc_aiserver.v1.GrokBotService_conn
 import { GrokBotUserComputerQueuedRequest, GrokBotUserComputerRequestFrame,
   GrokBotUserComputerResponseFrame, GrokBotUserComputerHello,
   GrokBotUserComputerClientMessage, GrokBotUserComputerControlMessage,
-  GrokBotUserComputerMessagesError, GrokBotUserComputerFileError, GrokBotUserComputerMessagesAccepted,
+  GrokBotUserComputerMessagesError, GrokBotUserComputerFileError, GrokBotUserComputerFile, GrokBotUserComputerMessagesAccepted,
+  GrokBotUserComputerMessagesConsentResult, GrokBotUserComputerMessagesConsentVerdict, GrokBotUserComputerMessagesResult,
   SubmitGrokBotUserComputerResponsesRequest } from "../generated/aiserver.v1_pb";
 import {
   lastAllocatedExecIdOrZero,
@@ -30,8 +32,13 @@ import {
 import type { PermissionMode } from "../settings";
 import { isSupervised } from "../state/discovery";
 import { dataRootFromEnv } from "../util";
-import { approvalsPathFor, authorizationOf, describeExec, execRefusal, downloadRefusal, retireApproval, retirementsPathFor, type Authorization } from "./approvals";
+import { approvalsPathFor, authorizationOf, describeExec, execRefusal, downloadRefusal, uploadRefusal, discoverAiToolRefusal, retireApproval, retirementsPathFor, type Authorization } from "./approvals";
 import type { UserComputerHello, UserComputerTransport } from "./types";
+import { ASK_MSG, NEVER_MSG } from "../exec/handlers";
+import { messagesSettings } from "../settings";
+import { decideExecLocalUse, standingGrantsPathFor } from "./approvals";
+import { draftCardCodes, locateSidecar, messagesCapabilities, MessagesExecutor, messagesOpSchema, type MessagesOpRequest } from "../box/messages-op";
+import { fileTooLarge } from "./file-source";
 
 export type ResolvedUcChannel = { backendUrl: string; machineId: string; credential: string };
 export type UcProviderOptions = {
@@ -47,6 +54,10 @@ export type UcProviderOptions = {
   accountScope?: string;
   /** D:L179387–179395: live scope lookup, not the construction-time credential snapshot. */
   resolveChannel?: () => Promise<ResolvedUcChannel | null>;
+  /** D:187322–187325: CLAUDE_CONFIG_DIR / CODEX_HOME captured once at start. */
+  aiToolConfigDirs?: AiToolConfigDirs;
+  /** Test hook for D:Ed 83034 (sidecar lookup); default locateSidecar(). */
+  sidecar?: () => string | undefined;
 };
 
 const requestKinds = Object.fromEntries(GrokBotUserComputerRequestFrame.fields.list().map(f => [f.localName, f.no]));
@@ -54,7 +65,12 @@ const requestKinds = Object.fromEntries(GrokBotUserComputerRequestFrame.fields.l
 // Only business mapping remains here. Field numbers, oneof and int64 are runtime-owned.
 export type Queued = { id: string; requestId: string; kind: number; serverMessage: Record<string, unknown>; parseError?: string;
   /** Exec: D v9r (L178863) approvalId + c5 authorization; retire-approval: approvalId. */
-  approvalId?: string; authorization?: Authorization; path?: string };
+  approvalId?: string; authorization?: Authorization; path?: string; bytes?: Uint8Array; source?: AiToolSource;
+  /** D:v9r messagesOp 178909–178926 */
+  messages?: MessagesOpRequest;
+  /** D:v9r→undefined (178512–178516): never admitted; w9r reply (178785) when frame.requestId is non-empty, else none. */
+  unsupported?: { reply?: ExecFrameOut } };
+const UNSUPPORTED_FRAME = "This computer's local-exec daemon does not understand that request frame; update the desktop app."; // D:z2
 export function parseQueued(item: GrokBotUserComputerQueuedRequest): Queued {
   const id = item.id;
   const frame = item.frame;
@@ -69,6 +85,39 @@ export function parseQueued(item: GrokBotUserComputerQueuedRequest): Queued {
     if (frame.frame.case === "download") {
       const value = frame.frame.value;
       return { id, requestId, kind, serverMessage, path: value.path, approvalId: value.approvalId, authorization: authorizationOf(value) };
+    }
+    if (frame.frame.case === "upload") {
+      const value = frame.frame.value;
+      return { id, requestId, kind, serverMessage, path: value.path, bytes: value.data, approvalId: value.approvalId, authorization: authorizationOf(value) };
+    }
+    if (frame.frame.case === "discoverAiTool") {
+      // D:v9r 178897–178906: only QP sources map; anything else is the w9r file-error (178789–178790).
+      const value = frame.frame.value;
+      if (!isAiToolSource(value.source)) {
+        return { id, requestId, kind, serverMessage, unsupported: frame.requestId.length > 0 ? { reply: { kind: "file-error", requestId: frame.requestId, error: UNSUPPORTED_FRAME } } : {} };
+      }
+      return { id, requestId, kind, serverMessage, source: value.source, approvalId: value.approvalId, authorization: authorizationOf(value) };
+    }
+    if (frame.frame.case === "putFileToUrl" || frame.frame.case === "getFileFromUrl") {
+      // D:v9r 178890–178892 returns undefined → w9r default (178791–178792): control throw{id:0, z2}; not admitted.
+      return { id, requestId, kind, serverMessage, unsupported: frame.requestId.length > 0
+        ? { reply: { kind: "control", requestId: frame.requestId, message: { throw: { id: 0, error: UNSUPPORTED_FRAME } } } } : {} };
+    }
+    if (frame.frame.case === "messagesOp") {
+      // D:v9r 178909–178926: AJe = rk.safeParse(tn(opJson)); failure → undefined → w9r messages-error z2 (178787–178788).
+      const value = frame.frame.value;
+      let raw: unknown; try { raw = JSON.parse(value.opJson); } catch { raw = undefined; }
+      const op = messagesOpSchema.safeParse(raw);
+      if (!op.success) {
+        return { id, requestId, kind, serverMessage, unsupported: frame.requestId.length > 0 ? { reply: { kind: "messages-error", requestId: frame.requestId, error: UNSUPPORTED_FRAME } } : {} };
+      }
+      const sendKey = typeof value.sendKey === "string" && value.sendKey.length > 0 ? value.sendKey : undefined; // T9r
+      return { id, requestId, kind, serverMessage, approvalId: value.approvalId, messages: {
+        requestId, op: op.data, approvalId: value.approvalId,
+        ...(sendKey === undefined ? {} : { sendKey }),
+        ...(value.draftCard === true ? { draftCard: true as const } : {}),
+        ...(value.draftCard === true && value.authorizedByApproval ? { authorization: { kind: "approval" as const } } : {}),
+      } };
     }
     if (frame.frame.case === "exec") {
       const value = frame.frame.value;
@@ -88,6 +137,17 @@ export function parseQueued(item: GrokBotUserComputerQueuedRequest): Queued {
     return { id, requestId, kind: 0, serverMessage: {}, parseError };
   }
 }
+/** D:Y_ 178966 / 179080–179097: a file payload is split into j2 (1 MiB) chunks with seq 0.. and last on the final one. */
+function responseFrames(frame: ExecFrameOut): GrokBotUserComputerResponseFrame[] {
+  if (frame.kind !== "file" || frame.bytes === undefined || frame.bytes.length <= UC_FILE_CHUNK_BYTES) return [responseFrame(frame)];
+  const n = frame.bytes, out: GrokBotUserComputerResponseFrame[] = [];
+  for (let o = 0, i = 0; o < n.length; o += UC_FILE_CHUNK_BYTES, i += 1) {
+    const a = Math.min(o + UC_FILE_CHUNK_BYTES, n.length);
+    out.push(new GrokBotUserComputerResponseFrame({ requestId: frame.requestId,
+      frame: { case: "file", value: new GrokBotUserComputerFile({ data: n.slice(o, a), seq: i, last: a === n.length }) } }));
+  }
+  return out;
+}
 function responseFrame(frame: ExecFrameOut): GrokBotUserComputerResponseFrame {
   const result = new GrokBotUserComputerResponseFrame({requestId: frame.requestId});
   if (frame.kind === "client") {
@@ -101,7 +161,30 @@ function responseFrame(frame: ExecFrameOut): GrokBotUserComputerResponseFrame {
       cwdState: frame.cwdState,
     })};
   } else if (frame.kind === "messages-error") result.frame = {case: "messagesError", value: new GrokBotUserComputerMessagesError({error: frame.error})};
+  else if (frame.kind === "messages-accepted") result.frame = { case: "messagesAccepted", value: new GrokBotUserComputerMessagesAccepted() };
+  else if (frame.kind === "messages-consent-result") {
+    // D:I9r 178950–178959: allow→STANDING, ask→ASK, refused→REFUSED (+reason).
+    const V = GrokBotUserComputerMessagesConsentVerdict, v = frame.verdict;
+    result.frame = { case: "messagesConsentResult", value: new GrokBotUserComputerMessagesConsentResult({
+      verdict: v.kind === "allow" ? V.STANDING : v.kind === "ask" ? V.ASK : V.REFUSED, ...(v.kind === "refused" ? { reason: v.reason } : {}) }) };
+  } else if (frame.kind === "messages-result") {
+    // D:Y_ 179001–179014: result JSON above K_ (8 MiB) becomes messages-error Od(n, K_).
+    const n = JSON.stringify(frame.result);
+    if (n.length > 8 * 1024 * 1024) return responseFrame({ kind: "messages-error", requestId: frame.requestId, error: fileTooLarge(n.length, 8 * 1024 * 1024) });
+    result.frame = { case: "messagesResult", value: new GrokBotUserComputerMessagesResult({ resultJson: n, ...frame.timings }) };
+  }
   else if (frame.kind === "file-error") result.frame = {case: "fileError", value: new GrokBotUserComputerFileError({error: frame.error})};
+  else if (frame.kind === "file") {
+    // D:Y_ 179080–179091: upload success / empty payload → one empty last chunk at seq 0.
+    const bytes = frame.bytes;
+    if (bytes === undefined || bytes.length === 0) {
+      result.frame = { case: "file", value: new GrokBotUserComputerFile({ data: new Uint8Array(), seq: 0, last: true }) };
+    } else {
+      const owned = new Uint8Array(bytes.byteLength);
+      owned.set(bytes);
+      result.frame = { case: "file", value: new GrokBotUserComputerFile({ data: owned, seq: 0, last: true }) };
+    }
+  }
   return result;
 }
 function authError(error: unknown): boolean {
@@ -215,7 +298,9 @@ export class UserComputerProvider implements UserComputerTransport {
     null;
 
   private client: Client<typeof GrokBotService>;
+  private readonly aiToolConfigDirs: AiToolConfigDirs;
   constructor(private readonly opts: UcProviderOptions) {
+    this.aiToolConfigDirs = opts.aiToolConfigDirs ?? aiToolConfigDirsFromEnv();
     this.client = createClient(GrokBotService, createConnectTransport({
       baseUrl: opts.backendUrl, httpVersion: "1.1", useBinaryFormat: true,
       readMaxBytes: 8 * 1024 * 1024, writeMaxBytes: 8 * 1024 * 1024,
@@ -444,7 +529,7 @@ export class UserComputerProvider implements UserComputerTransport {
     if (frames.length === 0 || !this.replies || (!ch && !(this.replies instanceof UcReplyLanes))) return Promise.resolve();
     // Lane envelopes are decoded to frames only; missing channel must not discard abandonWork's terminal.
     return this.replies.enqueue(Buffer.from(new SubmitGrokBotUserComputerResponsesRequest({
-      machineId: ch?.machineId ?? "", credential: ch?.credential ?? "", frames: frames.map(responseFrame),
+      machineId: ch?.machineId ?? "", credential: ch?.credential ?? "", frames: frames.flatMap(responseFrames),
     }).toBinary()), frames.map(f => f.requestId));
   }
 
@@ -479,6 +564,7 @@ export class UserComputerProvider implements UserComputerTransport {
         if (this.seen.has(q.id)) continue;
         // Capacity is checked before ack/admission. Cancel controls bypass backlog.
         this.seen.add(q.id); this.pendingAcks.push(q.id);
+        if (q.unsupported) { if (q.unsupported.reply && !this.storeClosingFrame(q.unsupported.reply)) this.unack(q); continue; }
         if (q.parseError) { if (!this.storeClosingFrame({ kind: "control", requestId: q.requestId, message: { throw: { error: q.parseError } } })) this.unack(q); continue; }
         if (q.kind === requestKinds.retireApproval) {
           // Official (D:L178509–178555, v_.handle L135964, wUe L81351): ACKed like any item, not E7 → no keepalive,
@@ -634,7 +720,9 @@ export class UserComputerProvider implements UserComputerTransport {
    */
   private closingFrame(q: Queued, error: string): ExecFrameOut {
     if ([requestKinds.upload, requestKinds.download, requestKinds.discoverAiTool].includes(q.kind)) return { kind: "file-error", requestId: q.requestId, error };
-    if (q.kind === requestKinds.messagesOp) return { kind: "messages-error", requestId: q.requestId, error };
+    // D:zl 136457–136464: draft-card messages-op closing errors use the Fpt code (fallback: the text itself).
+    if (q.kind === requestKinds.messagesOp) return { kind: "messages-error", requestId: q.requestId,
+      error: q.messages?.draftCard === true ? (draftCardCodes(NEVER_MSG, ASK_MSG).get(error) ?? error) : error };
     return { kind: "control", requestId: q.requestId, message: { throw: { id: 0, error } } };
   }
   private storeClosing(q: Queued, error: string): boolean { return this.storeClosingFrame(this.closingFrame(q, error)); }
@@ -664,7 +752,7 @@ export class UserComputerProvider implements UserComputerTransport {
     const ch = this.channel; const r = this.replies;
     if (!r || (!ch && !(r instanceof UcReplyLanes))) return false;
     if (typeof r.offer === "function") return r.offer(Buffer.from(new SubmitGrokBotUserComputerResponsesRequest({
-      machineId: ch?.machineId ?? "", credential: ch?.credential ?? "", frames: [responseFrame(frame)] }).toBinary()), [frame.requestId]);
+      machineId: ch?.machineId ?? "", credential: ch?.credential ?? "", frames: responseFrames(frame) }).toBinary()), [frame.requestId]);
     // Minimal stubs without offer(): fall back to emit; a rejection re-defers (bounded).
     let p: Promise<void>;
     try { p = Promise.resolve(this.emit(frame)); } catch (e) { p = Promise.reject(e); }
@@ -695,7 +783,9 @@ export class UserComputerProvider implements UserComputerTransport {
       const q = this.backlog.shift()!;
       if (this.active.has(q.requestId)) continue;
       this.active.add(q.requestId); this.bump(1); trace("admit", { rid: q.requestId.slice(0, 16) });
-      const job = this.handleQueued(q).catch(e => requestError(q.requestId, lastAllocatedExecIdOrZero(), e, this.emit, { root: this.opts.root, serverMessage: q.serverMessage }))
+      const job = this.handleQueued(q).catch(e => q.kind === requestKinds.messagesOp
+        ? this.emit(this.closingFrame(q, e instanceof Error ? e.message : String(e)))
+        : requestError(q.requestId, lastAllocatedExecIdOrZero(), e, this.emit, { root: this.opts.root, serverMessage: q.serverMessage }))
         .catch(() => { console.error("[user-computer-provider] request reply failed"); })
         .then(() => undefined).finally(() => { this.activeJobs.delete(job); this.active.delete(q.requestId); this.bump(-1); if (this.active.size === 0) this.onInflightDrained?.(); this.runBacklog(); });
       this.activeJobs.add(job);
@@ -711,6 +801,42 @@ export class UserComputerProvider implements UserComputerTransport {
   /** Test hook: wait for pending retire-approval writes. */
   async settleRetirements(): Promise<void> { await Promise.all([...this.retireJobs]); }
   private async handleQueued(q: Queued): Promise<void> {
+    if (q.kind === requestKinds.upload) {
+      // D:135989–136004 / 136374–136382: write-file auth, size check, n9, approximate cp, empty file success.
+      const live = loadSettingsSync(), dataRoot = dataRootFromEnv();
+      const refusal = await uploadRefusal({
+        file: q.path ?? "", permission: live.permission, ceiling: live.settings.localToolPermissionCeiling,
+        serverAuthoritative: this.serverAuthoritative, accountScope: this.opts.accountScope,
+        approvalId: q.approvalId, authorization: q.authorization ?? { kind: "none" },
+        terminalsFolder: this.opts.hello.terminalsFolder,
+        approvalsPath: approvalsPathFor(dataRoot), retirementsPath: retirementsPathFor(dataRoot),
+      });
+      if (refusal !== undefined) { await this.emit({ kind: "file-error", requestId: q.requestId, error: refusal }); return; }
+      try {
+        await writeUploadFile(this.opts.root, q.path ?? "", q.bytes ?? new Uint8Array());
+        await this.emit({ kind: "file", requestId: q.requestId });
+      } catch (error) {
+        await this.emit({ kind: "file-error", requestId: q.requestId, error: error instanceof Error ? error.message : String(error) });
+      }
+      return;
+    }
+    if (q.kind === requestKinds.discoverAiTool && q.source !== undefined) {
+      // D:135989–136024: k6r→pJe read-ai-tool-setup on the product label; file-error refusal; VJe JSON as file bytes.
+      const live = loadSettingsSync(), dataRoot = dataRootFromEnv();
+      const refusal = await discoverAiToolRefusal({
+        target: describeAiToolDiscovery(q.source).target, permission: live.permission, ceiling: live.settings.localToolPermissionCeiling,
+        serverAuthoritative: this.serverAuthoritative, accountScope: this.opts.accountScope,
+        approvalId: q.approvalId, authorization: q.authorization ?? { kind: "none" },
+        terminalsFolder: this.opts.hello.terminalsFolder,
+        approvalsPath: approvalsPathFor(dataRoot), retirementsPath: retirementsPathFor(dataRoot),
+      });
+      if (refusal !== undefined) { await this.emit({ kind: "file-error", requestId: q.requestId, error: refusal }); return; }
+      let frame: ExecFrameOut;
+      try { frame = { kind: "file", requestId: q.requestId, bytes: await discoverAiToolBytes(q.source, { configDirs: this.aiToolConfigDirs }) }; }
+      catch (error) { frame = { kind: "file-error", requestId: q.requestId, error: error instanceof Error ? error.message : String(error) }; }
+      await this.emit(frame);
+      return;
+    }
     if (q.kind === requestKinds.download) {
       // D:135989–136009: same authorization as exec, but read-file description and file-error refusal.
       const live = loadSettingsSync(), dataRoot = dataRootFromEnv();
@@ -730,6 +856,13 @@ export class UserComputerProvider implements UserComputerTransport {
       } catch (error) { await this.emit({ kind: "file-error", requestId: q.requestId, error: error instanceof Error ? error.message : String(error) }); }
       return;
     }
+    if (q.kind === requestKinds.messagesOp && q.messages !== undefined) {
+      // D:v_.handle 135974–135983 → shared executor (withSendKey → replayedSend → handleMessagesOp).
+      const entry = { get cancelled() { return self.cancelledIds.has(q.requestId); } };
+      const self = this;
+      await this.messages.handle(q.messages, entry, f => this.pushFrame(f));
+      return;
+    }
     if (q.kind !== requestKinds.exec) {
       // Frozen oracle dispatch maps unimplemented outer variants to an error.
       // Full variant-specific payloads remain a documented gap (not silent success).
@@ -739,7 +872,7 @@ export class UserComputerProvider implements UserComputerTransport {
       return;
     }
     // t117u: exec approval chain (src/uc/approvals.ts) — server flags only on a serverAuthoritative channel,
-    // local approvals file + retirements + 1h recordedAtMs expiry + Yce. Upload and other request kinds stay unimplemented.
+    // local approvals file + retirements + 1h recordedAtMs expiry + Yce. Discover-ai-tool and other request kinds stay unimplemented.
     // Official re() (D:L179276–179288) calls N.getLocalToolPermission() → load() → readFileSync (L82881/L82271/pue)
     // synchronously inside startRequest, before its first await (v_.handle L135963 → withInflight L136032 →
     // handleExecRequest L136309–136318 have no earlier await). Same here: one synchronous read per request, so execs
@@ -783,12 +916,34 @@ export class UserComputerProvider implements UserComputerTransport {
       serverMessage: q.serverMessage, permission: "always", pullOutput: true, emit: frame => {
         if (this.replies instanceof UcReplyLanes) {
           // Original UC enqueue is synchronous push + flush, not a Promise for Submit success.
-          this.replies.push([responseFrame(frame)]);
+          this.replies.push(responseFrames(frame));
           void this.replies.flush();
           return;
         }
         return this.emit(frame); // Existing public async Emit/test-double contract.
       } });
+  }
+
+  /** Same enqueue as exec frames: synchronous lane push + flush (D:enqueue → replies.push(Y_(t))). */
+  private pushFrame(frame: ExecFrameOut): void | Promise<void> {
+    if (this.replies instanceof UcReplyLanes) { this.replies.push(responseFrames(frame)); void this.replies.flush(); return; }
+    return this.emit(frame);
+  }
+  /** One v_ per UC provider (D:Ve 179353–179365): decideLocalUse = Qce, isLocalUseBlocked = AUe via re(Y, accountScope, SA). */
+  private messages = new MessagesExecutor({
+    capabilities: () => { const m = messagesSettings(loadSettingsSync()); return messagesCapabilities(m.enabled, { read: m.read, send: m.send }); },
+    isLocalUseBlocked: async t => await execRefusal({ ...this.messagesDecisionInput(), approvalId: t.approvalId, authorization: t.authorization, describes: t.describes }),
+    decideLocalUse: async t => {
+      const v = await decideExecLocalUse({ ...this.messagesDecisionInput(), approvalId: t.approvalId, authorization: t.authorization, describes: t.describes });
+      return v.kind === "refused" ? { kind: "refused", reason: v.error } : v;
+    },
+    sidecar: () => (this.opts.sidecar ?? locateSidecar)(),
+  }, draftCardCodes(NEVER_MSG, ASK_MSG));
+  private messagesDecisionInput() {
+    const live = loadSettingsSync(), dataRoot = dataRootFromEnv();
+    return { permission: live.permission, ceiling: live.settings.localToolPermissionCeiling, messagesEnabled: messagesSettings(live).enabled,
+      serverAuthoritative: this.serverAuthoritative, accountScope: this.opts.accountScope, terminalsFolder: this.opts.hello.terminalsFolder,
+      approvalsPath: approvalsPathFor(dataRoot), retirementsPath: retirementsPathFor(dataRoot), standingGrantsPath: standingGrantsPathFor(dataRoot) };
   }
 
   private async watchLoop(hello: UserComputerHello): Promise<void> {

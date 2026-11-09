@@ -11,6 +11,8 @@ import {
 } from "../generated/agent.v1_pb";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import * as os from "node:os";
+import * as url from "node:url";
 import { spawn, type ChildProcess } from "node:child_process";
 import { assertRealpathUnderRoot, assertUnderRoot, PathGuardError } from "./path";
 import type { PermissionMode } from "../settings";
@@ -19,7 +21,13 @@ import { commitShell, getSessionCwd, MAX_STATE_BYTES, prepareShell, terminateIni
 export type ExecFrameOut =
   | { kind: "client"; requestId: string; message: Record<string, unknown> }
   | { kind: "control"; requestId: string; message: Record<string, unknown>; cwdState?: string }
-  | { kind: "file-error" | "messages-error"; requestId: string; error: string };
+  | { kind: "file-error" | "messages-error"; requestId: string; error: string }
+  /** UC upload success has no bytes (Y_ empty seq0/last). Box download materializes bytes for bytesBase64. */
+  | { kind: "file"; requestId: string; bytes?: Uint8Array }
+  /** UC messages-op frames (D:Y_ 179001–179040). */
+  | { kind: "messages-accepted"; requestId: string }
+  | { kind: "messages-consent-result"; requestId: string; verdict: { kind: "allow" } | { kind: "ask" } | { kind: "refused"; reason: string } }
+  | { kind: "messages-result"; requestId: string; result: unknown; timings?: { daemonMs: number; helperMs: number; sqliteMs?: number } };
 
 export type Emit = (frame: ExecFrameOut) => void | Promise<void>;
 
@@ -192,6 +200,20 @@ export async function handleRead(args: {
 export const RIPGREP_UNCONFIGURED =
   "Ripgrep path not configured. Call configureRipgrepPath() at startup.";
 
+/** D:er 15130 (zNe ~ expansion 15119, DLt file:// 15122): the ls executor's own path resolution against the workspace root. */
+export function lsResolvePath(t: string, root: string): string {
+  let r = t;
+  if (r.startsWith("file://")) { try { r = url.fileURLToPath(r); } catch { /* keep */ } }
+  r = r.replace(/^~(?=$|\/|\\)/, () => os.homedir());
+  return root && !path.isAbsolute(r) ? path.resolve(root, r) : path.resolve(r);
+}
+/** D:uae 15087 / cae 15079: <...>/.cursor/projects/<id>/terminals exactly. */
+export function isCursorTerminalsDir(t: string): boolean {
+  const r = t.split(/[/\\]/).filter(e => e);
+  for (let n = 0; n < r.length - 2; n++)
+    if (r[n] === ".cursor" && r[n + 1] === "projects" && r[n + 3] === "terminals") return r.slice(n + 4).length === 0;
+  return false;
+}
 export async function handleLs(args: {
   root: string;
   requestId: string;
@@ -205,15 +227,28 @@ export async function handleLs(args: {
   // path. Verified by isolated oracle (docs/local-exec-scenario-matrix.md,
   // official-v2 "ls"). We match the observed behavior, not the design intent.
   // Path guard stays (official ls escape behavior is unverified).
+  // t154: LocalLsExecutor.execute (D:129400–129483) stats the er()-resolved path BEFORE the ripgrep build, so
+  // ENOENT / not-a-directory / other stat errors win over the nl() throw. The ripgrep tree build itself
+  // (kO D:107439, buildTreeFromRipgrepStream D:129495–129542) is unreachable in 0.79.3 and is NOT implemented.
   const { root, requestId, msgId, emit } = args;
   try {
-    const abs = assertRealpathUnderRoot(root, args.path);
+    assertRealpathUnderRoot(root, args.path);
+    const abs = lsResolvePath(args.path, root);
+    let error = RIPGREP_UNCONFIGURED;
+    try {
+      if (!(await fs.promises.stat(abs)).isDirectory()) error = `Path is not a directory: ${abs}`;
+    } catch (m) {
+      const code = typeof m === "object" && m !== null && "code" in m ? (m as { code?: unknown }).code : undefined;
+      error = code === "ENOENT"
+        ? (isCursorTerminalsDir(abs) ? "No active terminals." : `Path does not exist: ${abs}`)
+        : m instanceof Error ? m.message : typeof m === "object" && m !== null && typeof (m as { message?: unknown }).message === "string" ? (m as { message: string }).message : "";
+    }
     const client = new ExecClientMessage({
       id: msgId,
       message: {
         case: "lsResult",
         value: new LsResult({
-          result: { case: "error", value: new LsError({ path: abs, error: RIPGREP_UNCONFIGURED }) },
+          result: { case: "error", value: new LsError({ path: abs, error }) },
         }),
       },
       localExecutionTimeMs: 1,
@@ -448,29 +483,23 @@ export function handleUnsupported(
   })().catch(() => console.error("[local-exec] unsupported reply failed"));
 }
 
-export function handleDownload(args: {
+/** Box JSON download materializer after the caller already applied Qce/AUe (D:137534–137544 / iqe).
+ * Not a UC attached stream. Callers must refuse before invoking this.
+ */
+export async function handleDownload(args: {
   root: string;
   requestId: string;
   filePath: string;
-  permission: PermissionMode;
   emit: Emit;
-}): void {
-  const { requestId, emit, permission } = args;
-  if (refuseByPermission(permission, requestId, emit)) return;
+}): Promise<void> {
+  const { prepareDownload, readWholeFile } = await import("../uc/file-source");
   try {
-    assertRealpathUnderRoot(args.root, args.filePath);
-    // Minimal: refuse to invent upload protocol; report not implemented for Always.
-    emit({
-      kind: "file-error",
-      requestId,
-      error: "Download streaming is not implemented in this P1 skeleton (path guards OK).",
-    });
+    const source = await prepareDownload(args.root, args.filePath);
+    const whole = await readWholeFile(source);
+    if ("error" in whole) await args.emit({ kind: "file-error", requestId: args.requestId, error: whole.error });
+    else await args.emit({ kind: "file", requestId: args.requestId, bytes: whole.bytes });
   } catch (e) {
-    emit({
-      kind: "file-error",
-      requestId,
-      error: e instanceof PathGuardError ? e.message : String(e),
-    });
+    await args.emit({ kind: "file-error", requestId: args.requestId, error: e instanceof Error ? e.message : String(e) });
   }
 }
 

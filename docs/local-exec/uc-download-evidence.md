@@ -46,3 +46,7 @@ No upload, file URL transfer, Box streaming, download-to-agent storage pipeline,
 - Root `npm run build`: passed. `UC_SKIP_OFFICIAL=1 npm test`: control **227/227**, daemon **265 passed / 4 skipped / 0 failed** (269 total), organization **6/6**. Each planned functional scope ran once; no test failure was rerun away.
 - Development failures are NOT erased: first `node --check` failed for a missing brace in the short-read mock; it was corrected before testing. First daemon build failed TS2322 because frozen generated File.data infers `Uint8Array<ArrayBuffer>` while FileRead initially declared ArrayBufferLike. The source already allocates an owned ArrayBuffer; only its declaration was narrowed, without changing schema, adding a cast or copying frames. A subsequent build validated that specific type correction. Raw failed build and correction notes are retained in local, uncommitted validation evidence; the original syntax diagnostic also remains in the tool transcript.
 - Historical evidence untouched; no commit/push. HEAD remained `7cff6e9efa732f5ed4f7ebaaa67d9e690dfe8f5f`.
+
+## Related t153
+
+UC outer **upload** and Box JSON **materialized download** are documented in `upload-box-url-evidence.md`. They are not the same as this attached-source download path. URL transfer remains unimplemented because original v9r ignores those frames.
