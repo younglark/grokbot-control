@@ -2,7 +2,7 @@
   "source": "/workspace/grokbot-control/docs/protocol/baselines/schema-0.79.3/aiserver.v1.proto",
   "sha256": "056916b2f377efb78888fcb6a3e1dc12845b2356046fc17da46904bb6c7cb7bd",
   "generator": "Independent Python stdlib protobuf wire construction from frozen field numbers, no production code",
-  "helloHex": "0a0b696e646570656e64656e74120f2f73796e7468657469632d726f6f741a192f73796e7468657469632d726f6f742f7465726d696e616c73220361736b280132036c616238004a00",
+  "helloHex": "0a0b696e646570656e64656e74120f2f73796e7468657469632d726f6f741a192f73796e7468657469632d726f6f742f7465726d696e616c73220361736b280132036c616238004204100420014a00",
   "submitClientHex": "0a1573796e7468657469632d6c61622d6d616368696e65122073796e7468657469632d75632d63726564656e7469616c2d6c61622d6f6e6c791a140a06676f6c64656e120a0a087b226964223a377d",
   "accepted0Hex": "0800",
   "accepted1Hex": "0801",
@@ -11,5 +11,6 @@
     "machine_id": 1,
     "credential": 2,
     "presence_token": 3
-  }
+  },
+  "helloCapabilitiesNote": "t160: field 8 = GrokBotUserComputerCapabilities{messages_op_generation(2)=4, ai_tool_setup(4)=true}; the original hello always sets capabilities with gE=4 and aiToolSetup true; mobileLocalTools [] encodes nothing; no sidecar \u2192 no messagesOp/localStandingGrants (D:178137-178175, D:97145)."
 }

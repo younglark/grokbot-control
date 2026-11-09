@@ -10,6 +10,8 @@ export type DiscoveryRecord = {
   inflightCount: number;
   filesKeyId?: string;
   generation?: number;
+  /** D:v 179205: sorted rejected account scopes, only when non-empty. */
+  rejectedAccountScopes?: string[];
 };
 
 export function discoveryPath(env: NodeJS.ProcessEnv = process.env): string {
@@ -28,8 +30,10 @@ export async function publishDiscovery(
     inflightCount: partial.inflightCount ?? 0,
     ...(fileKeyB64 ? { filesKeyId: filesKeyIdFromBase64Key(fileKeyB64) } : {}),
     ...(partial.generation != null ? { generation: partial.generation } : {}),
+    ...(partial.rejectedAccountScopes?.length ? { rejectedAccountScopes: [...partial.rejectedAccountScopes].sort() } : {}),
   };
-  await writeAtomic(discoveryPath(env), JSON.stringify(rec));
+  // D:CLe 80993 → TLe(path, record, {pretty:true}) → cp without a mode.
+  await writeAtomic(discoveryPath(env), JSON.stringify(rec, null, 2));
 }
 
 export async function clearDiscovery(env: NodeJS.ProcessEnv = process.env): Promise<void> {

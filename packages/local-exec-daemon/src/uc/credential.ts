@@ -1,7 +1,7 @@
 import * as path from "node:path";
 import { z } from "zod";
 import { dataRootFromEnv, readJsonIfExists } from "../util";
-import { unsealJson } from "./sealed";
+import { openMaybeSealed } from "../state/connection";
 
 const UserComputerChannelSchema = z.object({
   credential: z.string().min(1),
@@ -10,12 +10,14 @@ const UserComputerChannelSchema = z.object({
   serverAuthoritative: z.boolean().optional(),
 });
 
+/** D:GFt 80896: top-level credential (Box exchange) is optional; at least one of credential/userComputer(s) required. */
 const CredentialPayloadSchema = z.object({
+  credential: z.string().min(1).optional(),
   backendUrl: z.string().min(1),
   userComputer: UserComputerChannelSchema.optional(),
   userComputers: z.array(UserComputerChannelSchema).optional(),
   box: z.unknown().optional(),
-});
+}).refine(e => e.credential !== undefined || e.userComputer !== undefined || (e.userComputers?.length ?? 0) > 0);
 
 export type CredentialPayload = z.infer<typeof CredentialPayloadSchema>;
 export type UserComputerChannelCred = z.infer<typeof UserComputerChannelSchema>;
@@ -25,11 +27,12 @@ export function credentialPath(env: NodeJS.ProcessEnv = process.env): string {
 }
 
 /**
- * Load sealed credential file using the IPC file key.
- * Does not log credential material.
+ * D:ILe 80986 via _d (D:80952): ENOENT → null, other read errors throw; RDe (D:79701) opens a sealed envelope with
+ * the IPC key (no key or a bad open → null) and passes any other text through as plain JSON; tn (JSON.parse →
+ * undefined) then up(GFt) → null on schema failure. Does not log credential material.
  */
 export async function loadSealedCredential(
-  fileKeyB64: string,
+  fileKeyB64: string | null,
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<CredentialPayload | null> {
   const p = credentialPath(env);
@@ -41,8 +44,11 @@ export async function loadSealedCredential(
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw e;
   }
-  const plain = unsealJson(fileKeyB64, raw);
-  const parsed = CredentialPayloadSchema.safeParse(JSON.parse(plain));
+  const plain = openMaybeSealed(raw, fileKeyB64);
+  if (plain == null) return null;
+  let value: unknown;
+  try { value = JSON.parse(plain); } catch { value = undefined; }
+  const parsed = CredentialPayloadSchema.safeParse(value);
   return parsed.success ? parsed.data : null;
 }
 

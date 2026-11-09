@@ -103,7 +103,7 @@ test('Box validates token/custom headers on GET and POST, retries 503, reconnect
  });});await new Promise(r=>server.listen(0,'127.0.0.1',r));
  const provider=new BoxProvider({connection:{baseUrl:`http://127.0.0.1:${server.address().port}`,token:'synthetic-token',headers:{'x-lab':'synthetic-header'}},root,computerId:'synthetic',label:'lab',variant:'lab',permission:'never'});
  const running=provider.start();
- try{await until(()=>gets>=2&&posts>=3);assert.equal(valid,true)}finally{await provider.stop({ withdrawPresence: true });stream?.destroy();await running;await new Promise(r=>server.close(r));if(old===undefined)delete process.env.SAND_DATA_ROOT;else process.env.SAND_DATA_ROOT=old;fs.rmSync(root,{recursive:true,force:true})}
+ try{await until(()=>gets>=2&&posts>=3);assert.equal(valid,true)}finally{await provider.stop({ withdrawPresence: true });stream?.destroy();await Promise.race([running,new Promise(r=>setTimeout(r,50))]);await new Promise(r=>server.close(r));if(old===undefined)delete process.env.SAND_DATA_ROOT;else process.env.SAND_DATA_ROOT=old;fs.rmSync(root,{recursive:true,force:true})}
 });
 test('spawn error event produces error+close without uncaught exception',async()=>{
  const cp=require('node:child_process'),{EventEmitter}=require('node:events');const original=cp.spawn;const root=workspace();const got=[];

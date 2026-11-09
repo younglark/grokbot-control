@@ -27,7 +27,11 @@ export type ExecFrameOut =
   /** UC messages-op frames (D:Y_ 179001–179040). */
   | { kind: "messages-accepted"; requestId: string }
   | { kind: "messages-consent-result"; requestId: string; verdict: { kind: "allow" } | { kind: "ask" } | { kind: "refused"; reason: string } }
-  | { kind: "messages-result"; requestId: string; result: unknown; timings?: { daemonMs: number; helperMs: number; sqliteMs?: number } };
+  | { kind: "messages-result"; requestId: string; result: unknown; timings?: { daemonMs: number; helperMs: number; sqliteMs?: number } }
+  /** UC local-tool frames (D:Y_ 179042–179078). */
+  | { kind: "local-tool-accepted"; requestId: string; permissionGranted?: true }
+  | { kind: "local-tool-permission-pending"; requestId: string; reason?: string }
+  | { kind: "local-tool-result"; requestId: string; outcome: { status: "done"; outputJson: string } | { status: "failed"; error: string } | { status: "needs_permission"; error?: string } | { status: "ask"; app: { bundleId: string; appName: string } } };
 
 export type Emit = (frame: ExecFrameOut) => void | Promise<void>;
 

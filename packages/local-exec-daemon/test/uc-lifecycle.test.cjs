@@ -17,7 +17,7 @@ const code = source
     point,
     '    globalThis.audit = { publish, requestOwnershipTick, awaitOwnershipTick: async () => { await ownershipTask; }, setInflight: value => { inflightCount = value; }, setSuperseded: value => { supersededSinceMs = value; }, refreshUc, requestUcRefresh, shutdown, getUc: () => uc, awaitUcRefresh: async () => { await ucRefresh; } };\n' + point,
   )
-  .replace('main().catch(() => (0, handoff_1.exitFatal)());', 'module.exports = main;');
+  .replace('main().catch(error => (0, handoff_1.exitFatal)(error));', 'module.exports = main;'); // t160: fatal now reports xt(e)
 assert.notEqual(code, source);
 assert.ok(code.includes('module.exports = main;'));
 
@@ -71,6 +71,8 @@ async function harness(sa = false, hooks = {}) {
     updateChannel(c) { this.updated = c; return true; }
     async rehelloIfChanged() { this.updated = await this.opts.resolveChannel(); }
   }
+  const boxes = [];
+  const written = [];
   const mods = {
     './trace': { lifecycleTrace(ev, info) { traces.push({ev, at: now, ...info}); } },
     './exec/handlers': { shutdownShells: () => shellStop() },
@@ -92,11 +94,16 @@ async function harness(sa = false, hooks = {}) {
       isSupervised: () => supervised(),
       loadDiscovery: async () => hooks.readDiscovery ? hooks.readDiscovery() : discovery,
     },
-    './state/connection': { loadConnection: async () => null },
-    './box/provider': { BoxProvider: class { constructor() { throw new Error('box prohibited'); } } },
+    './state/connection': { loadConnection: async () => null, writeConnection: async (c, k) => { written.push({ c, k }); } },
+    // t159: the original always constructs and starts the Box provider (D:Te 179316–179331); this fake never dials.
+    './box/provider': { BoxProvider: class { constructor(opts) { this.opts = opts; boxes.push(this); } async start() {} redial() {} wakeFromReconnectBackoff() {} async stop() {} beginShutdown() {} } },
+    './state/connection-exchange': require('../dist/state/connection-exchange'),
+    './uc/local-tools': { createDeviceTools: () => ({ announced: () => [], offers: () => false }) },
     './uc/provider': { UserComputerProvider: FakeProvider },
     // t154: index captures CLAUDE_CONFIG_DIR/CODEX_HOME once at start (D:187322–187325).
     './uc/ai-tool-discovery': { aiToolConfigDirsFromEnv: () => ({}) },
+    // t158: UC hello capabilities consult the sidecar lookup (D:y5 84695); absent on Linux.
+    './box/messages-op': { locateSidecar: () => undefined },
     './uc/credential': {
       loadSealedCredential: async () => {
         const value = await loader();
@@ -145,6 +152,8 @@ async function harness(sa = false, hooks = {}) {
     now: () => now,
     timerCount: () => timers.filter(t => !t.cancelled).length,
     instances,
+    boxes,
+    written,
     events,
     setChannel: (v) => { channel = v; },
     setLoader: (v) => { loader = v; },
@@ -478,4 +487,99 @@ test('shutdown disposes independent ownership schedule even when an ownership re
  h.requestOwnershipTick();await tick();h.shutdown('synthetic');await tick();gate.resolve();await h.awaitOwnershipTick();
  const before=h.traces.filter(t=>t.ev==='ownership:begin').length;await h.advance(30000);
  assert.equal(reads,1);assert.equal(h.traces.filter(t=>t.ev==='ownership:begin').length,before);assert.equal(h.timerCount(),0);
+});
+
+// ---- t159: Box always runs; resolveConnection / onConnectionStale (ge) / onLoopEvent wiring (D:179262–179331, 179404–179412)
+const http159 = require('node:http');
+async function fakeExchange(handler) {
+  const seen = [];
+  const server = http159.createServer((req, res) => { let b = ''; req.on('data', d => b += d); req.on('end', () => { seen.push({ method: req.method, url: req.url, headers: req.headers, body: b }); handler(req, res); }); });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  return { seen, url: `http://127.0.0.1:${server.address().port}`, close: () => new Promise(r => { server.closeAllConnections?.(); server.close(r); }) };
+}
+
+test('t159 Box is constructed at startup with resolveConnection/resolveResponseConnection/onConnectionStale; variant = HPe(boxNamespace)', async () => {
+  const h = await harness(false);
+  assert.equal(h.boxes.length, 1);
+  const o = h.boxes[0].opts;
+  assert.equal(o.connection, undefined);
+  assert.equal(o.variant, 'sand-dev');
+  assert.equal(typeof o.onConnectionStale, 'function');
+  // a live UC channel keeps the Box dial idle (C9r); responses still resolve via `we` (P9r when no file)
+  await assert.rejects(o.resolveConnection(), e => e.name === 'SandLocalExecConnectionError' && /box dial stays idle/.test(e.message));
+  await assert.rejects(o.resolveResponseConnection(), e => e.name === 'SandLocalExecConnectionError' && /no gateway connection yet/.test(e.message));
+  h.setChannel(null);
+  await assert.rejects(o.resolveConnection(), e => /no gateway connection yet/.test(e.message));
+});
+
+test('t159 ge: exchange runs only with a top-level credential and no serving UC channel; result written with the IPC key', async () => {
+  const srv = await fakeExchange((req, res) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ baseUrl: 'http://gw.synthetic', token: 'synthetic-gw', gatewayPortToken: 'synthetic-port' })); });
+  try {
+    const h = await harness(false);
+    const stale = h.boxes[0].opts.onConnectionStale;
+    // UC channel present (not refused) → X() true → no exchange
+    h.setLoader(async () => ({ backendUrl: srv.url, credential: 'synthetic-box', userComputer: ch(false) }));
+    await stale();
+    assert.equal(srv.seen.length, 0);
+    // no top-level credential → no exchange
+    h.setLoader(async () => ({ backendUrl: srv.url, userComputers: [] }));
+    await stale();
+    assert.equal(srv.seen.length, 0);
+    // credential only → POST, then vLe(connection, key)
+    h.setLoader(async () => ({ backendUrl: srv.url, credential: 'synthetic-box' }));
+    await stale();
+    assert.equal(srv.seen.length, 1);
+    assert.equal(srv.seen[0].url, '/sand-box/local-exec-connection');
+    assert.deepEqual(JSON.parse(srv.seen[0].body), { credential: 'synthetic-box' });
+    assert.equal(h.written.length, 1);
+    assert.deepEqual(JSON.parse(JSON.stringify(h.written[0].c)), { baseUrl: 'http://gw.synthetic', token: 'synthetic-gw', headers: { 'x-anyrun-port-token': 'synthetic-port' } });
+    assert.equal(h.written[0].k, 'synthetic-key');
+  } finally { await srv.close(); }
+});
+
+test('t159 ge: unavailable exchange logs the original text and writes nothing', async () => {
+  const srv = await fakeExchange((req, res) => { res.writeHead(503); res.end(); });
+  const logs = []; const orig = console.error; console.error = (...a) => logs.push(a.join(' '));
+  try {
+    const h = await harness(null);
+    h.setLoader(async () => ({ backendUrl: srv.url, credential: 'synthetic-box' }));
+    await h.boxes[0].opts.onConnectionStale();
+    assert.ok(logs.includes('[local-exec-daemon] connection exchange unavailable (status): http_503'), logs.join('\n'));
+    assert.equal(h.written.length, 0);
+  } finally { console.error = orig; await srv.close(); }
+});
+
+test('t159 onLoopEvent: unauthorized adds the scope (Box may dial, discovery lists it); connected removes it and redials', async () => {
+  const published = [];
+  const h = await harness(false, { publisher: async rec => { published.push(rec); } });
+  const box = h.boxes[0]; let wakes = 0, redials = 0;
+  box.wakeFromReconnectBackoff = () => { wakes++; }; box.redial = () => { redials++; };
+  const ev = h.instances[0].opts.onLoopEvent;
+  ev({ kind: 'disconnected', reason: 'unauthorized' });
+  assert.equal(wakes, 1);
+  await tick(); await tick();
+  assert.deepEqual([...published.at(-1).rejectedAccountScopes], ['synthetic-scope']); // vm-realm array → copy
+  await assert.rejects(box.opts.resolveConnection(), e => /no gateway connection yet/.test(e.message)); // X() false now
+  ev({ kind: 'connected' });
+  assert.equal(redials, 1);
+  await tick(); await tick();
+  assert.equal(published.at(-1).rejectedAccountScopes, undefined);
+  ev({ kind: 'channel-missing' });
+  assert.equal(wakes, 2);
+});
+
+test('t160 index passes no hello capabilities; the provider builds them on every Watch (D:hello 178137–178175)', async () => {
+  const h = await harness(false);
+  assert.equal(h.instances[0].opts.hello.capabilities, undefined);
+});
+
+test('t160 servingAt starts at startedAt (m = p) and every completed standing tick sets it to now (Rt m = l(), D:179478)', async () => {
+  const recs = [];
+  const h = await harness(false, { publisher: async rec => { recs.push(rec); } });
+  assert.ok(recs.length > 0);
+  assert.equal(recs[0].servingAt, recs[0].startedAt);
+  await h.advance(4100);
+  const last = recs.at(-1);
+  assert.ok(last.servingAt > last.startedAt, JSON.stringify(recs.map(r => r.servingAt)));
+  assert.ok(last.servingAt <= h.now());
 });

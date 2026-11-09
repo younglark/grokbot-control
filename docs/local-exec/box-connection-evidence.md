@@ -25,8 +25,23 @@ Evidence is D:137179–137185 (constants) and $L (D:137208–137260):
 - An injectable `clock` drives all four timers: deadline, backoff, watchdog, heartbeat.
 - Tests: `test/uc-messages-op-box-timing.test.cjs` (fake clock; no long real sleeps).
 
-## Deviations and gaps
-- **Shutdown:** close() also ends the backoff wait, so stop() can await start(). The original start() is fire-and-forget.
-- **Timers stay referenced:** the original's qr unrefs its timers. The port does not, to avoid the daemon exiting while it waits.
-- **onConnectionStale is not wired:** in the original it is ge (D:179267–179275), which exchanges the UC credential for a new connection with the backend. That exchange RPC was not ported, so the option exists but index.ts does not pass it.
-- **Data outbox is not aligned:** the original flush POSTs the whole outbox, 3 tries per batch with a 120 s deadline, and drops after that. The port still uses ReplyQueue, which retries indefinitely and pauses the lane on 401/403.
+## t158 alignment
+- **Timers are unref'd.** The default clock `boxRealClock` calls `setTimeout(...).unref()`, matching qr.schedule (D:78117–78140). Only Pu with keepEventLoopAliveDuringWaits keeps timers referenced (D:78244), and no Box policy sets it. This covers the deadline (Gi D:78186), backoff/postRetry (Pu D:78223), watchdog (xh D:78300) and heartbeat (yre D:78435).
+- **close behaves like the original.** close does only `closed=true; abortController?.abort()` (D:137284). It does not wake the backoff wait, and stop() does not drain the outbox. Tests: `await running` became `Promise.race([running, 50ms])`.
+- **Data lane follows the original.** The NOT-ORIGINAL ReplyQueue is removed, and the port now matches the original's whole-outbox flush and drop behavior:
+  - `enqueue` = push + flush (D:137293–137306).
+  - While the outbox is non-empty and not closed, flush POSTs the whole outbox (`{providerId, frames}`) to `${baseUrl}/local-exec/responses`.
+  - Each attempt has the 120 s E0 deadline. postRetry makes imt=3 attempts with a fixed 200 ms between them (D:137307–137330).
+  - Each attempt resolves the connection via `resolveResponseConnection ?? resolveConnection`.
+  - Headers come from cmt: content-type plus headers, then `authorization: Bearer`.
+  - After 3 failures it logs `[local-exec-provider] dropping N-frame response batch after 3 failed POSTs: ${xt(cause)}` and discards the batch.
+  - xt (D:78680) is ported as `describeError`: `name (code)`, else an `E[A-Z_]+` code from the cause chain, else the name.
+  - Errors: a non-ok response throws `SandLocalExecResponsePostError (http_<status>)`; a timeout throws `DeadlineExceededError (deadline_exceeded)`.
+  - 401/403 no longer pause the lane.
+- **Control POSTs (hello/ping)** use the same postBatch with a 10 s control deadline.
+- **SSE request headers** are `{accept:"text/event-stream", ...headers}` (D:cmt 137186).
+- Tests: `test/box-lane-local-tool.test.cjs`, covering batching [1] then [2,3], 3×500 drop log, 3×120 s deadline drop, post-stop no-flush, unref, and xt.
+
+## onConnectionStale (t159: implemented — see connection-exchange-evidence.md)
+- runLoop (D:137338–137377): after Cwr=3 consecutive failed streams, onConnectionStale is awaited and r is reset. A failure is logged as `[local-exec-provider] stale-connection re-resolve failed: ${xt}`.
+- The daemon passes ge (D:179267–179277), which calls O9r: a plain HTTP JSON POST, ported the same way the original does it.

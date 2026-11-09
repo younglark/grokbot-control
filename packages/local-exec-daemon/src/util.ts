@@ -2,6 +2,7 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { lifecycleTrace } from "./trace";
+import { cp } from "./state/fs-write";
 
 export function delay(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -11,29 +12,19 @@ export function filesKeyIdFromBase64Key(keyB64: string): string {
   return crypto.createHash("sha256").update(Buffer.from(keyB64, "base64")).digest("hex").slice(0, 16);
 }
 
-export async function writeAtomic(filePath: string, data: string, mode = 0o600): Promise<void> {
+/**
+ * Atomic write through the original's cp (src/state/fs-write.ts, D:80591). Lifecycle trace points for the
+ * discovery file are test instrumentation only. `mode` undefined = the original's no-mode call (existing file mode
+ * or 0o666 & ~umask).
+ */
+export async function writeAtomic(filePath: string, data: string, mode?: number): Promise<void> {
   const discovery = path.basename(filePath) === "local-exec-daemon.json";
   if (discovery) lifecycleTrace("discovery:write-begin");
-  const dir = path.dirname(filePath);
-  await fs.promises.mkdir(dir, { recursive: true });
-  const tmp = path.join(
-    dir,
-    `.${path.basename(filePath)}.${process.pid}.${Date.now()}.${crypto.randomBytes(4).toString("hex")}.tmp`,
-  );
-  await fs.promises.writeFile(tmp, data, { encoding: "utf8", mode });
-  if (discovery) lifecycleTrace("discovery:temp-done");
-  try {
-    if (discovery) lifecycleTrace("discovery:rename-begin");
-    await fs.promises.rename(tmp, filePath);
-    if (discovery) lifecycleTrace("discovery:rename-done");
-  } catch (e) {
-    try {
-      await fs.promises.unlink(tmp);
-    } catch {
-      /* ignore */
-    }
-    throw e;
-  }
+  await cp(filePath, data, mode != null ? { mode } : {}, discovery ? {
+    tempDone: () => lifecycleTrace("discovery:temp-done"),
+    renameBegin: () => lifecycleTrace("discovery:rename-begin"),
+    renameDone: () => lifecycleTrace("discovery:rename-done"),
+  } : {});
 }
 
 export async function readJsonIfExists<T>(filePath: string): Promise<T | null> {

@@ -1,3 +1,4 @@
+import { describeError } from "../box/provider";
 import { logFatal } from "../util";
 
 export type FileKeyHandoff = {
@@ -84,7 +85,9 @@ export async function awaitHandoff(timeoutMs = 5000): Promise<HandoffResult> {
   });
 }
 
-export function exitFatal(): never {
-  logFatal();
+/** D:cqr catch 187341–187348: `[sand-local-exec-daemon] fatal: ${xt(e)}` then exit 1. No argument → "Error". */
+export function exitFatal(error?: unknown): never {
+  if (error === undefined) logFatal();
+  else console.error(`[sand-local-exec-daemon] fatal: ${describeError(error instanceof Error ? error : new Error(String(error)))}`);
   process.exit(1);
 }

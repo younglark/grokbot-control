@@ -21,7 +21,7 @@ async function boxPeer(t,{settings={version:1,localToolPermission:'always'},welc
  const connection={baseUrl:`http://127.0.0.1:${server.address().port}`,token:'synthetic-token',headers:{}};
  const provider=new BoxProvider({connection,root,computerId:'synthetic',label:'lab',variant:'lab',permission:'always',sidecar:()=>undefined,...opts});
  const running=provider.start();
- t.after(async()=>{await provider.stop();stream?.destroy();await running;await new Promise(r=>server.close(r));if(old===undefined)delete process.env.SAND_DATA_ROOT;else process.env.SAND_DATA_ROOT=old});
+ t.after(async()=>{await provider.stop();stream?.destroy();await Promise.race([running,new Promise(r=>setTimeout(r,50))]);await new Promise(r=>server.close(r));if(old===undefined)delete process.env.SAND_DATA_ROOT;else process.env.SAND_DATA_ROOT=old});
  return{root,data,connection,provider,bodies,posted,gets,stream:()=>stream,send:obj=>stream.write('data: '+JSON.stringify(obj)+'\n\n'),reply:id=>posted.filter(f=>f.requestId===id)};
 }
 
@@ -77,7 +77,8 @@ test('Box heartbeat "moved" check aborts only the current stream and redials wit
 test('Box hello dropped after 3 failed POSTs with the original log line',{timeout:10000},async t=>{
  const errs=[];const orig=console.error;console.error=(...a)=>errs.push(a.join(' '));t.after(()=>{console.error=orig});
  const b=await boxPeer(t,{welcome:false,opts:{heartbeatMs:60000},postStatus:x=>x.frames[0].kind==='hello'?500:200});
- await until(()=>errs.some(e=>e.includes('dropping 1-frame response batch after 3 failed POSTs')));
+ // t159: match this provider's cause; an earlier test's provider may still drop its own batch (ECONNREFUSED) after stop.
+ await until(()=>errs.some(e=>e.includes('dropping 1-frame response batch after 3 failed POSTs: SandLocalExecResponsePostError (http_500)')));
  assert.equal(b.bodies.filter(x=>x.frames[0].kind==='hello').length,3);
 });
 

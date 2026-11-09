@@ -7,7 +7,9 @@ import * as path from "node:path";
 import { awaitHandoff, exitFatal } from "./bootstrap/handoff";
 import { loadSettings } from "./settings";
 import { clearDiscovery, isSupervised, loadDiscovery, publishDiscovery } from "./state/discovery";
-import { loadConnection } from "./state/connection";
+import { loadConnection, writeConnection } from "./state/connection";
+import { BOX_IDLE_FOR_UC, BOX_NO_CONNECTION, SandLocalExecConnectionError, backendClientFromEnv, exchangeConnection, variantForNamespace } from "./state/connection-exchange";
+import { createDeviceTools } from "./uc/local-tools";
 import { BoxProvider } from "./box/provider";
 import { UserComputerProvider } from "./uc/provider";
 import { aiToolConfigDirsFromEnv } from "./uc/ai-tool-discovery";
@@ -23,16 +25,22 @@ import { localRootFromEnv, logInfo, delay } from "./util";
 async function main(): Promise<void> {
   // D:187322–187325: CLAUDE_CONFIG_DIR / CODEX_HOME captured once at daemon start.
   const aiToolConfigDirs = aiToolConfigDirsFromEnv();
-  const startedAt = Date.now();
   const handoff = await awaitHandoff(5000);
   if (!handoff.ok) exitFatal();
+  // D:cqr 187314: eke(process.env, "desktop") runs right after the handoff; QPe may throw IsolatedDeploymentConfigError,
+  // which the outer catch reports as `fatal: ${xt(e)}` and exit 1 (D:187341–187348).
+  const client = backendClientFromEnv();
+  // D:lgt p = l() (179176): startedAt is taken when the daemon body starts, after the handoff; servingAt m = p.
+  const startedAt = Date.now();
 
   const { key, computerId } = handoff.handoff;
   const root = path.resolve(localRootFromEnv());
   const { permission } = await loadSettings();
   const generation = generationFromEnv();
 
-  let servingAt: number | undefined;
+  let servingAt: number | undefined = startedAt;
+  // D:x 179192: account scopes whose Watch was refused as unauthorized (onLoopEvent 179404–179412).
+  const rejectedScopes = new Set<string>();
   let inflightCount = 0;
   let box: BoxProvider | undefined;
   let uc: UserComputerProvider | undefined;
@@ -63,6 +71,7 @@ async function main(): Promise<void> {
             servingAt,
             inflightCount,
             ...(generation !== undefined ? { generation } : {}),
+            ...(rejectedScopes.size === 0 ? {} : { rejectedAccountScopes: [...rejectedScopes] }),
           },
           key,
         ).catch(error => { written = false; lifecycleTrace("publish:error", { kind: error?.name }); });
@@ -105,7 +114,8 @@ async function main(): Promise<void> {
         try {
           await refreshUc();
           await uc?.rehelloIfChanged();
-          if (!shuttingDown) await publish();
+          // D:Rt 179478: y || (m = l(), d && await C()) — every completed standing tick moves servingAt.
+          if (!shuttingDown) { servingAt = Date.now(); await publish(); }
         } catch (error) { console.error("[user-computer-provider] standing re-hello check failed"); }
         lifecycleTrace("standing:end", { ucFollowUp, shuttingDown });
       } while (ucFollowUp && !shuttingDown);
@@ -166,25 +176,62 @@ async function main(): Promise<void> {
     void publish();
   };
 
+  // D:lgt 179165–179330: backend client identity (eke(env, "desktop").backend); Box/UC hello variant = HPe(boxNamespace).
+  const providerVariant = variantForNamespace(client.boxNamespace);
+  // D:q 179247: one device-tool set shared by every UC provider.
+  const deviceTools = createDeviceTools({ rootDir: () => dataRootFromEnv(), log: m => console.error(`[local-exec-daemon] ${m}`) });
+  /** D:Q 179250–179259: credential channels keyed by accountScope ?? (single → legacy:machineId). */
+  const channelsByScope = (payload: Awaited<ReturnType<typeof loadSealedCredential>>) => {
+    const out = new Map<string, { serverAuthoritative?: boolean }>();
+    if (payload == null) return out;
+    let list = payload.userComputers ?? [];
+    if (list.length === 0 && payload.userComputer !== undefined) list = [payload.userComputer];
+    for (const u of list) {
+      const scope = u.accountScope ?? (list.length === 1 ? `legacy:${u.machineId}` : undefined);
+      if (scope !== undefined) out.set(scope, u);
+    }
+    return out;
+  };
+  /** D:X 179262–179266: a UC channel is live (SA, or not refused) → the Box dial stays idle. */
+  const ucServes = async (): Promise<boolean> => {
+    for (const [scope, u] of channelsByScope(await loadSealedCredential(key))) if (u.serverAuthoritative === true || !rejectedScopes.has(scope)) return true;
+    return false;
+  };
+  /** D:we 179311–179315 */
+  const readConnection = async () => {
+    const c = await loadConnection(process.env, key);
+    if (c == null) throw new SandLocalExecConnectionError(BOX_NO_CONNECTION);
+    return c;
+  };
+  /** D:ge 179267–179277: exchange the sealed Box credential for a connection unless a UC channel serves. */
+  const onConnectionStale = async (): Promise<void> => {
+    const y = await loadSealedCredential(key);
+    if (y?.credential === undefined || (await ucServes())) return;
+    const z = await exchangeConnection({ client, backendUrl: y.backendUrl, credential: y.credential });
+    if (z.kind === "unavailable") { console.error(`[local-exec-daemon] connection exchange unavailable (${z.reason}): ${z.detail}`); return; }
+    await writeConnection(z.connection, key);
+  };
+
+  /** D:Te 179316–179331 + Te.start(): the Box provider always runs; the dial resolves the connection each time. */
   const tryStartBox = async () => {
     if (box || shuttingDown) return;
-    const conn = await loadConnection();
-    if (!conn || shuttingDown) return;
     box = new BoxProvider({
-      connection: conn,
       root,
       computerId,
       // D:v_ constructor 135918–135920: computerLabel unset for Box → hostname().trim() || "this computer".
       label: os.hostname().trim() || "this computer",
-      variant: process.env.SAND_VARIANT || "sand-dev",
+      variant: providerVariant,
       permission,
       onInflight: n => onInflight("box", n),
       aiToolConfigDirs,
-      resolveConnection: () => loadConnection(),
+      resolveConnection: async () => {
+        if (await ucServes()) throw new SandLocalExecConnectionError(BOX_IDLE_FOR_UC);
+        return await readConnection();
+      },
+      resolveResponseConnection: readConnection,
+      onConnectionStale,
     });
-    servingAt = Date.now();
-    // Box path left as before this round (not part of the UC Ve/start evidence).
-    await publish();
+    // D:Te.start() 179332: constructing/starting the Box neither publishes discovery nor moves servingAt.
     void box.start().catch(() => undefined);
   };
 
@@ -234,18 +281,25 @@ async function main(): Promise<void> {
         localRoot: root,
         terminalsFolder: path.join(root, "terminals"),
         standing: permission === "always" ? "always" : permission === "never" ? "never" : "ask",
-        variant: process.env.SAND_VARIANT || "sand-dev",
+        variant: providerVariant,
         serverAuthoritative: ch.serverAuthoritative ?? false,
-        capabilities: {
-          aiToolSetup: false,
-          messagesOpGeneration: 4,
-        },
+        // capabilities are built by the provider on every Watch (D:hello 178137–178175).
       },
       onInflight: n => onInflight("uc", n),
+      deviceTools,
+      client,
+      // D:onLoopEvent 179404–179412
+      onLoopEvent: ev => {
+        const scope = ch.accountScope ?? `legacy:${ch.machineId}`;
+        let changed = false;
+        if (ev.kind === "connected") { changed = rejectedScopes.delete(scope); box?.redial(); }
+        else if (ev.kind === "disconnected" && ev.reason === "unauthorized") { changed = !rejectedScopes.has(scope); rejectedScopes.add(scope); box?.wakeFromReconnectBackoff(); }
+        else if (ev.kind === "channel-missing") box?.wakeFromReconnectBackoff();
+        if (changed) void publish();
+      },
     });
     // Official: (V.set(...), ye.start()) with no await between (D:L179423).
     uc = provider;
-    servingAt = Date.now();
     void provider.start().catch(() => console.error("[user-computer-provider] provider lifecycle failed"));
   };
 
@@ -320,4 +374,4 @@ async function main(): Promise<void> {
   logInfo(`started (pid ${process.pid}); serving local exec over the gateway`);
 }
 
-main().catch(() => exitFatal());
+main().catch(error => exitFatal(error));

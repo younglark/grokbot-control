@@ -8,12 +8,25 @@ import { requestError } from "../exec/handlers";
 import * as crypto from "node:crypto";
 import { Code, ConnectError, createClient, type Client } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-node";
+import * as http from "node:http";
+import * as https from "node:https";
+import { backendClientFromEnv, clientHeaders, type BackendClient } from "../state/connection-exchange";
+import { describeError } from "../box/provider";
+/** D:s9r 177840 */
+export const UC_AGENT_TIMEOUT_MS = 5_000;
+/** D:e9r / t9r 177836–177837 */
+export const UC_WATCH_CONNECT_IDLE_MS = 35_000;
+export const UC_RECONNECT_INITIAL_MS = 1_000; // Q8r D:177834
+const UC_RECONNECT_MAX_MS = 60_000; // X1t D:177835
+const UC_SILENT_RENEWAL_INITIAL_MS = 2_000; // r9r D:177838
+const UC_WATCH_SILENCE_MS = 15_000;
 import { GrokBotService } from "../generated/svc_aiserver.v1.GrokBotService_connect";
 import { GrokBotUserComputerQueuedRequest, GrokBotUserComputerRequestFrame,
   GrokBotUserComputerResponseFrame, GrokBotUserComputerHello,
   GrokBotUserComputerClientMessage, GrokBotUserComputerControlMessage,
   GrokBotUserComputerMessagesError, GrokBotUserComputerFileError, GrokBotUserComputerFile, GrokBotUserComputerMessagesAccepted,
   GrokBotUserComputerMessagesConsentResult, GrokBotUserComputerMessagesConsentVerdict, GrokBotUserComputerMessagesResult,
+  GrokBotUserComputerLocalToolAccepted, GrokBotUserComputerLocalToolPermissionPending, GrokBotUserComputerLocalToolResult,
   SubmitGrokBotUserComputerResponsesRequest } from "../generated/aiserver.v1_pb";
 import {
   lastAllocatedExecIdOrZero,
@@ -39,6 +52,7 @@ import { messagesSettings } from "../settings";
 import { decideExecLocalUse, standingGrantsPathFor } from "./approvals";
 import { draftCardCodes, locateSidecar, messagesCapabilities, MessagesExecutor, messagesOpSchema, type MessagesOpRequest } from "../box/messages-op";
 import { fileTooLarge } from "./file-source";
+import { ComputerUse, createDeviceTools, handleLocalTool, helloLocalToolCapabilities, localToolsSnapshot, type DeviceTools, type LocalToolCall } from "./local-tools";
 
 export type ResolvedUcChannel = { backendUrl: string; machineId: string; credential: string };
 export type UcProviderOptions = {
@@ -58,6 +72,12 @@ export type UcProviderOptions = {
   aiToolConfigDirs?: AiToolConfigDirs;
   /** Test hook for D:Ed 83034 (sidecar lookup); default locateSidecar(). */
   sidecar?: () => string | undefined;
+  /** D:Ve client: t.client (eke(env, "desktop").backend); default derived from process.env. */
+  client?: BackendClient;
+  /** D:lgt q = t.deviceTools ?? Ppt({log: _c}) (179247), shared by every UC provider; default: Linux Ppt. */
+  deviceTools?: DeviceTools;
+  /** D:onLoopEvent (179404): connected / disconnected{reason} / channel-missing. */
+  onLoopEvent?: (e: { kind: "connected" } | { kind: "disconnected"; reason: string } | { kind: "channel-missing" } | { kind: "renewed"; cause: string }) => void;
 };
 
 const requestKinds = Object.fromEntries(GrokBotUserComputerRequestFrame.fields.list().map(f => [f.localName, f.no]));
@@ -68,6 +88,8 @@ export type Queued = { id: string; requestId: string; kind: number; serverMessag
   approvalId?: string; authorization?: Authorization; path?: string; bytes?: Uint8Array; source?: AiToolSource;
   /** D:v9r messagesOp 178909–178926 */
   messages?: MessagesOpRequest;
+  /** D:v9r localTool 178927–178938 */
+  localTool?: LocalToolCall;
   /** D:v9r→undefined (178512–178516): never admitted; w9r reply (178785) when frame.requestId is non-empty, else none. */
   unsupported?: { reply?: ExecFrameOut } };
 const UNSUPPORTED_FRAME = "This computer's local-exec daemon does not understand that request frame; update the desktop app."; // D:z2
@@ -102,6 +124,10 @@ export function parseQueued(item: GrokBotUserComputerQueuedRequest): Queued {
       // D:v9r 178890–178892 returns undefined → w9r default (178791–178792): control throw{id:0, z2}; not admitted.
       return { id, requestId, kind, serverMessage, unsupported: frame.requestId.length > 0
         ? { reply: { kind: "control", requestId: frame.requestId, message: { throw: { id: 0, error: UNSUPPORTED_FRAME } } } } : {} };
+    }
+    if (frame.frame.case === "localTool") {
+      const v = frame.frame.value;
+      return { id, requestId, kind, serverMessage, localTool: { toolId: v.toolId, inputJson: v.inputJson, conversationId: v.conversationId, approvalId: v.approvalId } };
     }
     if (frame.frame.case === "messagesOp") {
       // D:v9r 178909–178926: AJe = rk.safeParse(tn(opJson)); failure → undefined → w9r messages-error z2 (178787–178788).
@@ -172,6 +198,19 @@ function responseFrame(frame: ExecFrameOut): GrokBotUserComputerResponseFrame {
     const n = JSON.stringify(frame.result);
     if (n.length > 8 * 1024 * 1024) return responseFrame({ kind: "messages-error", requestId: frame.requestId, error: fileTooLarge(n.length, 8 * 1024 * 1024) });
     result.frame = { case: "messagesResult", value: new GrokBotUserComputerMessagesResult({ resultJson: n, ...frame.timings }) };
+  }
+  else if (frame.kind === "local-tool-accepted") result.frame = { case: "localToolAccepted", value: new GrokBotUserComputerLocalToolAccepted(frame.permissionGranted === true ? { permissionGranted: true } : {}) };
+  else if (frame.kind === "local-tool-permission-pending") result.frame = { case: "localToolPermissionPending", value: new GrokBotUserComputerLocalToolPermissionPending(frame.reason === undefined ? {} : { reason: frame.reason }) };
+  else if (frame.kind === "local-tool-result") {
+    const o = frame.outcome, K = 8 * 1024 * 1024, mib = (n: number) => `${(n / (1024 * 1024)).toFixed(1)} MiB`;
+    // D:Y_ 179062–179070: a done output above K_ becomes failed PJe.
+    if (o.status === "done" && o.outputJson.length > K) return responseFrame({ kind: "local-tool-result", requestId: frame.requestId, outcome: { status: "failed",
+      error: `The computer-use reply is ${mib(o.outputJson.length)}, which exceeds Grok Bot's ${mib(K)} limit for one reply from the user's computer. Capture a smaller area, such as one app window instead of the whole display.` } });
+    // D:R9r 178942–178956
+    const v = o.status === "done" ? { status: "done", outputJson: o.outputJson } : o.status === "failed" ? { status: "failed", error: o.error }
+      : o.status === "needs_permission" ? (o.error === undefined ? { status: "needs_permission" } : { status: "needs_permission", error: o.error })
+      : { status: "ask", outputJson: JSON.stringify({ bundleId: o.app.bundleId, appName: o.app.appName }) };
+    result.frame = { case: "localToolResult", value: new GrokBotUserComputerLocalToolResult(v) };
   }
   else if (frame.kind === "file-error") result.frame = {case: "fileError", value: new GrokBotUserComputerFileError({error: frame.error})};
   else if (frame.kind === "file") {
@@ -301,9 +340,21 @@ export class UserComputerProvider implements UserComputerTransport {
   private readonly aiToolConfigDirs: AiToolConfigDirs;
   constructor(private readonly opts: UcProviderOptions) {
     this.aiToolConfigDirs = opts.aiToolConfigDirs ?? aiToolConfigDirsFromEnv();
-    this.client = createClient(GrokBotService, createConnectTransport({
-      baseUrl: opts.backendUrl, httpVersion: "1.1", useBinaryFormat: true,
+    this.client = this.makeClient(opts.backendUrl);
+  }
+  /**
+   * D:E9r 179040–179055 (renewConnection): Connect over HTTP/1.1 with a keep-alive agent (timeout s9r = 5 s) and an
+   * interceptor that sets every mb(client) header (D:79034) on every request of this client (Watch, Poll, Submit,
+   * keepalive, withdraw). The 8 MiB read/write limits are this port's own setting, kept from before.
+   */
+  private makeClient(baseUrl: string): Client<typeof GrokBotService> {
+    const headers = clientHeaders(this.opts.client ??= backendClientFromEnv());
+    const agentOpts = { keepAlive: true, timeout: UC_AGENT_TIMEOUT_MS };
+    return createClient(GrokBotService, createConnectTransport({
+      baseUrl, httpVersion: "1.1", useBinaryFormat: true,
       readMaxBytes: 8 * 1024 * 1024, writeMaxBytes: 8 * 1024 * 1024,
+      nodeOptions: { agent: URL.parse(baseUrl)?.protocol === "https:" ? new https.Agent(agentOpts) : new http.Agent(agentOpts) },
+      interceptors: [next => req => { for (const [k, v] of Object.entries(headers)) req.header.set(k, v); return next(req); }],
     }));
   }
 
@@ -346,7 +397,7 @@ export class UserComputerProvider implements UserComputerTransport {
       // Fenced where the failure is set: a stale channel's 401 never closes a channel that rotated in between.
       reject: (e) => {
         if (e.epoch !== undefined && e.epoch !== this.channel) return false;
-        this.proven = false; this.admissionClosed = true; this.abort.abort(); return true;
+        this.proven = false; this.admissionClosed = true; this.credentialRejected = true; this.abort.abort(); return true; // D:rejectCredential 178423
       },
       isCancelled: (id) => this.cancelledIds.has(id),
     });
@@ -366,13 +417,15 @@ export class UserComputerProvider implements UserComputerTransport {
       if (!this.closed) this.keepAliveTimer = setTimeout(() => void tick(), UC_KEEPALIVE_INTERVAL_MS);
     };
     this.keepAliveTimer = setTimeout(() => void tick(), UC_KEEPALIVE_INTERVAL_MS);
-    let attempts = 0;
+    // D:178223–178289 runLoop counters: e = reconnect attempt (reset on connected), r = silent-renewal attempt.
+    let e = 1, r = 0;
     while (!this.closed && !this.watchStopped) {
       let liveChannel: ResolvedUcChannel | null = null;
       try { liveChannel = await this.resolveChannel(); }
       catch { console.error("[user-computer-provider] channel resolve failed"); }
       if (liveChannel === null) {
         this.channel = null; this.proven = false; this.abandonWork();
+        this.opts.onLoopEvent?.({ kind: "channel-missing" });
         await new Promise(r => setTimeout(r, 10_000)); // original channelRetry, even after a resolve error
         continue;
       }
@@ -382,9 +435,30 @@ export class UserComputerProvider implements UserComputerTransport {
       hello.standing = this.standingFor((await loadSettings()).permission);
       hello.serverAuthoritative = this.opts.hello.serverAuthoritative;
       this.announcedStanding = hello.standing;
-      await this.watchLoop(hello);
+      // D:watch 178367–178376: localTools() is read before every Watch and shapes the hello capabilities.
+      const lt = await localToolsSnapshot(this.computerUse, this.deviceTools);
       if (this.closed || this.watchStopped) break;
-      await new Promise(r => setTimeout(r, Math.min(2000, 100 * 2 ** Math.min(attempts++, 4))));
+      this.helloedLocalTools = JSON.stringify(lt);
+      hello.capabilities = this.withLocalToolCapabilities(hello.capabilities, lt);
+      const reason = await this.watchLoop(hello, () => { e = 1; });
+      this.opts.onLoopEvent?.({ kind: "disconnected", reason });
+      if (this.closed || this.watchStopped) break;
+      // D:178267–178286 per-reason branches (network-change is never produced by this port).
+      r = reason !== "silent" ? 0 : (this.watchHeardAfterConnected ? 1 : r + 1);
+      if (reason === "lifetime") continue;
+      if (reason === "silent") {
+        this.renew(liveChannel, reason); // D:178314 renew → renewConnection (fresh E9r client)
+        await this.loopSleep(Math.random() * Math.min(UC_RECONNECT_MAX_MS, UC_SILENT_RENEWAL_INITIAL_MS * 2 ** (r - 1))); // silentRenewalBackoff, jitter "full"
+        continue;
+      }
+      if (reason === "unauthorized") {
+        // Original: channel = undefined, proven = false, e = 1, channelRetry (10 s). This port keeps its
+        // admission fencing (admissionClosed loop above) and only resets the attempt counter here.
+        e = 1;
+        continue;
+      }
+      await this.loopSleep(Math.min(UC_RECONNECT_MAX_MS, UC_RECONNECT_INITIAL_MS * 2 ** (e - 1))); // reconnectBackoff, no jitter
+      e += 1;
     }
     clearInterval(this.pollTimer);
     clearTimeout(this.keepAliveTimer);
@@ -398,13 +472,10 @@ export class UserComputerProvider implements UserComputerTransport {
   private applyResolvedChannel(next: ResolvedUcChannel): boolean {
     const old = this.channel;
     if (old && old.backendUrl === next.backendUrl && old.machineId === next.machineId && old.credential === next.credential) return false;
-    this.client = createClient(GrokBotService, createConnectTransport({
-      baseUrl: next.backendUrl, httpVersion: "1.1", useBinaryFormat: true,
-      readMaxBytes: 8 * 1024 * 1024, writeMaxBytes: 8 * 1024 * 1024,
-    }));
+    this.client = this.makeClient(next.backendUrl);
     this.channel = next;
     this.proven = false;
-    this.abort.abort(); this.abort = new AbortController();
+    this.rehello();
     this.admissionClosed = false; this.replies?.resume();
     return true;
   }
@@ -418,9 +489,11 @@ export class UserComputerProvider implements UserComputerTransport {
       if (this.applyResolvedChannel(next)) return;
     }
     const standing = this.standingFor((await loadSettings()).permission);
-    if (this.announcedStanding !== undefined && this.announcedStanding !== standing) {
+    // D:rehelloWhenInputsChanged 178209–178219: localTools() (device refresh) is read on every check once helloed.
+    const lt = this.helloedLocalTools === undefined ? undefined : JSON.stringify(await localToolsSnapshot(this.computerUse, this.deviceTools));
+    if ((this.announcedStanding !== undefined && this.announcedStanding !== standing) || (lt !== undefined && lt !== this.helloedLocalTools)) {
       this.announcedStanding = standing;
-      this.abort.abort(); this.abort = new AbortController();
+      this.rehello();
     }
   }
 
@@ -433,7 +506,7 @@ export class UserComputerProvider implements UserComputerTransport {
     if (next.credential === this.channel.credential) return false;
     this.channel = { ...this.channel, credential: next.credential };
     this.proven = false;
-    this.abort.abort(); this.abort = new AbortController();
+    this.rehello();
     this.admissionClosed = false; this.replies?.resume(); return true;
   }
 
@@ -446,7 +519,7 @@ export class UserComputerProvider implements UserComputerTransport {
   }
 
   beginShutdown(): void {
-    this.closed = true; clearInterval(this.pollTimer); clearTimeout(this.keepAliveTimer); this.abort.abort();
+    this.closed = true; clearInterval(this.pollTimer); clearTimeout(this.keepAliveTimer); this.abort.abort(); this.loopWake.abort();
   }
   /** D:L178009–178025. Reentrant close returns immediately; it does not join the first close. */
   async stop(options: { withdrawPresence?: boolean } = {}): Promise<void> {
@@ -464,14 +537,14 @@ export class UserComputerProvider implements UserComputerTransport {
     this.onInflightDrained = undefined;
     await this.drainOnClose();
     this.closed = true;
-    this.abort.abort();
+    this.abort.abort(); this.loopWake.abort();
     await withdraw;
   }
 
   private async stopWatchingAndWithdraw(): Promise<void> {
     // D:L178027–178049: begin withdrawal BEFORE poll/inflight/flush drain; await it last.
     this.watchStopped = true;
-    this.abort.abort();
+    this.abort.abort(); this.loopWake.abort();
     const ch = this.channel;
     if (!ch) return;
     try {
@@ -547,7 +620,7 @@ export class UserComputerProvider implements UserComputerTransport {
       if (this.announcedStanding !== undefined && liveStanding !== this.announcedStanding) {
         // Re-announce policy by replacing only the Watch connection, never tasks.
         this.announcedStanding = liveStanding;
-        this.abort.abort(); this.abort = new AbortController();
+        this.rehello();
       }
       // Continue polling at capacity: cancel controls must remain reachable.
       const res = await this.client.pollGrokBotUserComputerRequests({
@@ -589,6 +662,8 @@ export class UserComputerProvider implements UserComputerTransport {
           // Cancellation may synchronously enqueue its terminal: dropping afterwards would erase it.
           if (typeof this.replies?.drop === 'function') this.replies.drop(id => id === q.requestId, id => this.cancelledIds.has(id));
           cancelRequest(q.requestId);
+          // D:handleCancel 136353–136364: cancelled flag + entry.cancel() (local-tool abort).
+          const lt = this.localToolEntries.get(q.requestId); if (lt) { lt.cancelled = true; lt.cancel(); }
           for (const f of closings) if (!this.storeClosingFrame(f)) throw new Error("reserved closing reply not held");
           continue;
         }
@@ -721,6 +796,8 @@ export class UserComputerProvider implements UserComputerTransport {
   private closingFrame(q: Queued, error: string): ExecFrameOut {
     if ([requestKinds.upload, requestKinds.download, requestKinds.discoverAiTool].includes(q.kind)) return { kind: "file-error", requestId: q.requestId, error };
     // D:zl 136457–136464: draft-card messages-op closing errors use the Fpt code (fallback: the text itself).
+    // D:zl 136465–136470: local-tool closing → local-tool-result failed.
+    if (q.kind === requestKinds.localTool) return { kind: "local-tool-result", requestId: q.requestId, outcome: { status: "failed", error } };
     if (q.kind === requestKinds.messagesOp) return { kind: "messages-error", requestId: q.requestId,
       error: q.messages?.draftCard === true ? (draftCardCodes(NEVER_MSG, ASK_MSG).get(error) ?? error) : error };
     return { kind: "control", requestId: q.requestId, message: { throw: { id: 0, error } } };
@@ -775,15 +852,19 @@ export class UserComputerProvider implements UserComputerTransport {
   /** Official rejectCredential(e): only the channel that is still current may be closed. */
   private rejectCredential(ch: { credential: string } | null): void {
     if (!ch || this.channel !== ch) return;
-    this.proven = false; this.admissionClosed = true; this.abort.abort();
+    this.proven = false; this.admissionClosed = true; this.credentialRejected = true; this.abort.abort();
   }
+  /** D:rehello 178421: mark the Watch ending as "lifetime" and replace the connection (never tasks). */
+  private rehello(): void { this.rehelloRequested = true; this.abort.abort(); this.abort = new AbortController(); }
+  private credentialRejected = false;
+  private rehelloRequested = false;
 
   private runBacklog(): void {
     while (!this.closed && !this.closing && !this.admissionClosed && this.active.size < UC_INFLIGHT_MAX && this.backlog.length && this.replies?.available) {
       const q = this.backlog.shift()!;
       if (this.active.has(q.requestId)) continue;
       this.active.add(q.requestId); this.bump(1); trace("admit", { rid: q.requestId.slice(0, 16) });
-      const job = this.handleQueued(q).catch(e => q.kind === requestKinds.messagesOp
+      const job = this.handleQueued(q).catch(e => q.kind === requestKinds.messagesOp || q.kind === requestKinds.localTool
         ? this.emit(this.closingFrame(q, e instanceof Error ? e.message : String(e)))
         : requestError(q.requestId, lastAllocatedExecIdOrZero(), e, this.emit, { root: this.opts.root, serverMessage: q.serverMessage }))
         .catch(() => { console.error("[user-computer-provider] request reply failed"); })
@@ -854,6 +935,20 @@ export class UserComputerProvider implements UserComputerTransport {
         // Original non-exec branch has no post-authorization cancelled check (unlike exec).
         this.replies.stream(q.requestId, chunks);
       } catch (error) { await this.emit({ kind: "file-error", requestId: q.requestId, error: error instanceof Error ? error.message : String(error) }); }
+      return;
+    }
+    if (q.kind === requestKinds.localTool && q.localTool !== undefined) {
+      // D:v_.handle 135984–135987 → withInflight → handleLocalTool; r.cancel is wired for the cancel path.
+      const entry = { cancelled: this.cancelledIds.has(q.requestId), cancel: () => {} };
+      this.localToolEntries.set(q.requestId, entry);
+      try {
+        await handleLocalTool(q.requestId, q.localTool, entry, f => this.pushFrame(f), this.computerUse, {
+          tools: this.deviceTools,
+          // D:isDeviceToolBlocked → TUe 81514: effective permission or ceiling "never" → Xh.
+          blocked: async () => { const d = this.messagesDecisionInput(); return d.permission === "never" || d.ceiling === "never" ? NEVER_MSG : undefined; },
+        });
+      }
+      finally { this.localToolEntries.delete(q.requestId); }
       return;
     }
     if (q.kind === requestKinds.messagesOp && q.messages !== undefined) {
@@ -929,6 +1024,12 @@ export class UserComputerProvider implements UserComputerTransport {
     if (this.replies instanceof UcReplyLanes) { this.replies.push(responseFrames(frame)); void this.replies.flush(); return; }
     return this.emit(frame);
   }
+  /** D:UL computer-use (Linux: no helper). */
+  private computerUse = new ComputerUse();
+  private get deviceTools(): DeviceTools {
+    return this.opts.deviceTools ??= createDeviceTools({ rootDir: () => dataRootFromEnv(), log: m => console.error(`[local-exec-daemon] ${m}`) });
+  }
+  private localToolEntries = new Map<string, { cancelled: boolean; cancel: () => void }>();
   /** One v_ per UC provider (D:Ve 179353–179365): decideLocalUse = Qce, isLocalUseBlocked = AUe via re(Y, accountScope, SA). */
   private messages = new MessagesExecutor({
     capabilities: () => { const m = messagesSettings(loadSettingsSync()); return messagesCapabilities(m.enabled, { read: m.read, send: m.send }); },
@@ -946,18 +1047,94 @@ export class UserComputerProvider implements UserComputerTransport {
       approvalsPath: approvalsPathFor(dataRoot), retirementsPath: retirementsPathFor(dataRoot), standingGrantsPath: standingGrantsPathFor(dataRoot) };
   }
 
-  private async watchLoop(hello: UserComputerHello): Promise<void> {
+  /**
+   * D:hello 178137–178175: the provider itself builds every capabilities field on each Watch; nothing comes from the
+   * caller. i = executor.messages.available() (Dpt → y5, the sidecar lookup); u = computerUse non-empty or a device
+   * tool offering app consent. Always present: messagesOpGeneration gE=4 (D:97145), aiToolSetup true, mobileLocalTools.
+   */
+  private withLocalToolCapabilities(_base: Record<string, unknown> | undefined, lt: Awaited<ReturnType<typeof localToolsSnapshot>>): Record<string, unknown> {
+    const i = (this.opts.sidecar ?? locateSidecar)() !== undefined;
+    const c = helloLocalToolCapabilities(lt, this.deviceTools);
+    return {
+      ...(i ? { messagesOp: true } : {}),
+      ...(i || c.consent ? { localStandingGrants: true } : {}),
+      messagesOpGeneration: 4,
+      aiToolSetup: true,
+      mobileLocalTools: c.mobileLocalTools,
+      ...(c.consent ? { localToolAppConsent: true, localToolGrantSeen: true } : {}),
+      ...(c.helperName === undefined ? {} : { localToolHelperName: c.helperName }),
+    };
+  }
+  private helloedLocalTools?: string;
+  /**
+   * D:watch 178342–178420. Reason classification:
+   * - l(): closed → "closed"; credentialRejected → "unauthorized"; renewRequested → "network-change" (never set here:
+   *   this port has no network-change renewal); rehelloRequested → "lifetime"; a fired watchdog → "silent" after
+   *   connected, else "stall".
+   * - Normal end → l() ?? "lifetime". On a throw: l() if set; Connect Canceled → "stall"; otherwise log
+   *   `watch stream failed: xt` and rethrow, so the runLoop sees Unauthenticated → "unauthorized", else "error"
+   *   (D:178247–178256).
+   * - Watchdogs xh (unref'd): connect e9r = 35 s armed at dial; silence t9r = 15 s after connected. Every event kicks.
+   */
+  private watchHeardAfterConnected = false;
+  private loopWake = new AbortController();
+  /** Unref'd backoff sleep (Pu/qr timers do not hold the loop) that ends early on close/stop. */
+  private loopSleep(ms: number): Promise<void> {
+    return new Promise(resolve => {
+      const sig = this.loopWake.signal;
+      if (sig.aborted) return resolve();
+      const done = () => { clearTimeout(t); sig.removeEventListener("abort", done); resolve(); };
+      const t = setTimeout(done, ms); t.unref();
+      sig.addEventListener("abort", done, { once: true });
+    });
+  }
+  /** D:178314–178318 */
+  private renew(ch: ResolvedUcChannel, cause: string): void {
+    this.client = this.makeClient(ch.backendUrl);
+    this.opts.onLoopEvent?.({ kind: "renewed", cause });
+  }
+  private async watchLoop(hello: UserComputerHello, onConnected?: () => void): Promise<string> {
+    try { return await this.watchOnce(hello, onConnected); }
+    catch (error) { return error instanceof ConnectError && error.code === Code.Unauthenticated ? "unauthorized" : "error"; }
+  }
+  private async watchOnce(hello: UserComputerHello, onConnected?: () => void): Promise<string> {
     const ch = this.channel!;
     this.proven = false;
+    this.credentialRejected = false; this.rehelloRequested = false; this.watchHeardAfterConnected = false;
+    const s = new AbortController();
+    const outer = this.abort.signal;
+    const onOuter = () => s.abort();
+    if (outer.aborted) s.abort(); else outer.addEventListener("abort", onOuter, { once: true });
+    let o = false, i = false;
+    const fire = () => { i = true; s.abort(); };
+    const watchdog = (ms: number) => {
+      let t: NodeJS.Timeout | undefined;
+      const arm = () => { clearTimeout(t); t = setTimeout(fire, ms); t.unref(); };
+      arm();
+      return { kick: arm, dispose: () => clearTimeout(t) };
+    };
+    let u = watchdog(UC_WATCH_CONNECT_IDLE_MS);
+    const l = (): string | undefined => {
+      if (this.closed || this.watchStopped) return "closed";
+      if (this.credentialRejected) return "unauthorized";
+      if (this.rehelloRequested) return "lifetime";
+      if (i) return o ? "silent" : "stall";
+      return undefined;
+    };
     try {
       const events = this.client.watchGrokBotUserComputerRequests({
         machineId: ch.machineId, credential: ch.credential, presenceToken: this.presenceToken,
         hello: GrokBotUserComputerHello.fromJsonString(JSON.stringify(hello)),
-      }, {signal: this.abort.signal});
+      }, {signal: s.signal});
       for await (const event of events) {
+        if (o) this.watchHeardAfterConnected = true; // D:178381
+        u.kick();
         if (event.event.case === "connected") {
+          u.dispose(); u = watchdog(UC_WATCH_SILENCE_MS); o = true;
+          onConnected?.(); // D:178249 r(): e = 1
           // Official (L178388–178403): proven, requestPoll, flush — flush wakes held replies once the new Watch is up.
           this.proven = true;
+          this.opts.onLoopEvent?.({ kind: "connected" }); // D:178389
           // official connected → this.flush() (not a credential resume)
           const r = this.replies as { flush?: () => Promise<void> } | undefined;
           if (r && typeof r.flush === "function") void r.flush();
@@ -966,9 +1143,16 @@ export class UserComputerProvider implements UserComputerTransport {
           void this.pollOnce().catch(() => undefined);
         }
       }
+      return l() ?? "lifetime";
     } catch (error) {
-      if (authError(error)) this.rejectCredential(ch);
-      // One Watch connection ending never closes reply, task or acknowledgment state.
+      const p = l();
+      if (p !== undefined) return p;
+      if (error instanceof ConnectError && error.code === Code.Canceled) return "stall";
+      if (authError(error)) this.rejectCredential(ch); // keep this port's admission fencing on a 401
+      console.error(`[user-computer-provider] watch stream failed: ${describeError(error)}`);
+      throw error;
+    } finally {
+      u.dispose(); outer.removeEventListener("abort", onOuter);
     }
   }
 }

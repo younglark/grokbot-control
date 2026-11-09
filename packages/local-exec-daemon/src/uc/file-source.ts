@@ -2,6 +2,7 @@
  * Static 0.79.3 D:97843–97893 / 132584–132602 / 136374–136392 / 80591–80602.
  * Box download materializes the same Ype source via iqe (D:97895–97906 / 137534–137544).
  */
+import { cp } from "../state/fs-write";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
@@ -89,20 +90,8 @@ export async function resolveUploadPath(root: string, requested: string): Promis
 export async function writeUploadFile(root: string, requested: string, bytes: Uint8Array, maxBytes = UC_MAX_FILE_BYTES): Promise<void> {
   if (bytes.length > maxBytes) throw new Error(fileTooLarge(bytes.length, maxBytes));
   const target = await resolveUploadPath(root, requested);
-  await fs.mkdir(path.dirname(target), { recursive: true });
-  let mode = 0o666;
-  try { mode = (await fs.stat(target)).mode; } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-  }
-  const tmp = `${target}.${crypto.randomInt(1 << 30)}`;
-  const handle = await fs.open(tmp, "w", mode);
-  try {
-    await handle.writeFile(bytes);
-    try { await handle.chmod(mode); } catch { /* original ELe swallows chmod failures */ }
-    await handle.sync();
-  } finally { await handle.close(); }
-  try { await fs.rename(tmp, target); }
-  catch (e) { await fs.rm(tmp, { force: true }); throw e; }
+  // D:upload 136374–136383: n9 then cp(target, Buffer.from(bytes)) with no mode (src/state/fs-write.ts).
+  await cp(target, Buffer.from(bytes));
 }
 /** D:iqe 97895–97906 — materialize a FileSource for Box JSON bytesBase64 replies. */
 export async function readWholeFile(source: FileSource): Promise<{ bytes: Uint8Array<ArrayBuffer> } | { error: string }> {

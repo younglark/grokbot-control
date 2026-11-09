@@ -130,7 +130,7 @@ async function boxPeer(t,{permission='always',maxFileBytes,aiToolConfigDirs}={})
  await new Promise(r=>server.listen(0,'127.0.0.1',r));
  const provider=new BoxProvider({connection:{baseUrl:`http://127.0.0.1:${server.address().port}`,token:'synthetic-token',headers:{}},root,computerId:'synthetic',label:'lab',variant:'lab',permission,maxFileBytes,aiToolConfigDirs});
  const running=provider.start();
- t.after(async()=>{await provider.stop();stream?.destroy();await running;await new Promise(r=>server.close(r));if(old===undefined)delete process.env.SAND_DATA_ROOT;else process.env.SAND_DATA_ROOT=old});
+ t.after(async()=>{await provider.stop();stream?.destroy();await Promise.race([running,new Promise(r=>setTimeout(r,50))]);await new Promise(r=>server.close(r));if(old===undefined)delete process.env.SAND_DATA_ROOT;else process.env.SAND_DATA_ROOT=old});
  await until(()=>posted.some(f=>f.kind==='hello'));
  return{root,posted,send:obj=>stream.write('data: '+JSON.stringify(obj)+'\n\n'),raw:s=>stream.write(s),reply:id=>posted.find(f=>f.requestId===id)};
 }

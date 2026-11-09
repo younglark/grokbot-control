@@ -6,7 +6,7 @@ import { UC_MAX_FILE_BYTES, writeUploadFile } from "../uc/file-source";
 import { aiToolConfigDirsFromEnv, describeAiToolDiscovery, discoverAiToolBytes, isAiToolSource, type AiToolConfigDirs } from "../uc/ai-tool-discovery";
 import { StringDecoder } from "node:string_decoder";
 import { ASK_MSG, NEVER_MSG, requestError } from "../exec/handlers";
-import { HttpStatusError, ReplyQueue } from "../transport/replies";
+import { HttpStatusError } from "../transport/replies";
 import * as http from "node:http";
 import * as https from "node:https";
 import { URL } from "node:url";
@@ -22,7 +22,8 @@ import {
 import { decodeExecServerMessageValue, execServerMessageToRecord, isExecServerDecodeError, prepareBoxExecFrame } from "../exec/exec-codec";
 
 export type BoxProviderOptions = {
-  connection: Connection;
+  /** Initial connection; the original has none and resolves one on every dial (D:$L wiring 179311–179319). */
+  connection?: Connection;
   root: string;
   computerId: string;
   label: string;
@@ -35,6 +36,8 @@ export type BoxProviderOptions = {
   aiToolConfigDirs?: AiToolConfigDirs;
   /** D:$L resolveConnection 179318–179322: re-read on every dial and by the heartbeat "moved" check. */
   resolveConnection?: () => Promise<Connection | null>;
+  /** D:postBatch 137311: (resolveResponseConnection ?? resolveConnection)() — the daemon passes `we` (no UC check). */
+  resolveResponseConnection?: () => Promise<Connection | null>;
   /** Test hook for D:CJe 97387 heartbeat interval (10 s). */
   heartbeatMs?: number;
   /** D:$L clock option (e.clock ?? qr) — drives deadline, backoff, watchdog and heartbeat timers. */
@@ -57,7 +60,35 @@ export const BOX_STALE_AFTER_FAILURES = 3;
 export function boxBackoffMs(attempt: number): number { return Math.min(BOX_BACKOFF_MAX_MS, BOX_BACKOFF_INITIAL_MS * 2 ** (attempt - 1)); }
 /** D:qr.schedule 78117 shape; injectable for tests (fake clocks). */
 export type BoxClock = { schedule(ms: number, fn: () => void): { dispose(): void } };
-const realClock: BoxClock = { schedule(ms, fn) { const t = setTimeout(fn, ms); return { dispose: () => clearTimeout(t) }; } };
+/** D:qr.schedule 78117–78140: every policy timer is unref'd unless keepEventLoopAlive (no Box policy sets it, 78244). */
+export const boxRealClock: BoxClock = { schedule(ms, fn) { const t = setTimeout(fn, ms); t.unref(); return { dispose: () => clearTimeout(t) }; } };
+/** D:E0 97389 data-post deadline, ok control-post deadline. */
+export const BOX_DATA_POST_MS = 120_000;
+export const BOX_CONTROL_POST_MS = 10_000;
+/** D:qi 78160 */
+class DeadlineExceededError extends Error {
+  readonly code = "deadline_exceeded";
+  constructor(policy: string) { super(`Deadline exceeded for ${policy}`); this.name = "DeadlineExceededError"; }
+}
+/** D:H5e 137172–137178 */
+class ResponsePostError extends Error {
+  readonly code: string;
+  constructor(status: number) { super("response POST failed"); this.name = "SandLocalExecResponsePostError"; this.code = `http_${status}`; }
+}
+/** D:xt 78680 / un 78672 / j7t: `${name} (${code or first E* code along the cause chain})`. */
+export function describeError(t: unknown): string {
+  if (!(t instanceof Error)) return typeof t;
+  const e = (t as { code?: unknown }).code;
+  let r: string | undefined = typeof e === "string" && e.length > 0 ? e : undefined;
+  if (r === undefined) {
+    const seen = new Set<unknown>();
+    for (let n: unknown = t; n != null && typeof n === "object" && !seen.has(n); n = (n as { cause?: unknown }).cause) {
+      seen.add(n); const c = (n as { code?: unknown }).code;
+      if (typeof c === "string" && /^E[A-Z_]+$/.test(c)) { r = c; break; }
+    }
+  }
+  return r !== undefined ? `${t.name} (${r})` : t.name;
+}
 /** D:kwr/Pwr 137196–137205 */
 export function sameConnection(t: Connection, e: Connection): boolean {
   const r = Object.entries(t.headers ?? {}), n = new Map(Object.entries(e.headers ?? {}));
@@ -73,42 +104,6 @@ export function uploadFrameTooLarge(maxFileBytes: number): string {
 
 type JsonFrame = Record<string, unknown>;
 
-function httpRequest(
-  urlStr: string,
-  opts: { method: string; headers?: Record<string, string>; body?: string; timeoutMs?: number },
-): Promise<{ status: number; body: string }> {
-  const u = new URL(urlStr);
-  const lib = u.protocol === "https:" ? https : http;
-  return new Promise((resolve, reject) => {
-    const req = lib.request(
-      {
-        protocol: u.protocol,
-        hostname: u.hostname,
-        port: u.port,
-        path: u.pathname + u.search,
-        method: opts.method,
-        headers: opts.headers,
-      },
-      (res) => {
-        const chunks: Buffer[] = [];
-        let size = 0;
-        res.on("data", (c: Buffer) => {
-          size += c.length;
-          if (size > 8 * 1024 * 1024) { res.destroy(); reject(new Error("HTTP response limit")); return; }
-          chunks.push(c);
-        });
-        res.on("error", reject);
-        res.on("end", () =>
-          resolve({ status: res.statusCode || 0, body: Buffer.concat(chunks).toString("utf8") }),
-        );
-      },
-    );
-    req.setTimeout(opts.timeoutMs ?? 2000, () => req.destroy(new Error("HTTP deadline")));
-    req.on("error", reject);
-    if (opts.body) req.write(opts.body);
-    req.end();
-  });
-}
 
 /** D:137431–137475 SSE reader: event blocks split on a blank line; an event (or an unterminated buffer) longer than
  * maxUploadFrameBytes is handed to onOversized and skipped up to the next blank line. No other size cap.
@@ -133,7 +128,7 @@ function openSse(
         port: u.port,
         path: u.pathname + u.search,
         method: "GET",
-        headers: { ...headers, accept: "text/event-stream" },
+        headers: { accept: "text/event-stream", ...headers }, // D:cmt 137186
       },
       (res) => {
         if ((res.statusCode || 0) !== 200) { res.resume(); reject(new HttpStatusError(res.statusCode || 0)); return; }
@@ -182,31 +177,27 @@ export class BoxProvider {
   private inflight = 0;
   private seen = new Set<string>();
   private jobs = new Map<string, Promise<void>>();
-  private replies: ReplyQueue;
-  private rejected = false;
+  /** D:$L outbox / flushing 137281–137282 */
+  private outbox: JsonFrame[] = [];
+  private flushing = false;
   private wakeBackoff?: () => void;
   private wakeRequested = false;
   private streamAbort?: AbortController;
-  private get clock(): BoxClock { return this.opts.clock ?? realClock; }
+  private get clock(): BoxClock { return this.opts.clock ?? boxRealClock; }
   /** D:v_.inflight 135944: one entry per requestId for every withInflight kind; `cancelled` set by handleCancel. */
   private fileInflight = new Map<string, { cancelled: boolean }>();
-  private conn: Connection;
+  private conn: Connection | undefined;
   private heartbeatTimer?: { dispose(): void };
   private readonly maxFileBytes: number;
   private readonly aiToolConfigDirs: AiToolConfigDirs;
   get headers(): Record<string, string> {
-    return { ...this.conn.headers, ...(this.conn.token ? { authorization: `Bearer ${this.conn.token}` } : {}) };
+    return { ...this.conn?.headers, ...(this.conn?.token ? { authorization: `Bearer ${this.conn.token}` } : {}) };
   }
 
   constructor(private readonly opts: BoxProviderOptions) {
     this.conn = opts.connection;
     this.maxFileBytes = opts.maxFileBytes ?? UC_MAX_FILE_BYTES;
     this.aiToolConfigDirs = opts.aiToolConfigDirs ?? aiToolConfigDirsFromEnv();
-    this.replies = new ReplyQueue(async body => {
-      const res = await httpRequest(`${this.conn.baseUrl.replace(/\/$/, "")}/local-exec/responses`, {
-        method: "POST", headers: { ...this.headers, "content-type": "application/json" }, body: body.toString("utf8") });
-      if (res.status < 200 || res.status >= 300) throw new HttpStatusError(res.status);
-    }, () => { this.rejected = true; this.abort.abort(); });
   }
 
   /** D:runLoop 137338–137377: e = backoff attempt (reset to 1 on connect, +1 after each wait), r = consecutive failed
@@ -214,22 +205,20 @@ export class BoxProvider {
    */
   async start(): Promise<void> {
     let e = 1, r = 0;
-    while (!this.closed && !this.rejected) {
+    while (!this.closed) {
       try { await this.streamRequests(() => { e = 1; r = 0; }); }
       catch { r += 1; }
-      if (this.closed || this.rejected) break;
+      if (this.closed) break;
       if (r >= BOX_STALE_AFTER_FAILURES && this.opts.onConnectionStale != null) {
         r = 0;
         try { await this.opts.onConnectionStale(); }
-        catch (s) { console.error(`[local-exec-provider] stale-connection re-resolve failed: ${s instanceof Error ? s.message : String(s)}`); }
+        catch (s) { console.error(`[local-exec-provider] stale-connection re-resolve failed: ${describeError(s)}`); }
       }
       const n = { h: undefined as { dispose(): void } | undefined };
       try {
         if (!this.wakeRequested) await new Promise<void>(res => {
           n.h = this.clock.schedule(boxBackoffMs(e), res);
           this.wakeBackoff = res;
-          // NOT ORIGINAL: close() also ends the backoff wait so stop() can await start() (original start() is fire-and-forget).
-          if (this.closed) res();
         });
       } finally { this.wakeBackoff = undefined; this.wakeRequested = false; n.h?.dispose(); }
       e += 1;
@@ -266,7 +255,8 @@ export class BoxProvider {
       }
       if (stream.signal.aborted) throw stream.signal.reason ?? new Error("aborted");
       const dialed = this.conn;
-      await openSse(`${dialed.baseUrl.replace(/\/$/, "")}/local-exec/requests`,
+      if (dialed === undefined) throw new Error("local-exec connection unavailable");
+      await openSse(`${dialed.baseUrl}/local-exec/requests`, // D:RJe 97376, no slash trimming
         () => { connected = true; deadline.dispose(); onConnect(); kick(); void this.onConnected(dialed, stream); },
         kick,
         block => this.dispatchEventBlock(block), buffer => this.rejectOversizedFrame(buffer),
@@ -278,15 +268,14 @@ export class BoxProvider {
       this.abort.signal.removeEventListener("abort", onProviderAbort);
     }
   }
-  beginShutdown(): void { this.closed = true; this.abort.abort(); this.wakeBackoff?.(); }
+  /** D:close 137284: closed + abort the current stream only; a backoff wait in progress is NOT ended (it is unref'd). */
+  beginShutdown(): void { this.closed = true; this.abort.abort(); }
   async stop(): Promise<void> {
     if (this.stopped) return;
     this.stopped = true; this.beginShutdown();
     this.jobs.forEach((_, id) => cancelRequest(id));
     await Promise.race([Promise.all([...this.jobs.values()]), new Promise(r => setTimeout(r, 1000))]);
-    const drained = await this.replies.drain();
-    if (!drained) console.error("[box-provider] reply drain deadline");
-    this.replies.stop();
+    // D:close has no reply drain: flush stops between batches once closed (137291–137300).
   }
   /** D:streamRequests 137408–137440: right after a successful connect, hello is POSTed directly (postBatch with the
    * control deadline, not awaited, no providerId yet), then the heartbeat starts with a leading tick.
@@ -294,7 +283,7 @@ export class BoxProvider {
   private async onConnected(dialed: Connection, stream: AbortController): Promise<void> {
     const supervised = await this.currentSupervised();
     if (stream.signal.aborted) return;
-    void this.postControl([{
+    void this.postBatch([{
       kind: "hello",
       localRoot: this.opts.root,
       terminalsFolder: `${this.opts.root}/terminals`,
@@ -306,12 +295,12 @@ export class BoxProvider {
         ...((this.opts.sidecar ?? locateSidecar)() !== undefined ? { messagesOp: true } : {}),
         messagesOpGeneration: 4, // D:gE 97145
       },
-    }]);
+    }], BOX_CONTROL_POST_MS, "local-exec-control-post");
     const tick = async () => {
       if (stream.signal.aborted) return;
       try {
         const p = await this.currentSupervised();
-        void this.postControl([{ kind: "ping", ...(p !== undefined ? { supervised: p } : {}) }]);
+        void this.postBatch([{ kind: "ping", ...(p !== undefined ? { supervised: p } : {}) }], BOX_CONTROL_POST_MS, "local-exec-control-post");
         if (this.opts.resolveConnection) {
           let moved = false;
           try { const c = await this.opts.resolveConnection(); moved = !c || !sameConnection(c, dialed); }
@@ -326,20 +315,61 @@ export class BoxProvider {
     void tick();
   }
   private async currentSupervised(): Promise<boolean | undefined> { return await isSupervised(); }
-  /** D:postBatch 137295–137324 + postRetry imt=3 / amt=200 ms, control deadline ok=10 s; dropped (logged) after 3 failures. */
-  private async postControl(frames: JsonFrame[]): Promise<void> {
+  /** D:enqueue 137292 / flush 137293–137306: the whole outbox is one POST (data deadline E0 120 s); the posted
+   * prefix is removed whether posted or dropped; a dropped batch stops this flush (the rest waits for the next enqueue).
+   */
+  private enqueue(frame: JsonFrame): void { this.outbox.push(frame); void this.flush(); }
+  private async flush(): Promise<void> {
+    if (this.flushing) return;
+    this.flushing = true;
+    try {
+      while (this.outbox.length > 0 && !this.closed) {
+        const e = this.outbox.slice();
+        const r = await this.postBatch(e, BOX_DATA_POST_MS, "local-exec-data-post");
+        this.outbox.splice(0, e.length);
+        if (r === "dropped") break;
+      }
+    } finally { this.flushing = false; }
+  }
+  /** D:postBatch 137307–137330: postRetry (Pu imt=3, fixed amt=200 ms, unref'd waits); each attempt re-reads the
+   * connection (resolveResponseConnection) and runs one fetch under the deadline (Gi); non-2xx → H5e(status).
+   * After 3 failures: console.error with xt(last error) and the batch is dropped.
+   */
+  private async postBatch(frames: JsonFrame[], timeoutMs: number, policy: string): Promise<"posted" | "dropped"> {
+    let last: unknown;
     for (let attempt = 1; ; attempt++) {
       try {
-        const res = await httpRequest(`${this.conn.baseUrl.replace(/\/$/, "")}/local-exec/responses`, {
-          method: "POST", headers: { ...this.headers, "content-type": "application/json" },
-          body: JSON.stringify({ providerId: this.providerId, frames }), timeoutMs: 10_000 });
-        if (res.status < 200 || res.status >= 300) throw new HttpStatusError(res.status);
-        return;
+        let n = this.conn;
+        const resolve = this.opts.resolveResponseConnection ?? this.opts.resolveConnection;
+        if (resolve) {
+          const c = await resolve();
+          if (!c) throw new Error("local-exec connection unavailable");
+          n = c;
+        }
+        if (n === undefined) throw new Error("local-exec connection unavailable");
+        const ac = new AbortController();
+        let fail: (e: Error) => void = () => {};
+        const failed = new Promise<never>((_, rej) => { fail = rej; });
+        const h = this.clock.schedule(timeoutMs, () => { const err = new DeadlineExceededError(policy); fail(err); ac.abort(err); });
+        let res: Response;
+        try {
+          res = await Promise.race([fetch(`${n.baseUrl}/local-exec/responses`, {
+            method: "POST",
+            headers: { "content-type": "application/json", ...n.headers, ...(n.token ? { authorization: `Bearer ${n.token}` } : {}) },
+            body: JSON.stringify({ providerId: this.providerId, frames }),
+            signal: ac.signal,
+          }), failed]);
+        } finally { h.dispose(); }
+        if (!res.ok) throw new ResponsePostError(res.status);
+        return "posted";
       } catch (e) {
-        if (attempt >= 3) { console.error(`[local-exec-provider] dropping ${frames.length}-frame response batch after 3 failed POSTs: ${e instanceof Error ? e.message : String(e)}`); return; }
-        await new Promise(r => setTimeout(r, 200));
+        last = e;
+        if (attempt >= 3) break;
+        await new Promise<void>(r => this.clock.schedule(200, r));
       }
     }
+    console.error(`[local-exec-provider] dropping ${frames.length}-frame response batch after 3 failed POSTs: ${describeError(last)}`);
+    return "dropped";
   }
   /** D:dispatchEventBlock 137486–137510: `data:` lines (prefix 5, trimmed) joined by newline, one JSON value. */
   private dispatchEventBlock(block: string): void {
@@ -380,7 +410,8 @@ export class BoxProvider {
     };
   }
   private post(frames: JsonFrame[]): Promise<void> {
-    return this.replies.enqueue(Buffer.from(JSON.stringify({ frames, ...(this.providerId ? { providerId: this.providerId } : {}) })));
+    for (const f of frames) this.enqueue(f);
+    return Promise.resolve();
   }
 
   private emitExec = (frame: ExecFrameOut): Promise<void> => this.post([prepareBoxExecFrame(frame)]);
@@ -391,7 +422,7 @@ export class BoxProvider {
   }
 
   private async onEvent(data: unknown): Promise<void> {
-    if (this.closed || this.rejected || !this.replies.available || data == null || typeof data !== "object") return;
+    if (this.closed || data == null || typeof data !== "object") return;
     const ev = data as Record<string, unknown>;
     const kind = ev.kind;
 

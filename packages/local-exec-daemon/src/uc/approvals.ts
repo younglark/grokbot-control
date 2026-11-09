@@ -16,6 +16,7 @@
  *    which is undefined on both sides in practice (D:L81255);
  *  - non-SA approvals ignore accountScope (only SA checks it, D:L81489).
  */
+import { cp } from "../state/fs-write";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { PermissionMode } from "../settings";
@@ -149,13 +150,6 @@ async function withLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
   locks.set(key, p);
   try { return await p; } finally { if (locks.get(key) === p) locks.delete(key); }
 }
-/** Approximation of D: cp (L80591): write to a sibling temp file then rename (0600). Not byte-identical internals. */
-async function writeAtomic(file: string, data: string): Promise<void> {
-  await fs.promises.mkdir(path.dirname(file), { recursive: true });
-  const tmp = `${file}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
-  await fs.promises.writeFile(tmp, data, { mode: 0o600 });
-  await fs.promises.rename(tmp, file);
-}
 /** D: wUe (L81351): add id, prune ids no longer present in approvals, rm when empty. No reply frame. */
 export async function retireApproval(id: string, approvalsPath: string, retirementsPath: string, nowMs?: number): Promise<void> {
   await withLock(retirementsPath, async () => {
@@ -165,7 +159,7 @@ export async function retireApproval(id: string, approvalsPath: string, retireme
     s.add(id);
     for (const o of [...s]) if (!approvals.has(o)) s.delete(o);
     if (s.size === 0) { await fs.promises.rm(retirementsPath, { force: true }); return; }
-    await writeAtomic(retirementsPath, JSON.stringify({ retiredIds: [...s] }));
+    await cp(retirementsPath, JSON.stringify({ retiredIds: [...s] })); // D:81363 cp without a mode
   });
 }
 

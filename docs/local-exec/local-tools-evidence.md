@@ -34,3 +34,25 @@ The order is:
   - (d) mail tools → hke for accounts. For send, the x6r path with xUe spent-sends.
   - (e) Obsidian vault tools (Ipt/ypt/bpt/Apt) need a separate reverse-engineering pass.
 - Local-tool replies also need the hello capability fields (mobileLocalTools).
+
+## t158 implementation (`src/uc/local-tools.ts`, `src/uc/provider.ts`)
+Implemented:
+- **Intake:** parseQueued handles `case "localTool"`.
+- **Mail (Opt → Mpt D:135625):** on Linux mail is undefined.
+  - mac_mail_accounts → h6r returns `failed mail_accounts_unavailable` (hke) directly, with no accept.
+  - mac_send_mail → x6r (D:135728) returns `failed mail_send_unavailable` (cse) before spendSendApproval. **So xUe (local-tool-spent-sends) is unreachable on Linux and is not ported.** This corrects the earlier line above saying send goes through xUe; that only applies on darwin with mail available.
+- **Unknown tools:** a non-E5 tool → B5e result only (D:135477).
+- **computer_*:**
+  1. Sends accepted (permissionGranted unset), then runs UL.call (D:136514).
+  2. ewr (D:136738) validates the call: not-E5 / empty conversation / non-object args / `null`→{}.
+  3. Calls run one at a time per conversation. While a call is queued, the q6r 60 s keepalive (leading=false) sends another accepted frame (onStillQueued).
+  4. Cancel/abort → Gl.
+  5. availableHelper is always undefined → BL.
+- **Frame encoding (Y_/R9r D:179042–179078, D:178942):** done/failed/needs_permission/ask. Done results over 8 MiB → PJe.
+- **Closing:** zl closing → local-tool-result failed.
+- **UC hello capabilities (D:178137–178175, Linux):** `{messagesOp/localStandingGrants only if a sidecar is present, messagesOpGeneration:4, aiToolSetup:true, mobileLocalTools:[]}`. computerUse and device are empty, so localToolAppConsent, localToolGrantSeen and localToolHelperName are omitted.
+
+Documented only, not ported:
+- **Obsidian:** implemented in t159; see obsidian-evidence.md.
+- **The computer-use dev override:** on non-darwin, the helper is still found if the sand-dev `local-cua-helper.json` override exists and the NLe gate is open (Xpt D:136712). This is not ported; the port always returns BL.
+- **The darwin helper / sidecar path:** not ported.

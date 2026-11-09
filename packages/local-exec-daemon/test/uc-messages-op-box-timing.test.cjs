@@ -120,7 +120,7 @@ async function boxServer(t,onGet){
 }
 function box(t,s,clock,extra={}){
  const p=new BoxProvider({connection:{baseUrl:s.url,token:'synthetic-token',headers:{}},root:dir(t),computerId:'synthetic',label:'lab',variant:'lab',permission:'always',sidecar:()=>undefined,clock,heartbeatMs:987654,...extra});
- const running=p.start();t.after(async()=>{await p.stop();await running});return p;
+ const running=p.start();t.after(async()=>{await p.stop();await Promise.race([running,new Promise(r=>setTimeout(r,50))])});return p;
 }
 
 test('Box backoff: 1 s doubling to 10 s (B7t), all statuses retried incl. 401, onConnectionStale after 3 failures (Cwr)',{timeout:15000},async t=>{
