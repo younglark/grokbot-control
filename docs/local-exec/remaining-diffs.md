@@ -1,4 +1,4 @@
-# 剩余差异：逐项根因（t171）
+# 剩余差异：逐项根因（t171，t175/t176 更新）
 
 依据：`/workspace/grokbot-node-analysis-0793/daemon.formatted.cjs` 的行号（D:），以及 `/tmp/exec-t166-evidence/app-0793/` 中的 App 文件。全部是静态读取，没有执行任何官方代码。
 状态取值：**已修**（与原版一致，有测试）、**有意不移植**（附 App 不可达的证据）、**根因未知**（附已尝试的方法）。
@@ -19,6 +19,14 @@
 | 12 | retry-expiry oracle 的随机波动 | silentRenewalBackoff 使用 Pu 全抖动，`random: e.random ?? Math.random`（D:177900–177906，Pu D:78223–78250，D:78241） | 第二次 Watch 重连落在 30 000 + j1 + random·上限 ms。落点早于最后一轮计划轮（约 31.7 s）时，帧会过期，结果变成 10 + 2 轮，而不是 11 + 1 轮。已复现：random = 0 时 watches 为 [359, 15370, 30375]，ours 有 2 轮 wake、37 次 attempts；random = 0.9 时 watches 为 [355, 17169, 35776]，1 轮 wake、34 次 attempts，与 golden 一致。修复只改测试：用预加载 `scripts/oracles/fixed-random.cjs`（`--require`），仅在 PROBE_MAIN 指向我们的 dist 且设置 PROBE_FIXED_RANDOM 时注入；retry-expiry 用例固定为 0.9 | 已修（oracle 确定化，生产不变） |
 | 13 | 日志与错误文本扫查 | `channel resolve failed: ${xt}`（D:178229）；`dropping unparseable request frame: ${xt(o)}`（D:137506）；`… on close: ${xt(o)}`（D:178128）；UC hello label 为 `hostname().trim() \|\| "this computer"` | 修复前：前两处文本用 message 或 String 渲染；label 规则不同。现在统一使用 describeError（xt） | 已修 |
 | 14 | abandonWork 取消路径 | D:178050–178064：通过 `executor.handle({kind:"cancel"})` 取消，失败时打印 `cancel failed for abandoned ${r}: ${xt}` | 我们的 cancelRequest 是同步调用，不会 reject，所以这条日志不可达；backlog 的 closing 帧相同（矩阵已观测） | 有意保留（架构差异，无线上效果） |
+| 15 | t175：crash guard | pTe/V7t D:78686–78712，cqr 最先安装 D:187290–187292 | 修复前未安装，未捕获异常会使进程退出。现在 `[sand-local-exec-daemon] <kind> (kept alive): ${xt}` 后继续运行；reporter 失败写 `sand.host.crash_reporter_failed` | 已修（t175 M1） |
+| 16 | t175：关停清理 discovery | PLe D:81000–81004；`failed to clear discovery record on close: ${xt}` D:179530–179535 | 修复前无条件删除，可能删掉接任进程的记录。现在只删 pid 相同的记录，失败记日志 | 已修（t175 M2） |
+| 17 | t175：settings 全 schema 与 durable 日志 | II D:82217–82393；BDe D:79832–79875；tGt D:82208 | 修复前只校验我们用到的字段。现在任何兄弟字段非法即按不可读处理（ask），按 (path, kind, cause) 去重写 damaged/unsupported 日志。t176 已改为 onDamage 后 rethrow | 已修（t175 M3 + t176 M5） |
+| 18 | t175：shell 默认超时 | t5e / i5r = 30 s（D:130633） | 修复前 timeout=0 时永不超时。现在非后台请求默认 30 s | 已修（t175 M4） |
+| 19 | t175：Box exec 输出通道 | Box 构造同一个 v_（D:137251–137262），同步进入无界 outbox（D:137292–137294） | close-stream-evidence 记录的阻碍（ReplyQueue 有界准入）已随 ba05d14 的无界 outbox 消失；Box 改用 Ki 通道，心跳持续到 producer finally | 已修（t175 F1） |
+| 20 | t175：Sentry 崩溃上报 | T7t D:187161；fatal `report(e,"fatal"); flush(1500)` | 缺失。需新增 `@sentry/node` 与 hre 脱敏移植 | MISSING 大项（t176 按任务不动），计划见 port-coverage.md §6 |
+| 21 | t176：后台 shell / timeoutBehavior BACKGROUND / hardTimeout | bE D:98540；E_ D:130800–131184；r5e D:130721；ZO/p1e | 已移植 soft→backgrounded、terminals 文件、hardTimeout、spawn、writeStdin。未做 forceBackground* / outputNotification registry | 已修（t176 M6）；残余见 port-coverage §6.2 |
+| 22 | t176：denylist + requestedSandboxPolicy | Qk D:106788–106796；Kc D:106557；Ud/ol D:20797 | 已移植匹配/解析/fail-closed；Linux 无 helper → sandboxUnsupported | 已修（t176 M7） |
 
 ## 根因未知
 - 无。
@@ -27,3 +35,6 @@
 - 新增 `test/t171-remaining-diffs.test.cjs`（5 项）：ledger 的行文本、事件字段及顺序、短 outage 不写事件、channel-missing 去重、X8r 原因映射、Uae 解析、IPC 中非法消息被忽略和 disconnect 返回 null key。
 - 随原版语义调整的既有断言：`test/t162-uc-unauthorized-renewal.test.cjs`（connect 时 2 次 poll；30 s 冷却 + 每 Watch 安全轮询两个定时器）、`test/uc-close-channel.test.cjs`（withdraw 走 750 ms deadline signal）、`test/uc-keepalive.test.cjs`（安全轮询是 setTimeout 链而非 interval）、`test/dropin-acceptance.test.cjs`（等 connect 的两次 poll 落定后再做 heartbeat(0) 快照；否则第二次 poll 会取走新入队项并触发 drain 重 poll，造成快照竞态）。
 - 已更新：`test/uc-lifecycle.test.cjs`（handoff 新形状、multi-provider 访问器）、`test/electron-handoff.test.cjs`、`test/uc.test.cjs`（原版 superseded 文本、原子且容忍竞争的 fixture）、`test/ownership-oracle.test.cjs` 与 `scripts/oracles/ownership/assertions.cjs`（implementation 模式也要求原版文本）、`test/uc-keepalive.test.cjs`（retry-expiry 固定 random）。
+- t175：新增 `test/t175-port-coverage.test.cjs`（7 项）：crash guard（子进程）、clearOwnDiscovery、settings 全 schema/unsupported/bad JSON 日志（子进程，避开每进程去重）、shellTimeoutMs、pullOutput 路径。函数级覆盖表见 `port-coverage.md`。
+- t176：新增 `test/t176-background-denylist-sandbox.test.cjs`（6 项）：denylist 单元、shellStream rejected、sandboxUnsupported、BACKGROUND+hardTimeout、backgroundShellSpawnArgs、settings EISDIR rethrow。
+- t177：denylist 的 tree-sitter / tree-sitter-bash 写入 `packages/local-exec-daemon/package.json` 正式依赖（公开 npm 0.21.1 / 0.21.0），去掉 App/exec-daemon 路径回退；见 `port-coverage.md` §8。

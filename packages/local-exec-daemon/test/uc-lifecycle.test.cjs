@@ -90,13 +90,15 @@ async function harness(sa = false, hooks = {}) {
       awaitHandoff: async () => ({ key: 'synthetic-key', computerId: 'synthetic-computer' }),
       exitFatal: () => { throw new Error('unexpected exitFatal'); },
     },
+    // t175: pTe crash guard (D:78700–78712) would add process listeners to the test runner; inert here.
+    './bootstrap/crash-guard': { installCrashGuard: () => ({ setReporter() {} }) },
     './settings': { loadSettings: async () => ({ permission: 'ask' }) },
     // t168: sqr's module-load env pass (D:187195–187210): boot-env scrub + SAND_NODE_PROXY_ENV (nke); inert here.
     './bootstrap/boot-env': { scrubBootEnv: () => ({ inheritedFds: [], closedFds: [] }) },
     './state/node-proxy': { applyNodeProxyEnv: () => undefined },
     './state/discovery': {
       publishDiscovery: rec => publisher(rec),
-      clearDiscovery: async () => {},
+      clearOwnDiscovery: async () => true, // t175: PLe (D:81000–81004)
       isSupervised: () => supervised(),
       loadDiscovery: async () => hooks.readDiscovery ? hooks.readDiscovery() : discovery,
     },

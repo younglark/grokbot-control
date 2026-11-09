@@ -5,8 +5,9 @@ import { readJsonIfExists, dataRootFromEnv } from "./util";
 import * as os from "node:os";
 import * as path from "node:path";
 import { awaitHandoff, exitFatal } from "./bootstrap/handoff";
+import { installCrashGuard } from "./bootstrap/crash-guard";
 import { loadSettings } from "./settings";
-import { clearDiscovery, isSupervised, loadDiscovery, publishDiscovery } from "./state/discovery";
+import { clearOwnDiscovery, isSupervised, loadDiscovery, publishDiscovery } from "./state/discovery";
 import { loadConnection, writeConnection } from "./state/connection";
 import { BOX_IDLE_FOR_UC, BOX_NO_CONNECTION, SandLocalExecConnectionError, backendClientFromEnv, exchangeConnection, variantForNamespace } from "./state/connection-exchange";
 import { createDeviceTools } from "./uc/local-tools";
@@ -35,6 +36,8 @@ const nodeProxy = applyNodeProxyEnv(process.env);
 class StandingAbort extends Error {}
 
 async function main(): Promise<void> {
+  // D:cqr 187291: pTe({scope:"sand-local-exec-daemon"}) before the handoff; uncaught errors are logged, process kept alive.
+  installCrashGuard("sand-local-exec-daemon");
   // D:187322–187325: CLAUDE_CONFIG_DIR / CODEX_HOME captured once at daemon start.
   const aiToolConfigDirs = aiToolConfigDirsFromEnv();
   // D:aqr = iqr() (187285) then cqr 187302–187303: a handoff without a computerId (timeout, disconnect, no channel)
@@ -192,7 +195,10 @@ async function main(): Promise<void> {
       lifecycleTrace("shutdown:tick-done");
       await publishTask;
       lifecycleTrace("shutdown:publish-done");
-      await clearDiscovery();
+      // D:179530–179535: `d && await PLe(process.pid, discoveryPath).catch(log)` — a successor's record is left alone.
+      await clearOwnDiscovery(process.pid).catch(Z => {
+        console.error(`[local-exec-daemon] failed to clear discovery record on close: ${describeError(Z)}`);
+      });
       lifecycleTrace("shutdown:exit");
       process.exit(0);
     })();

@@ -35,6 +35,7 @@ plain-HTTP 的 `/sand-box/local-exec-connection`。凭据、HOME、数据目录�
 | 未验证 | 0 |
 
 矩阵之外的剩余差异（安全轮询生命周期、outageLedger、多账号、ownership 容忍、日志文本等）逐项根因见 `remaining-diffs.md`（t171）。
+t175 函数级覆盖审计（`port-coverage.md`）另修 4 项 MISSING（crash guard、PLe、settings 全 schema、t5e 30 s 默认超时），并把 Box 接入 Ki 通道。这些都不改变上表 48 行的结论；Sentry、后台 shell、denylist/沙箱列为 MISSING 大项（只给计划）。
 
 ## 逐步对照
 
@@ -123,3 +124,5 @@ plain-HTTP 的 `/sand-box/local-exec-connection`。凭据、HOME、数据目录�
 - 测试：`test/t168-node-proxy.test.cjs`，共 5 项；e2e 见 dropin-extra 的 SAND_NODE_PROXY_ENV 用例。
 - **F6**（t169）`src/box/provider.ts`：Box SSE GET 由 `http.request` 改为全局 `fetch`，状态判定、重定向、默认头、TextDecoder 分帧与 streamRequests 一致；其余不变。依据 D:137186、137205、137396–137402、137441–137471。测试 `test/t169-box-sse-fetch.test.cjs`，共 5 项。
 - **F7**（t171）`src/bootstrap/handoff.ts` + `src/bootstrap/boot-env.ts` + `src/index.ts`：handoff 改为 iqr/Uae/oqr 语义（忽略非法消息、trim computerId、坏 key→null key、IPC disconnect/超时→null key、finally 断开 IPC）。依据 D:79662–79687、D:187212–187303。其余 t171 修复见 `remaining-diffs.md`。
+- **t175** `src/bootstrap/crash-guard.ts`（新）、`src/index.ts`、`src/state/discovery.ts`、`src/settings.ts`、`src/exec/handlers.ts`、`src/box/provider.ts`：见 `port-coverage.md` §4。测试 `test/t175-port-coverage.test.cjs`，共 7 项。
+- **t176** `src/exec/denylist.ts`、`sandbox.ts`、`background-shell.ts` + `handlers.ts` / `settings.ts`：后台 shell、denylist、requestedSandboxPolicy、settings 读错误 rethrow。测试 `test/t176-background-denylist-sandbox.test.cjs`，共 6 项。详见 `port-coverage.md` §6。

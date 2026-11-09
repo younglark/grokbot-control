@@ -6,9 +6,13 @@ import {
   LsError,
   LsResult,
   ShellAbortReason,
+  ShellBackgroundReason,
   SandboxPolicy,
   SandboxPolicy_Type,
 } from "../generated/agent.v1_pb";
+import { Qk, m3Structured } from "./denylist";
+import { Kc, assertSandboxSupported, SandboxUnsupportedError, type InternalSandboxPolicy } from "./sandbox";
+import { backgroundShellManagerFor } from "./background-shell";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
@@ -282,8 +286,21 @@ export async function handleLs(args: {
 export async function handleShellStream(args: {
   root: string; requestId: string; msgId: number; command: string;
   workingDirectory?: string; timeout?: number; emit: Emit;
+  /** Soft-timeout mode: BACKGROUND → r5e handoff (D:131022–131184). */
+  timeoutBehavior?: string | number;
+  isBackground?: boolean;
+  /** D:hardTimeout — aborts even after backgrounding (E_ D:131055–131065). */
+  hardTimeout?: number;
+  adminCommandDenylist?: string[];
+  requestedSandboxPolicy?: { type?: unknown } | null;
+  description?: string;
 }): Promise<void> {
   const { root, requestId, msgId, command } = args;
+  const backgroundMode = isBackgroundTimeoutBehavior(args);
+  const softTimeoutMs = args.timeout ?? 0;
+  const hardTimeoutMs = typeof args.hardTimeout === "number" && args.hardTimeout > 0 ? args.hardTimeout : 0;
+  const policy = Kc(args.requestedSandboxPolicy);
+  const denylist = Array.isArray(args.adminCommandDenylist) ? args.adminCommandDenylist : [];
   const startedAt = Date.now();
   // Guarded emitter: a sync throw becomes a rejection; the first failure latches, aborts the job
   // and every later emit becomes a no-op, so a broken reply channel cannot cause unbounded emits.
@@ -390,12 +407,38 @@ export async function handleShellStream(args: {
   if (notice) await emit({ kind: "client", requestId, message: { id: msgId, shellStream: { stderr: { data: notice } }, localExecutionTimeMs: 0 } });
   // Re-check after the notice await: never spawn a cancelled request.
   if (pendingReason !== undefined) { await emitAborted(pendingReason, cwd); return; }
-  // Official shell executor yields `start` before it spawns (daemon.formatted.cjs L130994–130996), so start
-  // frames follow admission order; emitting on the child's async 'spawn' event reordered lanes (t112 fair gate).
+
+  // D:Qk 106788 / E_ 130859–130874 — denylist reject BEFORE start (no start frame).
+  const denyReason = Qk({ command, parsingResult: m3Structured(command), blockedCommands: denylist });
+  if (denyReason !== undefined) {
+    shells.delete(requestId);
+    await emit({ kind: "client", requestId, message: { id: msgId,
+      shellStream: { rejected: { command, workingDirectory: cwd, reason: denyReason } }, localExecutionTimeMs: Date.now() - startedAt } });
+    await emit({ kind: "control", requestId, message: { streamClose: { id: msgId } } });
+    resolveDone(); return;
+  }
+
+  // Official shell executor yields `start` before it spawns (daemon.formatted.cjs L130994–130996).
+  // start.sandboxPolicy is Xk(requested) (D:130994); we emit the converted policy JSON.
   await emit({ kind: "client", requestId, message: { id: msgId,
-    shellStream: { start: { sandboxPolicy: new SandboxPolicy({type: SandboxPolicy_Type.INSECURE_NONE}).toJson() } }, localExecutionTimeMs: 1 } });
+    shellStream: { start: { sandboxPolicy: startSandboxPolicyJson(policy) } }, localExecutionTimeMs: 1 } });
   startSent = true;
   if (pendingReason !== undefined) { await emitAborted(pendingReason, cwd); return; }
+
+  // D:Ud 20797 after start — non-insecure_none without helper → sandboxUnsupported (E_ 131119–131136).
+  try { assertSandboxSupported(policy); }
+  catch (e) {
+    if (!(e instanceof SandboxUnsupportedError)) throw e;
+    shells.delete(requestId);
+    await emit({ kind: "client", requestId, message: { id: msgId,
+      shellStream: { sandboxUnsupported: {
+        command, workingDirectory: cwd, sandboxPolicyType: policy.type,
+        reason: e.reason ?? e.message, isReadonly: policy.type === "workspace_readonly",
+      } }, localExecutionTimeMs: Date.now() - startedAt } });
+    await emit({ kind: "control", requestId, message: { streamClose: { id: msgId } } });
+    resolveDone(); return;
+  }
+
   const prep = prepared!;
   {
     const child = spawn(prep.bash, prep.args, {
@@ -412,18 +455,28 @@ export async function handleShellStream(args: {
     stateOut?.on("data", (b: Buffer) => { dumpSize += b.length; if (dumpSize <= MAX_STATE_BYTES) dumpChunks.push(b); });
     stateOut?.on("error", () => undefined);
     let finished = false;
+    let backgrounded = false;
+    let interleaved = "";
     let reason: ShellAbortReason | undefined;
     let escalation: NodeJS.Timeout | undefined;
     let deadline: NodeJS.Timeout | undefined;
     let drain: NodeJS.Timeout | undefined;
+    let hardTimer: NodeJS.Timeout | undefined;
+    let softTimer: NodeJS.Timeout | undefined;
+    let bgShellId: number | undefined;
+    const mgr = backgroundShellManagerFor(root);
     const groupKill = (signal: NodeJS.Signals) => {
       if (!child.pid) return;
       try { process.kill(-child.pid, signal); } catch { /* group already gone */ }
     };
+    const clearAllTimers = () => {
+      clearTimeout(timeoutTimer); clearTimeout(deadline); clearTimeout(escalation);
+      clearTimeout(drain); clearTimeout(hardTimer); clearTimeout(softTimer);
+    };
     const finish = async (code: number | null, error?: Error) => {
-      if (finished) return;
+      if (finished || backgrounded) return;
       finished = true;
-      clearTimeout(timeoutTimer); clearTimeout(deadline); clearTimeout(escalation); clearTimeout(drain);
+      clearAllTimers();
       if (reason) groupKill("SIGKILL");
       child.stdout?.destroy(); child.stderr?.destroy();
       shells.delete(requestId);
@@ -442,30 +495,89 @@ export async function handleShellStream(args: {
       } catch { console.error("[local-exec] reply emission failed during shell completion"); }
       resolveDone();
     };
+    /** D:E_ background handoff 131146–131184 — emit backgrounded + streamClose; child keeps running into terminals/{id}.txt. */
+    const goBackground = async (bgReason: "TIMEOUT" | "USER_REQUEST") => {
+      if (finished || backgrounded) return;
+      backgrounded = true;
+      clearTimeout(softTimer); clearTimeout(timeoutTimer); clearTimeout(drain);
+      // Ensure pipes flow for the terminal-file listeners adopt will attach (we may have paused them).
+      child.stdout?.resume(); child.stderr?.resume();
+      // Request lifecycle ends; cancel no longer kills the adopted shell (ZO owns it).
+      shells.delete(requestId);
+      const shellId = bgShellId ?? mgr.generateShellId();
+      bgShellId = shellId;
+      const msToWait = bgReason === "USER_REQUEST" ? Date.now() - startedAt : softTimeoutMs;
+      try {
+        await mgr.adopt({
+          shellId, command, workingDirectory: cwd, pid: child.pid,
+          initialOutput: interleaved, startTime: startedAt, showElapsedTime: true,
+          description: args.description, child,
+          onCleanup: () => { clearTimeout(hardTimer); },
+        });
+        const elapsed = Date.now() - startedAt;
+        await emit({ kind: "client", requestId, message: { id: msgId,
+          shellStream: { backgrounded: {
+            shellId, command, workingDirectory: cwd,
+            ...(child.pid !== undefined ? { pid: child.pid } : {}),
+            msToWait,
+            reason: bgReason === "USER_REQUEST"
+              ? proto3.getEnumType(ShellBackgroundReason).findNumber(ShellBackgroundReason.USER_REQUEST)!.name
+              : proto3.getEnumType(ShellBackgroundReason).findNumber(ShellBackgroundReason.TIMEOUT)!.name,
+          } }, localExecutionTimeMs: elapsed } });
+        await emit({ kind: "control", requestId, message: { streamClose: { id: msgId } } });
+      } catch (e) {
+        console.error("[local-exec] background handoff failed", e);
+        backgrounded = false;
+        await finish(null, e instanceof Error ? e : new Error(String(e)));
+        return;
+      }
+      resolveDone();
+    };
     abortJob = (why) => {
-      if (finished || reason) return;
+      if (finished || backgrounded || reason) return;
       reason = why; groupKill("SIGTERM");
       escalation = setTimeout(() => groupKill("SIGKILL"), 250);
       deadline = setTimeout(() => finish(null), 750);
     };
-    child.once("error", (e) => finish(null, e));
-    child.once("close", (code) => { void finish(code); });
+    child.once("error", (e) => { if (!backgrounded) void finish(null, e); });
+    child.once("close", (code) => { if (!backgrounded) void finish(code); });
     child.once("exit", (code) => {
+      if (backgrounded) return;
       // Isolated original oracle: 4s background drains naturally; both 6s
-      // background cases exit at ~5.04s, do not kill the background, and no
-      // delayed stdout appears during 2.5s post-exit observation. Preserve
-      // that observed bounded normal drain, separately from abort deadlines.
+      // background cases exit at ~5.04s. Preserve that bounded normal drain.
       drain = setTimeout(() => { void finish(code); }, 5000);
     });
-    if (args.timeout && args.timeout > 0) timeoutTimer = setTimeout(() => abortJob(ShellAbortReason.TIMEOUT), args.timeout);
+    // Soft timeout: CANCEL → abortJob(TIMEOUT); BACKGROUND → goBackground(TIMEOUT) (D:r5e 130721).
+    // softTimeoutMs===0 with BACKGROUND backgrounds immediately after spawn (r5e timer 0).
+    if (backgroundMode) {
+      softTimer = setTimeout(() => { void goBackground("TIMEOUT"); }, Math.max(0, softTimeoutMs));
+    } else if (softTimeoutMs > 0) {
+      timeoutTimer = setTimeout(() => abortJob(ShellAbortReason.TIMEOUT), softTimeoutMs);
+    } else if (softTimeoutMs === 0 && hardTimeoutMs > 0) {
+      // D:t5e+E_: non-BACKGROUND with hardTimeout → soft timeout 0 → immediate abort.
+      timeoutTimer = setTimeout(() => abortJob(ShellAbortReason.TIMEOUT), 0);
+    }
+    // D:hardTimeout 131055–131065 — survives backgrounding; aborts via manager or foreground.
+    if (hardTimeoutMs > 0) {
+      hardTimer = setTimeout(() => {
+        if (backgrounded && bgShellId !== undefined) {
+          if (!mgr.abort(bgShellId)) groupKill("SIGKILL");
+        } else {
+          abortJob(ShellAbortReason.TIMEOUT);
+        }
+      }, hardTimeoutMs);
+    }
     for (const [stream, name] of [[child.stdout, "stdout"], [child.stderr, "stderr"]] as const) {
       stream?.on("data", (b: Buffer) => {
         if (finished) return;
+        const text = b.toString("utf8");
+        interleaved += text;
+        if (backgrounded) return; // adopt owns further output via its own listeners after handoff
         stream?.pause();
         Promise.resolve(emit({ kind: "client", requestId, message: { id: msgId,
-          shellStream: { [name]: { data: b.toString("utf8") } }, localExecutionTimeMs: Date.now() - startedAt } }))
+          shellStream: { [name]: { data: text } }, localExecutionTimeMs: Date.now() - startedAt } }))
           .catch(() => abortJob(ShellAbortReason.USER_ABORT))
-          .finally(() => { if (!finished) stream?.resume(); });
+          .finally(() => { if (!finished && !backgrounded) stream?.resume(); });
       });
     }
   }
@@ -559,6 +671,91 @@ export async function withExecHeartbeat(requestId: string, msgId: number, emit: 
   finally { closed = true; clearTimeout(timer); }
 }
 
+/** D:bE / $3 execute 110633–110810 — spawn into ZO; single result then streamClose. */
+export async function handleBackgroundShellSpawn(args: {
+  root: string; requestId: string; msgId: number; command: string;
+  workingDirectory?: string; adminCommandDenylist?: string[];
+  sandboxPolicy?: { type?: unknown } | null; description?: string;
+  enableWriteShellStdinTool?: boolean; emit: Emit;
+}): Promise<void> {
+  const { root, requestId, msgId, command, emit } = args;
+  const mgr = backgroundShellManagerFor(root);
+  let cwd = root;
+  try {
+    const realRoot = fs.realpathSync(root);
+    const wanted = args.workingDirectory || root;
+    try { cwd = assertRealpathUnderRoot(root, wanted); }
+    catch { cwd = realRoot; }
+    if (!fs.existsSync(cwd) || !fs.statSync(cwd).isDirectory()) cwd = realRoot;
+    else cwd = fs.realpathSync(cwd);
+  } catch (e) {
+    await emit({ kind: "client", requestId, message: { id: msgId,
+      backgroundShellSpawnResult: { error: { command, workingDirectory: cwd, error: e instanceof Error ? e.message : String(e) } } } });
+    await emit({ kind: "control", requestId, message: { streamClose: { id: msgId } } });
+    return;
+  }
+  const denylist = Array.isArray(args.adminCommandDenylist) ? args.adminCommandDenylist : [];
+  const denyReason = Qk({ command, parsingResult: m3Structured(command), blockedCommands: denylist });
+  if (denyReason !== undefined) {
+    await emit({ kind: "client", requestId, message: { id: msgId,
+      backgroundShellSpawnResult: { rejected: { command, workingDirectory: cwd, reason: denyReason } } } });
+    await emit({ kind: "control", requestId, message: { streamClose: { id: msgId } } });
+    return;
+  }
+  const policy = Kc(args.sandboxPolicy);
+  try { assertSandboxSupported(policy); }
+  catch (e) {
+    if (!(e instanceof SandboxUnsupportedError)) throw e;
+    await emit({ kind: "client", requestId, message: { id: msgId,
+      backgroundShellSpawnResult: { sandboxUnsupported: {
+        command, workingDirectory: cwd, sandboxPolicyType: policy.type,
+        reason: e.reason ?? e.message, isReadonly: policy.type === "workspace_readonly",
+      } } } });
+    await emit({ kind: "control", requestId, message: { streamClose: { id: msgId } } });
+    return;
+  }
+  try {
+    const prep = await prepareShell(command, fs.realpathSync(root));
+    const stdio: ("ignore" | "pipe")[] = args.enableWriteShellStdinTool
+      ? ["pipe", "pipe", "pipe", "pipe", "pipe"]
+      : ["ignore", "pipe", "pipe", "pipe", "pipe"];
+    const child = spawn(prep.bash, prep.args, { cwd, detached: true, env: prep.env, stdio });
+    const stateIn = child.stdio?.[3] as NodeJS.WritableStream | null;
+    stateIn?.on("error", () => undefined);
+    stateIn?.end(prep.snapshotIn);
+    const shellId = mgr.generateShellId();
+    await mgr.adopt({
+      shellId, command, workingDirectory: cwd, pid: child.pid, initialOutput: "",
+      startTime: Date.now(), showElapsedTime: true, description: args.description, child,
+    });
+    await emit({ kind: "client", requestId, message: { id: msgId,
+      backgroundShellSpawnResult: { success: {
+        shellId, command, workingDirectory: cwd, ...(child.pid !== undefined ? { pid: child.pid } : {}),
+      } } } });
+    await emit({ kind: "control", requestId, message: { streamClose: { id: msgId } } });
+  } catch (e) {
+    await emit({ kind: "client", requestId, message: { id: msgId,
+      backgroundShellSpawnResult: { error: { command, workingDirectory: cwd, error: e instanceof Error ? e.message : String(e) } } } });
+    await emit({ kind: "control", requestId, message: { streamClose: { id: msgId } } });
+  }
+}
+
+/** D:ZO.writeStdin 110510. Not registered in Tft (D:132615–132670) — wire writeShellStdinArgs stays No handler. */
+export async function handleWriteShellStdin(args: {
+  root: string; requestId: string; msgId: number; shellId?: number; data?: string; emit: Emit;
+}): Promise<void> {
+  const { root, requestId, msgId, emit } = args;
+  try {
+    if (typeof args.shellId !== "number") throw new Error("Shell not found");
+    await backgroundShellManagerFor(root).writeStdin(args.shellId, args.data ?? "");
+    await emit({ kind: "client", requestId, message: { id: msgId, writeShellStdinResult: { success: {} } } });
+  } catch (e) {
+    await emit({ kind: "client", requestId, message: { id: msgId,
+      writeShellStdinResult: { error: { error: e instanceof Error ? e.message : String(e) } } } });
+  }
+  await emit({ kind: "control", requestId, message: { streamClose: { id: msgId } } });
+}
+
 export function detectServerMessageType(serverMessage: Record<string, unknown>): string {
   for (const k of Object.keys(serverMessage)) {
     if (k.endsWith("Args") || k === "readArgs" || k === "lsArgs" || k === "shellStreamArgs") return k;
@@ -567,13 +764,43 @@ export function detectServerMessageType(serverMessage: Record<string, unknown>):
   return "undefined";
 }
 
+/** D:i5r 130633 — the shell stream default timeout. */
+export const DEFAULT_SHELL_TIMEOUT_MS = 30_000;
+/**
+ * D:t5e — effective foreground timeout: a non-zero `timeout` wins; otherwise 0 for background
+ * shells (isBackground / TIMEOUT_BEHAVIOR_BACKGROUND / hardTimeout > 0), else i5r (30 s).
+ * Soft timeout for BACKGROUND / isBackground is the r5e wait (D:130721); 0 backgrounds immediately.
+ * hardTimeout>0 alone also yields 0 (original setTimeout(abort,0) when not BACKGROUND).
+ */
+
+export function isBackgroundTimeoutBehavior(a: { isBackground?: unknown; timeoutBehavior?: unknown }): boolean {
+  return a.isBackground === true
+    || a.timeoutBehavior === "TIMEOUT_BEHAVIOR_BACKGROUND"
+    || a.timeoutBehavior === "BACKGROUND"
+    || a.timeoutBehavior === 2;
+}
+
+function startSandboxPolicyJson(policy: InternalSandboxPolicy): Record<string, unknown> {
+  if (policy.type === "workspace_readonly") return new SandboxPolicy({ type: SandboxPolicy_Type.WORKSPACE_READONLY }).toJson() as Record<string, unknown>;
+  if (policy.type === "workspace_readwrite") return new SandboxPolicy({ type: SandboxPolicy_Type.WORKSPACE_READWRITE }).toJson() as Record<string, unknown>;
+  return new SandboxPolicy({ type: SandboxPolicy_Type.INSECURE_NONE }).toJson() as Record<string, unknown>;
+}
+
+export function shellTimeoutMs(a: { timeout?: unknown; isBackground?: unknown; timeoutBehavior?: unknown; hardTimeout?: unknown }): number {
+  const t = typeof a.timeout === "number" ? a.timeout : Number(a.timeout ?? 0) || 0;
+  if (t !== 0) return t;
+  const bg = a.isBackground === true || a.timeoutBehavior === "TIMEOUT_BEHAVIOR_BACKGROUND" || a.timeoutBehavior === 2
+    || (typeof a.hardTimeout === "number" && a.hardTimeout > 0);
+  return bg ? 0 : DEFAULT_SHELL_TIMEOUT_MS;
+}
+
 export async function dispatchExec(args: {
   root: string;
   requestId: string;
   serverMessage: Record<string, unknown>;
   permission: PermissionMode;
   emit: Emit;
-  /** UC synchronous queue consumer; Box keeps its existing public async admission behavior. */
+  /** Ki exec output channel (D:14896–14972); UC and Box both set it. Off only for direct unit callers. */
   pullOutput?: boolean;
   /** The owning provider's executor counter (D:135935); Box and each UC provider pass their own. */
   execIds?: ExecIdCounter;
@@ -607,6 +834,12 @@ export async function dispatchExec(args: {
       command?: string;
       workingDirectory?: string;
       timeout?: number;
+      isBackground?: boolean;
+      timeoutBehavior?: string | number;
+      hardTimeout?: number;
+      adminCommandDenylist?: string[];
+      requestedSandboxPolicy?: { type?: unknown } | null;
+      description?: string;
     };
     if (!a.command) {
       handleUnsupported(requestId, msgId, "shellStreamArgs", emit, { root, serverMessage });
@@ -619,13 +852,36 @@ export async function dispatchExec(args: {
       msgId,
       command,
       workingDirectory: a.workingDirectory,
-      timeout: a.timeout,
+      timeout: shellTimeoutMs(a),
+      timeoutBehavior: a.timeoutBehavior,
+      isBackground: a.isBackground,
+      hardTimeout: typeof a.hardTimeout === "number" ? a.hardTimeout : undefined,
+      adminCommandDenylist: a.adminCommandDenylist,
+      requestedSandboxPolicy: a.requestedSandboxPolicy,
+      description: a.description,
       emit: e,
     }));
     return;
   }
-  if (serverMessage.backgroundShellSpawnArgs) {
-    handleUnsupported(requestId, msgId, "backgroundShellSpawnArgs", emit, { root, serverMessage });
+  if (serverMessage.backgroundShellSpawnArgs && typeof serverMessage.backgroundShellSpawnArgs === "object") {
+    if (refuseByPermission(permission, requestId, emit)) return;
+    const a = serverMessage.backgroundShellSpawnArgs as {
+      command?: string;
+      workingDirectory?: string;
+      adminCommandDenylist?: string[];
+      sandboxPolicy?: { type?: unknown } | null;
+      description?: string;
+      enableWriteShellStdinTool?: boolean;
+    };
+    if (!a.command) {
+      handleUnsupported(requestId, msgId, "backgroundShellSpawnArgs", emit, { root, serverMessage });
+      return;
+    }
+    await heartbeat(requestId, msgId, emit, (e) => handleBackgroundShellSpawn({
+      root, requestId, msgId, command: a.command!, workingDirectory: a.workingDirectory,
+      adminCommandDenylist: a.adminCommandDenylist, sandboxPolicy: a.sandboxPolicy,
+      description: a.description, enableWriteShellStdinTool: a.enableWriteShellStdinTool, emit: e,
+    }));
     return;
   }
   const typeName = detectServerMessageType(serverMessage);

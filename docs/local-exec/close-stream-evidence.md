@@ -65,3 +65,6 @@ Remaining limitation: existing handlers generate their own terminal/error frames
 ## t151 continuation
 
 The earlier t149/t150 unimplemented attached-source notes are historical. `uc-download-evidence.md` records the subsequently implemented **UC outer download** read-file chain, attachment ownership/retry rules and remaining cancellation/setup races. Exec Ki and Box behavior remain separate.
+
+## t175 update
+The Box blocker above (ReplyQueue bounded admission) no longer exists: since ba05d14 Box enqueues into a synchronous unbounded outbox (D:137292–137306). Box now calls `dispatchExec({pullOutput:true})`, so Box consumes the same Ki channel as UC and the original Box. See port-coverage.md §4 F1.

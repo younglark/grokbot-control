@@ -39,12 +39,11 @@ export async function publishDiscovery(
   await writeAtomic(discoveryPath(env), JSON.stringify(rec, null, 2));
 }
 
-export async function clearDiscovery(env: NodeJS.ProcessEnv = process.env): Promise<void> {
-  try {
-    await fs.promises.unlink(discoveryPath(env));
-  } catch (e: unknown) {
-    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-  }
+/** D:PLe 81000–81004: remove the record only when it still names this pid (read fail-open; rm force). */
+export async function clearOwnDiscovery(pid: number, env: NodeJS.ProcessEnv = process.env): Promise<boolean> {
+  if ((await loadDiscovery(env))?.pid !== pid) return false;
+  await fs.promises.rm(discoveryPath(env), { force: true });
+  return true;
 }
 
 

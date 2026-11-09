@@ -445,6 +445,9 @@ export class BoxProvider {
           requestId,
           serverMessage,
           permission: "always",
+          // D:135911 v_ / Ki (14896–14972): Box feeds the same exec output channel as UC; its consumer is the
+          // synchronous unbounded outbox (enqueue 137292), so heartbeats run until the producer finishes.
+          pullOutput: true,
           execIds: this.execIds,
           emit: this.emitExec,
         });
