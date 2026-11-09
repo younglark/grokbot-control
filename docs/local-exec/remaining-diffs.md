@@ -25,7 +25,7 @@
 | 18 | t175：shell 默认超时 | t5e / i5r = 30 s（D:130633） | 修复前 timeout=0 时永不超时。现在非后台请求默认 30 s | 已修（t175 M4） |
 | 19 | t175：Box exec 输出通道 | Box 构造同一个 v_（D:137251–137262），同步进入无界 outbox（D:137292–137294） | close-stream-evidence 记录的阻碍（ReplyQueue 有界准入）已随 ba05d14 的无界 outbox 消失；Box 改用 Ki 通道，心跳持续到 producer finally | 已修（t175 F1） |
 | 20 | t175：Sentry 崩溃上报 | T7t D:187161；fatal `report(e,"fatal"); flush(1500)` | 缺失。需新增 `@sentry/node` 与 hre 脱敏移植 | MISSING 大项（t176 按任务不动），计划见 port-coverage.md §6 |
-| 21 | t176：后台 shell / timeoutBehavior BACKGROUND / hardTimeout | bE D:98540；E_ D:130800–131184；r5e D:130721；ZO/p1e | 已移植 soft→backgrounded、terminals 文件、hardTimeout、spawn、writeStdin。未做 forceBackground* / outputNotification registry | 已修（t176 M6）；残余见 port-coverage §6.2 |
+| 21 | t176：后台 shell / timeoutBehavior BACKGROUND / hardTimeout | bE D:98540；E_ D:130800–131184；r5e D:130721；ZO/p1e | 已移植 soft→backgrounded、terminals 文件、hardTimeout、spawn、writeStdin。未做 forceBackground* / outputNotification registry | 已修（t176 M6）；剩余 forceBackground/outputNotification/registry 经 t181 核验不可达（port-coverage §9） |
 | 22 | t176：denylist + requestedSandboxPolicy | Qk D:106788–106796；Kc D:106557；Ud/ol D:20797 | 已移植匹配/解析/fail-closed；Linux 无 helper → sandboxUnsupported | 已修（t176 M7） |
 
 ## 根因未知
@@ -38,3 +38,4 @@
 - t175：新增 `test/t175-port-coverage.test.cjs`（7 项）：crash guard（子进程）、clearOwnDiscovery、settings 全 schema/unsupported/bad JSON 日志（子进程，避开每进程去重）、shellTimeoutMs、pullOutput 路径。函数级覆盖表见 `port-coverage.md`。
 - t176：新增 `test/t176-background-denylist-sandbox.test.cjs`（6 项）：denylist 单元、shellStream rejected、sandboxUnsupported、BACKGROUND+hardTimeout、backgroundShellSpawnArgs、settings EISDIR rethrow。
 - t177：denylist 的 tree-sitter / tree-sitter-bash 写入 `packages/local-exec-daemon/package.json` 正式依赖（公开 npm 0.21.1 / 0.21.0），去掉 App/exec-daemon 路径回退；见 `port-coverage.md` §8。
+- t181：后台三组件静态核验不可达（Tft 不传 registry、forceBackground 无调用/未注册），不移植；补 jHt 文案（computerUseArgs/recordScreenArgs，D:98041–98046）。测试 `test/t181-background-reachability.test.cjs`（4 项）。

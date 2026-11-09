@@ -594,6 +594,14 @@ export function cancelRequest(requestId: string): boolean {
   job.abort(ShellAbortReason.USER_ABORT); return true;
 }
 
+/** D:jHt 98041–98046, used by wE.handle for unregistered cases (D:98199–98201): computer use / screen recording have fixed refusals. */
+const NO_HANDLER_TEXT: Record<string, string> = {
+  computerUseArgs:
+    "Computer use is not enabled for this environment, so the Computer tool and the computerUse subagent cannot run here. Do not retry computer actions; verify with non-GUI methods (automated tests, shell commands) instead. (No computer-use handler is registered on this exec daemon.)",
+  recordScreenArgs:
+    "Screen recording is not enabled for this environment, so recordings cannot be captured here. Do not retry; skip the recording and present other evidence instead. (No record-screen handler is registered on this exec daemon.)",
+};
+
 export function handleUnsupported(
   requestId: string,
   msgId: number,
@@ -606,7 +614,7 @@ export function handleUnsupported(
     const throwFrame: ExecFrameOut = {
       kind: "control",
       requestId,
-      message: { throw: { id: msgId, error: `No handler found for server message of type ${typeName}` } },
+      message: { throw: { id: msgId, error: NO_HANDLER_TEXT[typeName] ?? `No handler found for server message of type ${typeName}` } },
     };
     if (cwdState !== undefined) throwFrame.cwdState = cwdState;
     await emit(throwFrame);

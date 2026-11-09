@@ -1,4 +1,4 @@
-# 函数级移植覆盖审计（t175–t177 更新）
+# 函数级移植覆盖审计（t175–t181 更新）
 
 对象：0.79.3 原版 daemon bundle `/workspace/grokbot-node-analysis-0793/daemon.formatted.cjs`（下称 D:）与我们的 `packages/local-exec-daemon`。
 方法全部为静态读取：没有执行任何官方代码、worker 或 App 内二进制。脚本与中间产物在 `/tmp/exec-t175/`。
@@ -66,7 +66,7 @@ MISSING 发现 4 项并已修复，另有 1 项“已移植-差异”在本轮�
 
 ## 6. 大项计划 / t176 已修
 1. **Sentry 崩溃上报**（T7t D:187161）— **仍 MISSING**（本轮按任务要求不动）。计划不变：`@sentry/node` + hre 脱敏；仅两 env 均设置时 init；fatal `report+flush(1500)`。
-2. **后台 shell** — **t176 已修**：`timeoutBehavior=BACKGROUND` 软超时 → `backgrounded`（D:131146–131184）+ `terminals/{id}.txt`（p1e D:110252）；`hardTimeout` 在转后台后仍可 abort（D:131055–131065）；`backgroundShellSpawnArgs`（bE/$3 D:110633）。shellId 范围 1000–999999（YO/u1e）。`writeShellStdinArgs` / `forceBackgroundShellArgs` **不在 Tft 注册表**（D:132615–132670 仅 Tp/bE/gk/mk）→ 原版 No handler，我们保持一致；ZO.writeStdin 仅作后台管理器内部 API。未移植：forceBackgroundByToolCallId、outputNotification 观察器、backgroundWorkRegistry 完成队列。
+2. **后台 shell** — **t176 已修**：`timeoutBehavior=BACKGROUND` 软超时 → `backgrounded`（D:131146–131184）+ `terminals/{id}.txt`（p1e D:110252）；`hardTimeout` 在转后台后仍可 abort（D:131055–131065）；`backgroundShellSpawnArgs`（bE/$3 D:110633）。shellId 范围 1000–999999（YO/u1e）。`writeShellStdinArgs` / `forceBackgroundShellArgs` **不在 Tft 注册表**（D:132615–132670 仅 Tp/bE/gk/mk）→ 原版 No handler，我们保持一致；ZO.writeStdin 仅作后台管理器内部 API。剩余三个组件经 t181 静态核验均不可达，不移植（见 §9）。
 3. **管理员命令 denylist** — **t176 已修**：`src/exec/denylist.ts` 移植 Qk/vhe/zje/hZt/ZE/fZt/Gje/mZt/Mg/lse/bb/R4（D:106650–106796）与 m3/GYt 可执行命令抽取（D:99470–99750）；tree-sitter 可用时精确解析，不可用时 fail-closed fZt。
 4. **requestedSandboxPolicy** — **t176 已修**：Kc（D:106557）+ Ud/ol（D:20797–20834）。Linux 无 helper → `sandboxUnsupported`（Binary check failed）。不移植 darwin-only HKt/uze。start.sandboxPolicy 使用请求的策略（Xk 语义）。
 5. **settings 非 ENOENT 读错误** — **t176 已修**：II.readText（D:82258–82270）onDamage 后 rethrow（pue 无 isRefusedRead）。
@@ -83,3 +83,15 @@ denylist 解析直接 `require("tree-sitter")` / `require("tree-sitter-bash")`�
 - `tree-sitter@0.21.1`（公开 npm；与 App 随包 `@cursor/node-tree-sitter` 0.21.1 同 API/版本号）
 - `tree-sitter-bash@0.21.0`（公开 npm，与 App `dist/deps/tree-sitter-bash` 同版本）
 `node-gyp-build` 是 tree-sitter 的传递依赖，代码未直接 require，不单独声明。workspace 根 `package.json` 的 `allowScripts` 批准二者的 install 脚本以便 npm 拉取/重建 prebuild natives；**不**从 App asar 拷贝 `.node`。解析失败仍 fail-closed 到 fZt（与原版 tree-sitter stub 路径一致）。
+
+## 9. 后台三组件可达性（t181，静态）
+| 组件 | 原版 | 可达性证据 | 结论 |
+|---|---|---|---|
+| forceBackgroundByToolCallId（USER_REQUEST 转后台） | E_.forceBackgroundByToolCallId D:130809–130819；requestBackground D:130775、131033 | bundle 内无任何调用点（`grep \.forceBackgroundByToolCallId` 仅定义处；`pendingFrom` D:130820 同样无调用）；唯一可能入口 forceBackgroundShellExecutor（D:99280）**未在 Tft 注册**（D:132615–132670 仅 Tp/bE/gk/mk）→ 线上 `forceBackgroundShellArgs` 回 `No handler found …`（wE D:98199–98201） | 不可达，不移植；测试钉住 No handler 回复 |
+| outputNotification 观察器（l1e） | d1e.createObserver D:109931–109955；l1e D:109714 | Tft 以 `new $3(r,o,n,t,void 0,void 0)` 构造（D:132609）→ `$3` 中 `u = i && …: i` 为 undefined（D:110623）→ `new d1e(l,s,u)` 的 backgroundWorkRegistry 为 undefined → createObserver 首行 `if (!this.backgroundWorkRegistry …) return;` 永远返回 | 不可达，不移植；测试确认带 outputNotification 的 spawn 只写 `terminals/{id}.txt` |
+| backgroundWorkRegistry 完成队列 | ZO.registerShellWork/clearShellWork/enqueueShellCompletion D:110401–110450 | 同一 `u` 传给 `new ZO(d,u)`（D:110626）；三处均为 `this.backgroundWorkRegistry?.…` 或 `if (!this.backgroundWorkRegistry) return;` → no-op；且队列只在进程内（无 wire/磁盘/日志输出） | 不可达且无可观测效果，不移植；测试确认转后台后无任何完成帧 |
+
+App 侧：0.79.3 asar 中这些符号只出现在 `/dist/local-exec-daemon/main.cjs`（即 daemon bundle 本身）；main.cjs / main-core.cjs / main-app.cjs / proto.cjs（`/tmp/exec-t166-evidence/app-0793/`）均 0 次。App 不经 IPC 触发它们。
+
+顺带修复（同一 wE 分支，范围外但可观测）：jHt（D:98041–98046）为 `computerUseArgs` / `recordScreenArgs` 给出固定拒绝文案，原先我们回通用 `No handler found …`。已改为原文，测试 `t181-background-reachability.test.cjs`。
+
