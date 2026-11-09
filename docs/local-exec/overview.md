@@ -102,7 +102,7 @@ Daemon 侧负责：在本机执行工具、把结果帧送回 Box/UC、维持 pr
   - 验收以**合成后端 + 合成凭据**为主；门控 harness 设 `DROPIN_ACCEPTANCE=1`。
   - 测试与证据流水线使用 **`UC_SKIP_OFFICIAL=1`**，**禁止**执行官方 main.cjs / App 内嵌 electron / worker。
   - Electron 烟测可用公开 npm 的 Electron 二进制；**不等于**官方 App 所嵌 42.x 的验收。
-  - 已知有意边界（如 Sentry 未接；ls 的 ripgrep 树默认不可达，配置后路径已移植，仍缺 sharedBuildCache/spawnWorkload 包装）见包内 README、[ls-ripgrep-evidence.md](./ls-ripgrep-evidence.md) 与 remaining-diffs。
+  - 已知有意边界（如 Sentry 未接；ls 的 ripgrep 树默认不可达，配置后路径已移植；exec spawn 经 Ko/Ud（Md、CE、cgroup/FUSE 跳转）见 t198）见包内 README、[ls-ripgrep-evidence.md](./ls-ripgrep-evidence.md) 与 remaining-diffs。
 - 目录内 [README.md](./README.md) 是兼容边界短声明；本文是职责与能力总览。
 
 ---

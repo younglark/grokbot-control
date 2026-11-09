@@ -26,7 +26,7 @@
  *    variables whose value merely contains a token. POSIX-mode replay is not implemented.
  */
 import { spawn } from "node:child_process";
-import { b0 } from "./ls-ripgrep";
+import { Ko } from "./spawn-workload";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -190,9 +190,10 @@ export function initialSnapshot(bash: string, timeoutMs = 10000): Promise<string
     const finish = (v: string) => { if (done) return; done = true; clearTimeout(t); if (snapshot === null) snapshot = v; resolve(snapshot); };
     let child: ReturnType<typeof spawn>;
     try {
-      child = spawn(bash, ["-O", "extglob", "-ilc", `${DUMP_FN} builtin printf '%s\\n' '${INIT_MARK}'; __gb_dump_state`], {
-        env: b0({ ...process.env, ...BASE_ENV }) /* Ko D:21095 */, detached: true, stdio: ["ignore", "pipe", "ignore"], cwd: os.homedir(),
-      });
+      // D:22705–22720: the snapshot spawn goes through Ko(…, {type:"insecure_none"}) (b0 + Md + spawnWorkload).
+      child = Ko(bash, ["-O", "extglob", "-ilc", `${DUMP_FN} builtin printf '%s\\n' '${INIT_MARK}'; __gb_dump_state`], {
+        env: { ...process.env, ...BASE_ENV }, detached: true, stdio: ["ignore", "pipe", "ignore"], cwd: os.homedir(),
+      }, { type: "insecure_none" });
     } catch { finish(""); return; }
     const group: InitGroup | null = child.pid ? { child, pgid: child.pid, retired: false } : null;
     initGroup = group;
@@ -240,8 +241,8 @@ export async function prepareShell(command: string, root: string): Promise<Prepa
     [`GIT_CONFIG_VALUE_${gitCount}`]: "false",
   };
   if (!env.PATH) env.PATH = "/usr/local/bin:/usr/bin:/bin";
-  // Ko (D:21095) wraps every shell spawn env with b0: identity unless configureRipgrepPath() set an absolute path.
-  return { bash, args: ["-O", "extglob", "-c", script, "--", command], env: b0(env), snapshotIn };
+  // b0 / Md / CE are applied at spawn time by Ko (spawn-workload.ts, D:21094–21095 → Ud D:20798).
+  return { bash, args: ["-O", "extglob", "-c", script, "--", command], env, snapshotIn };
 }
 
 /** Atomically commit a complete dump and return its cwd; otherwise keep the old state. */

@@ -16,11 +16,12 @@ import { Qk, m3Structured } from "./denylist";
 import { Kc, assertSandboxSupported, SandboxUnsupportedError, type InternalSandboxPolicy } from "./sandbox";
 import { backgroundShellManagerFor } from "./background-shell";
 import { buildTreeFromRipgrepStream, LS_CHAR_BUDGET, LS_DEFAULT_TIMEOUT_MS, withTimeoutSignal } from "./ls-ripgrep";
+import { Ko } from "./spawn-workload";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import * as url from "node:url";
-import { spawn, type ChildProcess } from "node:child_process";
+import { type ChildProcess } from "node:child_process";
 import { assertRealpathUnderRoot, assertUnderRoot, PathGuardError } from "./path";
 import type { PermissionMode } from "../settings";
 import { commitShell, getSessionCwd, MAX_STATE_BYTES, prepareShell, terminateInitialSnapshot, type PreparedShell } from "./shell-session";
@@ -44,6 +45,8 @@ export type Emit = (frame: ExecFrameOut) => void | Promise<void>;
 
 type ShellJob = { abort: (reason: ShellAbortReason) => void; done: Promise<void> };
 const shells = new Map<string, ShellJob>();
+/** In-flight ls exec contexts by requestId (t198: cancel → LsResult.timeout, like the original's ctx cancel). */
+const lsJobs = new Map<string, AbortController>();
 /**
  * Official inner exec message ids: every v_ executor owns `nextExecId = 1` (D:135935) and does
  * `let a = this.nextExecId++; o.id = a` (D:136332–136333). Box builds its own v_ (D:137251) and every UC provider
@@ -259,6 +262,10 @@ export async function handleLs(args: {
   // the same code path yields success / timeout with directoryTreeRoot (t196, ls-ripgrep.ts).
   // Path guard (assertRealpathUnderRoot, our n9 equivalent) stays first.
   const { root, requestId, msgId, emit } = args;
+  // D:handleExecRequest 136333–136350: the exec ctx is baseCtx.withCancel(); handleCancel (136353–136364) cancels it,
+  // and LocalLsExecutor's withTimeout child inherits that abort → kO reports didTimeout → LsResult.timeout.
+  const ctx = new AbortController();
+  lsJobs.set(requestId, ctx);
   try {
     assertRealpathUnderRoot(root, args.path);
     const abs = lsResolvePath(args.path, root);
@@ -278,7 +285,7 @@ export async function handleLs(args: {
     else if (!st!.isDirectory()) result = lsError(`Path is not a directory: ${abs}`);
     else {
       try {
-        const u = Kc(args.sandboxPolicy), l = args.timeoutMs ?? LS_DEFAULT_TIMEOUT_MS, d = withTimeoutSignal(l);
+        const u = Kc(args.sandboxPolicy), l = args.timeoutMs ?? LS_DEFAULT_TIMEOUT_MS, d = withTimeoutSignal(l, ctx.signal);
         const { tree: f, didTimeout: p } = await buildTreeFromRipgrepStream(d, abs, args.ignore ?? [], u, LS_CHAR_BUDGET);
         result = p
           ? new LsResult({ result: { case: "timeout", value: new LsTimeout({ directoryTreeRoot: f }) } })
@@ -296,6 +303,9 @@ export async function handleLs(args: {
     await emit({ kind: "control", requestId, message: { streamClose: { id: msgId } } });
   } catch (e) {
     await requestError(requestId, msgId, e, emit, { root, serverMessage: { lsArgs: { path: args.path || root } } });
+  } finally {
+    if (lsJobs.get(requestId) === ctx) lsJobs.delete(requestId);
+    ctx.abort(); // handleExecRequest's finally `l()` (D:136350)
   }
 }
 
@@ -457,11 +467,12 @@ export async function handleShellStream(args: {
 
   const prep = prepared!;
   {
-    const child = spawn(prep.bash, prep.args, {
+    // D:22948–22966: Ko(bash, …, {env, stdio, cwd, detached}, policy) — b0, Md, CE (enableSharedBuildCache), spawnWorkload.
+    const child = Ko(prep.bash, prep.args, {
       cwd, detached: true,
       env: prep.env,
       stdio: ["ignore", "pipe", "pipe", "pipe", "pipe"],
-    });
+    }, policy);
     const stateIn = child.stdio?.[3] as NodeJS.WritableStream | null;
     const stateOut = child.stdio?.[4] as NodeJS.ReadableStream | null;
     const dumpChunks: Buffer[] = [];
@@ -605,6 +616,8 @@ export async function handleShellStream(args: {
   finally { clearTimeout(timeoutTimer); shells.delete(requestId); resolveDone(); }
 }
 export function cancelRequest(requestId: string): boolean {
+  const ls = lsJobs.get(requestId);
+  if (ls) { ls.abort(); return true; }
   const job = shells.get(requestId);
   if (!job) return false;
   job.abort(ShellAbortReason.USER_ABORT); return true;
@@ -743,7 +756,7 @@ export async function handleBackgroundShellSpawn(args: {
     const stdio: ("ignore" | "pipe")[] = args.enableWriteShellStdinTool
       ? ["pipe", "pipe", "pipe", "pipe", "pipe"]
       : ["ignore", "pipe", "pipe", "pipe", "pipe"];
-    const child = spawn(prep.bash, prep.args, { cwd, detached: true, env: prep.env, stdio });
+    const child = Ko(prep.bash, prep.args, { cwd, detached: true, env: prep.env, stdio }, policy); // $3 → Ko (D:110741–110750, 22948)
     const stateIn = child.stdio?.[3] as NodeJS.WritableStream | null;
     stateIn?.on("error", () => undefined);
     stateIn?.end(prep.snapshotIn);

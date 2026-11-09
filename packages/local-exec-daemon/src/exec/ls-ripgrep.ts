@@ -11,79 +11,13 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { spawn, type ChildProcess } from "node:child_process";
 import { StringDecoder } from "node:string_decoder";
 import { LsDirectoryTreeNode, LsDirectoryTreeNode_File } from "../generated/agent.v1_pb";
-import { assertSandboxSupported, type InternalSandboxPolicy } from "./sandbox";
+import type { InternalSandboxPolicy } from "./sandbox";
 
-/** Exact text of nl() (D:19008–19011). */
-export const RIPGREP_UNCONFIGURED =
-  "Ripgrep path not configured. Call configureRipgrepPath() at startup.";
-
-/** D:Z2 (19015). Never assigned in 0.79.3; only configureRipgrepPath() sets it here. */
-let Z2: string | undefined;
-
-/** The setter the nl() message names (absent from the 0.79.3 bundle). Stores the value as given, like Z2. */
-export function configureRipgrepPath(p: string): void { Z2 = p; }
-/** Current Z2 (undefined = unconfigured, the 0.79.3 App state). */
-export function getRipgrepPath(): string | undefined { return Z2; }
-
-/** D:nl 19007–19013. */
-export function nl(): string {
-  if (!Z2) throw new Error(RIPGREP_UNCONFIGURED);
-  return Z2;
-}
-
-/** D:IGe 18976 (non-win32 branch). */
-function IGe(t: NodeJS.ProcessEnv): string | undefined {
-  const e = Object.keys(t).filter((r) => r.toLowerCase() === "path");
-  if (e.length !== 0) return process.platform === "win32" ? (e.find((r) => r === "Path") ?? e[0]) : (e.find((r) => r === "PATH") ?? e[0]);
-  return undefined;
-}
-/** D:pWt 18983. */
-function pWt(t: NodeJS.ProcessEnv): string { const e = IGe(t); return e !== undefined ? (t[e] ?? "") : ""; }
-/** D:mWt 18987. */
-function mWt(t: NodeJS.ProcessEnv, e: string): NodeJS.ProcessEnv {
-  const r = IGe(t) ?? (process.platform === "win32" ? "Path" : "PATH"), n = { ...t };
-  for (const s of Object.keys(n)) if (s !== r && s.toLowerCase() === "path") delete n[s];
-  n[r] = e;
-  return n;
-}
-const fWt = ["/usr/local/bin", "/usr/bin", "/bin"];
-/** D:hWt 18994. */
-function hWt(t: NodeJS.ProcessEnv, e: string): NodeJS.ProcessEnv {
-  const r = path.dirname(e);
-  if (!r || r === ".") return t;
-  let n = pWt(t).split(path.delimiter).filter(Boolean);
-  if (n.length === 0 && process.platform !== "win32") n = fWt;
-  return mWt(t, [r, ...n.filter((o) => o !== r)].join(path.delimiter));
-}
-/**
- * D:b0 19002–19005: when Z2 is an absolute path, prepend its dir to PATH and set CURSOR_RIPGREP_PATH.
- * The original applies it to every Ko() spawn (D:21095: shell snapshot/commands); unconfigured → identity.
- */
-export function b0(t: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  return !Z2 || !path.isAbsolute(Z2) ? t : { ...hWt(t, Z2), CURSOR_RIPGREP_PATH: Z2 };
-}
-
-/** D:Md 18901: env for Ud spawns (drops ELECTRON_RUN_AS_NODE, AGENT_HOST_DAEMON_*, SSH_CLIENT, SSH2_CLIENT). */
-function Md(t?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  const { ELECTRON_RUN_AS_NODE: _r, ...n } = t || process.env;
-  for (const s of Object.keys(n)) if (s.startsWith("AGENT_HOST_DAEMON_")) delete n[s];
-  for (const s of ["SSH_CLIENT", "SSH2_CLIENT"]) delete n[s];
-  return n;
-}
-
-/**
- * D:Ud 20798 for the paths ls can take: non-insecure_none → the existing sandbox check (throws ol);
- * insecure_none → plain spawn with windowsHide (VKt 20816). The enableSharedBuildCache env merge
- * (CE 19166) and the spawnWorkload cgroup/cwd-hop wrapper (t$t 16797) are not ported (same as shell).
- */
-function Ud(cmd: string, args: string[], opts: { cwd: string }, policy: InternalSandboxPolicy): ChildProcess {
-  const env = Md(undefined);
-  assertSandboxSupported(policy);
-  return spawn(cmd, args, { ...opts, env, windowsHide: true });
-}
+export { RIPGREP_UNCONFIGURED, configureRipgrepPath, getRipgrepPath, nl, b0 } from "./ripgrep-path";
+import { nl } from "./ripgrep-path";
+import { Ud } from "./spawn-workload";
 
 /** D:_er (CURSOR_RIPWALK_THREADS, ger=2). */
 function _er(t: NodeJS.ProcessEnv = process.env): number | undefined {
@@ -320,13 +254,15 @@ export async function buildTreeFromRipgrepStream(signal: AbortSignal, r: string,
 }
 
 /**
- * D:withTimeout 18402 — child signal aborted after `ms` ("context deadline exceeded"). The original never
- * clears the timer on success; we unref it so a finished ls cannot hold the process open (no other effect).
+ * D:withTimeout 18402 (+_I 18324): a child of `parent` (the exec ctx, cancelled by handleCancel D:136353–136364)
+ * that also aborts after `ms` with "context deadline exceeded". Like the original, the timer is only cleared on
+ * abort — never on success — and is not unref'd (t198 revert).
  */
-export function withTimeoutSignal(ms: number): AbortSignal {
+export function withTimeoutSignal(ms: number, parent?: AbortSignal): AbortSignal {
   const c = new AbortController();
+  if (parent?.aborted) c.abort(parent.reason);
+  else parent?.addEventListener("abort", () => c.abort(parent.reason), { once: true });
   const t = setTimeout(() => { c.abort(new Error("context deadline exceeded")); }, ms);
-  t.unref?.();
   c.signal.addEventListener("abort", () => clearTimeout(t), { once: true });
   return c.signal;
 }

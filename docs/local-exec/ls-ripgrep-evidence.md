@@ -25,7 +25,7 @@ When configured, `handleLs` follows LocalLsExecutor.execute (D:129400–129483) 
 
 | Step | Original | Ours |
 |---|---|---|
-| policy / timeout | `Kc(r.sandboxPolicy)`, `r.timeoutMs ?? Q4r(5000)`, `e.withTimeout(l)` (D:129444–129446, withTimeout D:18402) | `Kc`, `timeoutMs ?? 5000`, `withTimeoutSignal` (timer `unref`'d; original never clears it — no other effect) |
+| policy / timeout | `Kc(r.sandboxPolicy)`, `r.timeoutMs ?? Q4r(5000)`, `e.withTimeout(l)` (D:129444–129446, withTimeout D:18402) | `Kc`, `timeoutMs ?? 5000`, `withTimeoutSignal(l, execCtx)` — timer cleared only on abort, not `unref`'d (t198, exactly as the original) |
 | tree | getDirectoryTree (D:129484) → buildTreeFromRipgrepStream (D:129495–129542; addPathToTree…sortTreeChildren to D:129609), X4r=2500 (D:129392) | `buildTreeFromRipgrepStream` |
 | ignore service | `t9` (D:132442–132466, passed by Tft D:132607): every method a constant `false` / `[]` / `{}` | `noopIgnoreService` — exact port, not a stub |
 | exclude globs | `[...r.ignore, ...getRepoBlockExcludeGlobs()]` | same (`LsArgs.ignore` + `[]`) |
@@ -43,14 +43,25 @@ PATH key name, `IGe`/`mWt`) and sets `CURSOR_RIPGREP_PATH`.
 
 Wire plumbing: `dispatchExec` now passes `lsArgs.ignore`, `lsArgs.timeoutMs`, `lsArgs.sandboxPolicy` (LsArgs fields 2/5/4).
 
-### Not ported (unchanged gaps, all shared with the shell spawn path)
-- `Ud` `enableSharedBuildCache` env merge (`CE` D:19166) and the `spawnWorkload` wrapper (`t$t` D:16797: cgroup / long-cwd hop).
-- `p6` ripwalk telemetry (no sink installed → no-op).
-- Outer exec cancellation: original `withTimeout` derives from the exec ctx, so a cancel would surface as `timeout`; our ls has no per-request cancel (as before).
-- `fer`/`ler` cursor-ignore expansion (unreachable: t9 returns `[]`).
+### t198: remaining items (each checked for reachability first)
+
+| Item | Reachable in 0.79.3? | Evidence | Result |
+|---|---|---|---|
+| `CE` shared build cache env | **Yes** via the wire: `SandboxPolicy.enable_shared_build_cache` (field 9) → `Kc` keeps it for insecure_none (D:106557–106566); shell: `E_` `b={perRepo:Kc(...)}` (D:130852, 131015) → `vi`→`Pme`→`fKt` keeps it (`r3`, D:19951, 20180–20205); background `$3` same (D:110741–110750); ls passes `Kc` straight to `kO`→`Ud` | `Ud` D:20800–20803: `r.env=Md(r.env)`; if set, `env={...Md(process.env), ...CE(), ...r.env}`; `CE` D:19166–19193 (dir `tmpdir/cursor-sandbox-cache/<IWt 16-byte hex, once per process>`, nothing created) | **Ported** (`spawn-workload.ts` `Ud`/`CE`), used by ls, shellStream, backgroundShell |
+| `Md` env strip on every exec spawn | **Yes** (always) | `Ud` D:20800, `Md` D:18901 | **Ported** for shell spawns too (before only ls); previously the shell child kept `SSH_CLIENT`/`SSH2_CLIENT`/`AGENT_HOST_DAEMON_*` |
+| `spawnWorkload` cgroup wrapper | **Yes, env-gated**: `Yn=t$t(ZUt(platform, process.env.CURSOR_WORKLOAD_CGROUP))` at module init (D:16842–16845); the App's main-core.cjs 0.79.3 never sets it (static grep of `/tmp/exec-t166-evidence/app-0793/main-core.cjs`: 0 hits), so only an inherited env arms it | `ZUt` D:16758 (linux, `/^\/sys\/fs\/cgroup\/[A-Za-z0-9_/.-]+$/`, no `..`, `cgroup.procs` W_OK via `YUt` D:16749); `Oae` D:16745; `t$t` D:16797–16829 | **Ported** |
+| FUSE cwd hop | **Yes, env-gated**: `FR()` = `CURSOR_SPAWN_CWD_HOP==="1"` (D:15347, `nDe` D:15585), also never set by main-core; cwd must be on a `fuse`/`fuseblk`/`fuse.*` mount per `/proc/self/mountinfo` (`u2` D:15311, `HLt`) | `_ae` D:15327–15346, `UR` D:15630, `eBt` D:15440–15500 (exit 79 + marker `cursor-fuse-cwd:cd` → `error` ENOENT `working directory is not accessible: …`), `xae` D:15541 | **Ported** (ChildProcess branch only; the pty `tBt` / promise branches of `oDe` D:15544 have no caller in our spawn paths — VKt always passes `child_process.spawn`) |
+| `BNe` oom_score_adj | **Yes** on Linux for every `Yn` spawn (`t$t(t, e=BNe)`, `e$t` D:16778) | `BNe` D:15066: `writeFileSync(/proc/<pid>/oom_score_adj,"0")`, errors ignored | **Ported** |
+| `Xi(ctx, "exec_daemon.spawn.cwd_hop")` span events (D:22945, `yae` D:15632) | Reachable but tracing only | no wire/log effect | Not ported (recorded) |
+| `p6` ripwalk telemetry | **No**: `z0e` is declared (D:107305) and only read (`f6` D:107306, `p6` D:107309); no assignment anywhere in the bundle | grep `z0e` → 4 hits, none an assignment | Not ported |
+| `fer`/`ler` cursor-ignore expansion | **No**: `__` is constructed once, `new __(r, n, t)` with `n = new t9()` (D:132607–132612); `t9.listCursorIgnoreFilesByRoot` always `Promise.resolve([])` (D:132452); so `PO([])` (D:107298) never calls `fer` (D:107288) / `ler` (D:107271) | — | Not ported (`PO` throws "not ported" for non-empty input, which cannot occur) |
+| ls outer cancel | **Yes**: `handleExecRequest` runs `execManager.handle(u, o)` with `[u,l]=baseCtx.withCancel()` (D:136333–136350); `handleCancel` (D:136353–136364) calls `r.cancel()`; LocalLsExecutor's `e.withTimeout(l)` child (`_I` D:18324) inherits that abort → `kO` sets `didTimeout` → `LsResult.timeout` with the partial tree | — | **Ported**: `cancelRequest(requestId)` aborts the ls ctx (UC/Box cancel paths already call it) |
+| timer `unref` | — | original `withTimeout` never clears on success and never unrefs (D:18402–18417) | **Reverted**; the pending ≤5 s timer only delays a test process's natural exit, it does not break it (full suite green) |
+
+Still not ported (shared with shell): `Ko`'s process-tree kill on the signal argument (D:21096+) — our shell/background handlers keep their own abort/kill paths.
 
 ### Tests
-`packages/local-exec-daemon/test/t196-ls-ripgrep-tree.test.cjs` (8): unconfigured text (also with a sandbox policy — `nl()` wins),
+`packages/local-exec-daemon/test/t196-ls-ripgrep-tree.test.cjs` (8) and `test/t198-spawn-workload-ls-cancel.test.cjs` (7: ZUt/Oae, armed cgroup with a fake `cgroup.procs`, `_ae` with injected mountinfo, a real FUSE hop + cd-failure on the box's FUSE mount (skips without one), `Ud` Md/CE, shellStream CE via `dispatchExec`, ls cancel → timeout): unconfigured text (also with a sandbox policy — `nl()` wins),
 `b0`, exact argv/cwd/env via a fake rg, rg failure text + spawn ENOENT, sandbox `ol` text, timeout partial tree, real `/usr/bin/rg`
 sorted tree + `.gitignore` + `lsArgs.ignore` via `dispatchExec`, 2500-char budget overflow. The box's `/usr/bin/rg` 14.1.1 is a test
 tool only; the App ships no `rg`.
