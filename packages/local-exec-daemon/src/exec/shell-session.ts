@@ -26,6 +26,7 @@
  *    variables whose value merely contains a token. POSIX-mode replay is not implemented.
  */
 import { spawn } from "node:child_process";
+import { b0 } from "./ls-ripgrep";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -190,7 +191,7 @@ export function initialSnapshot(bash: string, timeoutMs = 10000): Promise<string
     let child: ReturnType<typeof spawn>;
     try {
       child = spawn(bash, ["-O", "extglob", "-ilc", `${DUMP_FN} builtin printf '%s\\n' '${INIT_MARK}'; __gb_dump_state`], {
-        env: { ...process.env, ...BASE_ENV }, detached: true, stdio: ["ignore", "pipe", "ignore"], cwd: os.homedir(),
+        env: b0({ ...process.env, ...BASE_ENV }) /* Ko D:21095 */, detached: true, stdio: ["ignore", "pipe", "ignore"], cwd: os.homedir(),
       });
     } catch { finish(""); return; }
     const group: InitGroup | null = child.pid ? { child, pgid: child.pid, retired: false } : null;
@@ -239,7 +240,8 @@ export async function prepareShell(command: string, root: string): Promise<Prepa
     [`GIT_CONFIG_VALUE_${gitCount}`]: "false",
   };
   if (!env.PATH) env.PATH = "/usr/local/bin:/usr/bin:/bin";
-  return { bash, args: ["-O", "extglob", "-c", script, "--", command], env, snapshotIn };
+  // Ko (D:21095) wraps every shell spawn env with b0: identity unless configureRipgrepPath() set an absolute path.
+  return { bash, args: ["-O", "extglob", "-c", script, "--", command], env: b0(env), snapshotIn };
 }
 
 /** Atomically commit a complete dump and return its cwd; otherwise keep the old state. */

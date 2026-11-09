@@ -27,6 +27,7 @@
 | 20 | t175：Sentry 崩溃上报 | T7t D:187161；fatal `report(e,"fatal"); flush(1500)` | 缺失。需新增 `@sentry/node` 与 hre 脱敏移植 | MISSING 大项（t176 按任务不动），计划见 port-coverage.md §6 |
 | 21 | t176：后台 shell / timeoutBehavior BACKGROUND / hardTimeout | bE D:98540；E_ D:130800–131184；r5e D:130721；ZO/p1e | 已移植 soft→backgrounded、terminals 文件、hardTimeout、spawn、writeStdin。未做 forceBackground* / outputNotification registry | 已修（t176 M6）；剩余 forceBackground/outputNotification/registry 经 t181 核验不可达（port-coverage §9） |
 | 22 | t176：denylist + requestedSandboxPolicy | Qk D:106788–106796；Kc D:106557；Ud/ol D:20797 | 已移植匹配/解析/fail-closed；Linux 无 helper → sandboxUnsupported | 已修（t176 M7） |
+| 23 | t196：ls 配置 ripgrep 后的树路径 | nl/Z2 D:19007–19015；b0 D:19002；LocalLsExecutor D:129392–129609；kO D:107439；yer D:107400；t9 D:132442 | 默认不变（未配置→同句错误）。配置后已移植 kO argv、Md env、Eer、预算树、timeout；b0 接入 shell env。未移植 CE sharedBuildCache、spawnWorkload 包装、ls 外层取消 | 已移植（t196），见 ls-ripgrep-evidence.md |
 
 ## 根因未知
 - 无。
@@ -39,3 +40,4 @@
 - t176：新增 `test/t176-background-denylist-sandbox.test.cjs`（6 项）：denylist 单元、shellStream rejected、sandboxUnsupported、BACKGROUND+hardTimeout、backgroundShellSpawnArgs、settings EISDIR rethrow。
 - t177：denylist 的 tree-sitter / tree-sitter-bash 写入 `packages/local-exec-daemon/package.json` 正式依赖（公开 npm 0.21.1 / 0.21.0），去掉 App/exec-daemon 路径回退；见 `port-coverage.md` §8。
 - t181：后台三组件静态核验不可达（Tft 不传 registry、forceBackground 无调用/未注册），不移植；补 jHt 文案（computerUseArgs/recordScreenArgs，D:98041–98046）。测试 `test/t181-background-reachability.test.cjs`（4 项）。
+- t196：新增 `test/t196-ls-ripgrep-tree.test.cjs`（8 项）：未配置同句错误、b0、fake rg argv/cwd/env、rg 失败文案、sandbox 文案、timeout 部分树、真实 rg 排序树与 lsArgs.ignore、2500 字符预算溢出。

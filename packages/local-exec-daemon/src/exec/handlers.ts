@@ -5,6 +5,8 @@ import {
   ExecClientMessage,
   LsError,
   LsResult,
+  LsSuccess,
+  LsTimeout,
   ShellAbortReason,
   ShellBackgroundReason,
   SandboxPolicy,
@@ -13,6 +15,7 @@ import {
 import { Qk, m3Structured } from "./denylist";
 import { Kc, assertSandboxSupported, SandboxUnsupportedError, type InternalSandboxPolicy } from "./sandbox";
 import { backgroundShellManagerFor } from "./background-shell";
+import { buildTreeFromRipgrepStream, LS_CHAR_BUDGET, LS_DEFAULT_TIMEOUT_MS, withTimeoutSignal } from "./ls-ripgrep";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
@@ -219,9 +222,8 @@ export async function handleRead(args: {
   }
 }
 
-/** Exact official 0.79.3 message (daemon.formatted.cjs L19008–19011, nl()). */
-export const RIPGREP_UNCONFIGURED =
-  "Ripgrep path not configured. Call configureRipgrepPath() at startup.";
+/** Exact official 0.79.3 message (daemon.formatted.cjs L19008–19011, nl()); configuration lives in ls-ripgrep.ts. */
+export { RIPGREP_UNCONFIGURED, configureRipgrepPath, getRipgrepPath } from "./ls-ripgrep";
 
 /** D:er 15130 (zNe ~ expansion 15119, DLt file:// 15122): the ls executor's own path resolution against the workspace root. */
 export function lsResolvePath(t: string, root: string): string {
@@ -243,37 +245,51 @@ export async function handleLs(args: {
   msgId: number;
   path: string;
   emit: Emit;
+  /** LsArgs.ignore (field 2) → getDirectoryTree's exclude globs (D:129449). */
+  ignore?: string[];
+  /** LsArgs.timeout_ms (field 5); `?? Q4r` = 5000 (D:129445). */
+  timeoutMs?: number;
+  /** LsArgs.sandbox_policy (field 4) → Kc (D:129444). */
+  sandboxPolicy?: { type?: unknown } | null;
 }): Promise<void> {
-  // Official 0.79.3 Linux: LocalLsExecutor (L129403+) calls nl() before the
-  // ripgrep tree build; the module-level ripgrep path (Z2) is never assigned in
-  // this build, so the reachable behavior is LsResult.error with the requested
-  // path. Verified by isolated oracle (docs/local-exec-scenario-matrix.md,
-  // official-v2 "ls"). We match the observed behavior, not the design intent.
-  // Path guard stays (official ls escape behavior is unverified).
-  // t154: LocalLsExecutor.execute (D:129400–129483) stats the er()-resolved path BEFORE the ripgrep build, so
-  // ENOENT / not-a-directory / other stat errors win over the nl() throw. The ripgrep tree build itself
-  // (kO D:107439, buildTreeFromRipgrepStream D:129495–129542) is unreachable in 0.79.3 and is NOT implemented.
+  // LocalLsExecutor.execute (D:129400–129483): stat the er()-resolved path first (ENOENT / terminals /
+  // not-a-directory / other), then getDirectoryTree (D:129484) → buildTreeFromRipgrepStream (D:129495–129542) → kO.
+  // In the 0.79.3 App the ripgrep path Z2 is never configured, so kO's nl() throws and the catch
+  // (D:129466–129478) answers LsResult.error with RIPGREP_UNCONFIGURED. After configureRipgrepPath()
+  // the same code path yields success / timeout with directoryTreeRoot (t196, ls-ripgrep.ts).
+  // Path guard (assertRealpathUnderRoot, our n9 equivalent) stays first.
   const { root, requestId, msgId, emit } = args;
   try {
     assertRealpathUnderRoot(root, args.path);
     const abs = lsResolvePath(args.path, root);
-    let error = RIPGREP_UNCONFIGURED;
+    let result: LsResult;
+    const lsError = (error: string) => new LsResult({ result: { case: "error", value: new LsError({ path: abs, error }) } });
+    let st: fs.Stats | undefined;
+    let statError: string | undefined;
     try {
-      if (!(await fs.promises.stat(abs)).isDirectory()) error = `Path is not a directory: ${abs}`;
+      st = await fs.promises.stat(abs);
     } catch (m) {
       const code = typeof m === "object" && m !== null && "code" in m ? (m as { code?: unknown }).code : undefined;
-      error = code === "ENOENT"
+      statError = code === "ENOENT"
         ? (isCursorTerminalsDir(abs) ? "No active terminals." : `Path does not exist: ${abs}`)
         : m instanceof Error ? m.message : typeof m === "object" && m !== null && typeof (m as { message?: unknown }).message === "string" ? (m as { message: string }).message : "";
     }
+    if (statError !== undefined) result = lsError(statError);
+    else if (!st!.isDirectory()) result = lsError(`Path is not a directory: ${abs}`);
+    else {
+      try {
+        const u = Kc(args.sandboxPolicy), l = args.timeoutMs ?? LS_DEFAULT_TIMEOUT_MS, d = withTimeoutSignal(l);
+        const { tree: f, didTimeout: p } = await buildTreeFromRipgrepStream(d, abs, args.ignore ?? [], u, LS_CHAR_BUDGET);
+        result = p
+          ? new LsResult({ result: { case: "timeout", value: new LsTimeout({ directoryTreeRoot: f }) } })
+          : new LsResult({ result: { case: "success", value: new LsSuccess({ directoryTreeRoot: f }) } });
+      } catch (a) {
+        result = lsError(a instanceof Error ? a.message : "Unknown error occurred");
+      }
+    }
     const client = new ExecClientMessage({
       id: msgId,
-      message: {
-        case: "lsResult",
-        value: new LsResult({
-          result: { case: "error", value: new LsError({ path: abs, error }) },
-        }),
-      },
+      message: { case: "lsResult", value: result },
       localExecutionTimeMs: 1,
     });
     await emit({ kind: "client", requestId, message: client.toJson() as Record<string, unknown> });
@@ -832,8 +848,11 @@ export async function dispatchExec(args: {
   }
   if (serverMessage.lsArgs && typeof serverMessage.lsArgs === "object") {
     if (refuseByPermission(permission, requestId, emit)) return;
-    const p = (serverMessage.lsArgs as { path?: string }).path || root;
-    await heartbeat(requestId, msgId, emit, (e) => handleLs({ root, requestId, msgId, path: p, emit: e }));
+    const la = serverMessage.lsArgs as { path?: string; ignore?: unknown; timeoutMs?: unknown; sandboxPolicy?: { type?: unknown } | null };
+    const p = la.path || root;
+    const ignore = Array.isArray(la.ignore) ? la.ignore.filter((x): x is string => typeof x === "string") : undefined;
+    const timeoutMs = typeof la.timeoutMs === "number" ? la.timeoutMs : undefined;
+    await heartbeat(requestId, msgId, emit, (e) => handleLs({ root, requestId, msgId, path: p, emit: e, ignore, timeoutMs, sandboxPolicy: la.sandboxPolicy }));
     return;
   }
   if (serverMessage.shellStreamArgs && typeof serverMessage.shellStreamArgs === "object") {

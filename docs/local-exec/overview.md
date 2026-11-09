@@ -54,7 +54,7 @@ Daemon 侧负责：在本机执行工具、把结果帧送回 Box/UC、维持 pr
 ### 执行器（Tft 注册：shellStream / backgroundShell / read / ls）
 - **shellStream**：超时默认 30 s；`timeoutBehavior=BACKGROUND` 软超时转后台 + `terminals/{id}.txt`；`hardTimeout`；取消/abort 帧（`src/exec/handlers.ts`、`background-shell.ts`）。
 - **管理员命令 denylist** + **requestedSandboxPolicy**（Linux 无 helper → `sandboxUnsupported`；tree-sitter 解析，`src/exec/denylist.ts`、`sandbox.ts`）。
-- **read / ls**：路径与 symlink 守卫；ls 为浅 `readdir` 填同一 schema（与官方 ripgrep 树有意差异，见包内 README）。
+- **read / ls**：路径与 symlink 守卫；ls 默认对存在的目录返回与原版相同的 `Ripgrep path not configured…`（0.79.3 从未配置 `Z2`）；若调用 `configureRipgrepPath()`，按原版 `kO`/`buildTreeFromRipgrepStream` 用外部 `rg` 建 `directoryTreeRoot`（2500 字符预算、5 s 默认超时→`timeout`）。见 [ls-ripgrep-evidence.md](./ls-ripgrep-evidence.md)。
 - **输出通道 Ki + 心跳**：UC/Box exec 结果进入无界 outbox（`src/exec/output-channel.ts`）。
 - **未注册消息**：通用 `No handler found…`；`computerUseArgs` / `recordScreenArgs` 固定拒绝文案（jHt，D:98041–98046）。
 
@@ -102,7 +102,7 @@ Daemon 侧负责：在本机执行工具、把结果帧送回 Box/UC、维持 pr
   - 验收以**合成后端 + 合成凭据**为主；门控 harness 设 `DROPIN_ACCEPTANCE=1`。
   - 测试与证据流水线使用 **`UC_SKIP_OFFICIAL=1`**，**禁止**执行官方 main.cjs / App 内嵌 electron / worker。
   - Electron 烟测可用公开 npm 的 Electron 二进制；**不等于**官方 App 所嵌 42.x 的验收。
-  - 已知有意差异（如 ls 非 ripgrep 树、Sentry 未接）见包内 README 与 remaining-diffs。
+  - 已知有意边界（如 Sentry 未接；ls 的 ripgrep 树默认不可达，配置后路径已移植，仍缺 sharedBuildCache/spawnWorkload 包装）见包内 README、[ls-ripgrep-evidence.md](./ls-ripgrep-evidence.md) 与 remaining-diffs。
 - 目录内 [README.md](./README.md) 是兼容边界短声明；本文是职责与能力总览。
 
 ---
