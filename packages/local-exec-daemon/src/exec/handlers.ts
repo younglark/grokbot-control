@@ -37,21 +37,36 @@ export type Emit = (frame: ExecFrameOut) => void | Promise<void>;
 
 type ShellJob = { abort: (reason: ShellAbortReason) => void; done: Promise<void> };
 const shells = new Map<string, ShellJob>();
-/** Official daemon allocates inner exec message ids locally: nextExecId=1 then o.id=a. */
-let nextExecId = 1;
+/**
+ * Official inner exec message ids: every v_ executor owns `nextExecId = 1` (D:135935) and does
+ * `let a = this.nextExecId++; o.id = a` (D:136332–136333). Box builds its own v_ (D:137251) and every UC provider
+ * builds a fresh one (D:179358, also on an SA flip recreate D:179352–179366), so each provider counts from 1.
+ */
+export class ExecIdCounter {
+  constructor(private next = 1) {}
+  private lastId = 0;
+  allocate(): number {
+    this.lastId = this.next++;
+    lastAllocatedExecId = this.lastId;
+    trace("exec-id", { id: this.lastId });
+    return this.lastId;
+  }
+  /** Most recent id of this counter (0 if none). For catch paths that must not double-allocate. */
+  last(): number { return this.lastId; }
+}
+/** Fallback counter for callers that pass no provider counter (unit tests calling dispatchExec directly). */
+let defaultExecIds = new ExecIdCounter();
 let lastAllocatedExecId = 0;
 export function allocateExecId(): number {
-  lastAllocatedExecId = nextExecId++;
-  trace("exec-id", { id: lastAllocatedExecId });
-  return lastAllocatedExecId;
+  return defaultExecIds.allocate();
 }
-/** Most recent allocateExecId() result (0 if none since reset). For catch paths that must not double-allocate. */
+/** Most recent id allocated by any counter (0 if none since reset). Test observability only. */
 export function lastAllocatedExecIdOrZero(): number {
   return lastAllocatedExecId;
 }
-/** Test-only: reset sequential inner ids to match a fresh daemon instance. */
+/** Test-only: reset the fallback counter (value = next id) and the observed last id. */
 export function resetExecIdCounter(value = 1): void {
-  nextExecId = value;
+  defaultExecIds = new ExecIdCounter(value);
   lastAllocatedExecId = 0;
 }
 /**
@@ -560,13 +575,15 @@ export async function dispatchExec(args: {
   emit: Emit;
   /** UC synchronous queue consumer; Box keeps its existing public async admission behavior. */
   pullOutput?: boolean;
+  /** The owning provider's executor counter (D:135935); Box and each UC provider pass their own. */
+  execIds?: ExecIdCounter;
 }): Promise<void> {
   const { root, requestId, serverMessage, permission, emit } = args;
   const heartbeat = args.pullOutput
     ? (rid: string, id: number, output: Emit, run: (write: Emit) => Promise<void>) => withExecChannelHeartbeat(rid, id, output, run, () => { cancelRequest(rid); })
     : withExecHeartbeat;
   // Do not echo serverMessage.id — official maps e.g. server id=7 → local sequential id starting at 1.
-  const msgId = allocateExecId();
+  const msgId = args.execIds ? args.execIds.allocate() : allocateExecId();
 
   if (serverMessage.readArgs && typeof serverMessage.readArgs === "object") {
     if (refuseByPermission(permission, requestId, emit)) return;

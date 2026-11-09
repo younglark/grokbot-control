@@ -1,11 +1,11 @@
 import { loadSettings, loadSettingsSync, messagesSettings } from "../settings";
 import { boxMessagesOpFrame, draftCardCodes, locateSidecar, messagesCapabilities, MessagesExecutor, UNSUPPORTED_FRAME, type MessagesOp } from "./messages-op";
 import { dataRootFromEnv } from "../util";
-import { approvalsPathFor, discoverAiToolRefusal, downloadRefusal, execRefusal, retirementsPathFor, standingGrantsPathFor, uploadRefusal } from "../uc/approvals";
+import { approvalsPathFor, describeExec, discoverAiToolRefusal, downloadRefusal, execRefusal, retirementsPathFor, standingGrantsPathFor, uploadRefusal } from "../uc/approvals";
 import { UC_MAX_FILE_BYTES, writeUploadFile } from "../uc/file-source";
 import { aiToolConfigDirsFromEnv, describeAiToolDiscovery, discoverAiToolBytes, isAiToolSource, type AiToolConfigDirs } from "../uc/ai-tool-discovery";
 import { StringDecoder } from "node:string_decoder";
-import { ASK_MSG, NEVER_MSG, requestError } from "../exec/handlers";
+import { ASK_MSG, ExecIdCounter, NEVER_MSG, requestError } from "../exec/handlers";
 import { HttpStatusError } from "../transport/replies";
 import * as http from "node:http";
 import * as https from "node:https";
@@ -170,6 +170,8 @@ const str = (v: unknown): v is string => typeof v === "string";
 const optStr = (v: unknown) => v === undefined || typeof v === "string";
 
 export class BoxProvider {
+  /** D:137251: the Box provider's own v_ executor → its own nextExecId = 1 (D:135935), independent of UC. */
+  readonly execIds = new ExecIdCounter();
   private closed = false;
   private stopped = false;
   private abort = new AbortController();
@@ -451,11 +453,19 @@ export class BoxProvider {
           await requestError(requestId, 0, msg, this.emitExec);
           return;
         }
+        // t165 drop-in fix: the original Box path is the shared v_.handleExecRequest (D:136309–136332): await
+        // isLocalUseBlocked({approvalId, authorization: none (Nwr 137564), describes: fUe}) → blocked → x9 control
+        // throw{id:0,error} (D:136410); only then the exec runs (no second permission gate). This port used an
+        // approval-blind permission check that answered "ask" with a file-error.
+        const refusal = await execRefusal({ ...this.boxRefusalInput(), approvalId: typeof ev.approvalId === "string" ? ev.approvalId : undefined,
+          describes: describeExec(serverMessage, `${this.opts.root}/terminals`) });
+        if (refusal !== undefined) { await this.emitExec({ kind: "control", requestId, message: { throw: { id: 0, error: refusal } } }); return; }
         const job = dispatchExec({
           root: this.opts.root,
           requestId,
           serverMessage,
-          permission: (await loadSettings()).permission,
+          permission: "always",
+          execIds: this.execIds,
           emit: this.emitExec,
         });
         this.jobs.set(requestId, job);

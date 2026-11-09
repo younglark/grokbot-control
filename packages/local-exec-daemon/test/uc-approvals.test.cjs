@@ -174,7 +174,9 @@ test('provider: approved exec runs with exec id 1; refused consumes none; cancel
     const s = mk(e.root, true, 'acct-A');
     s.p.backlog = [readQ('r3', file, { authorization: { kind: 'approval' } })]; s.p.runBacklog();
     await waitFor(() => s.p.active.size === 0);
-    assert.equal(h.lastAllocatedExecIdOrZero(), 2);
+    // t166: a separate provider owns its own v_ counter (D:135935, 179358) → its first exec id is 1, not 2.
+    assert.equal(h.lastAllocatedExecIdOrZero(), 1);
+    assert.equal(s.p.execIds.last(), 1); assert.equal(p.execIds.last(), 1);
     p.backlog = [readQ('r4', file, { authorization: { kind: 'approval' } })]; p.runBacklog(); await waitFor(() => got.some((f) => f.requestId === 'r4'));
     assert.deepEqual(got.find((f) => f.requestId === 'r4'), { kind: 'control', requestId: 'r4', message: { throw: { id: 0, error: h.ASK_MSG } } });
     s.p.closed = true;

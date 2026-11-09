@@ -32,7 +32,7 @@ import { GrokBotUserComputerQueuedRequest, GrokBotUserComputerRequestFrame,
   GrokBotUserComputerLocalToolAccepted, GrokBotUserComputerLocalToolPermissionPending, GrokBotUserComputerLocalToolResult,
   SubmitGrokBotUserComputerResponsesRequest } from "../generated/aiserver.v1_pb";
 import {
-  lastAllocatedExecIdOrZero,
+  ExecIdCounter,
   cancelRequest,
   dispatchExec,
   type Emit,
@@ -343,6 +343,8 @@ export function createBackendReturn(random: () => number = Math.random) {
 }
 
 export class UserComputerProvider implements UserComputerTransport {
+  /** D:179358: each UC provider gets a fresh v_ executor → its own nextExecId = 1 (D:135935); an SA flip recreates. */
+  readonly execIds = new ExecIdCounter();
   private closed = false;
   private stopped = false;
   private closing = false;
@@ -944,7 +946,7 @@ export class UserComputerProvider implements UserComputerTransport {
       this.active.add(q.requestId); this.bump(1); trace("admit", { rid: q.requestId.slice(0, 16) });
       const job = this.handleQueued(q).catch(e => q.kind === requestKinds.messagesOp || q.kind === requestKinds.localTool
         ? this.emit(this.closingFrame(q, e instanceof Error ? e.message : String(e)))
-        : requestError(q.requestId, lastAllocatedExecIdOrZero(), e, this.emit, { root: this.opts.root, serverMessage: q.serverMessage }))
+        : requestError(q.requestId, this.execIds.last(), e, this.emit, { root: this.opts.root, serverMessage: q.serverMessage }))
         .catch(() => { console.error("[user-computer-provider] request reply failed"); })
         .then(() => undefined).finally(() => { this.activeJobs.delete(job); this.active.delete(q.requestId); this.bump(-1); if (this.active.size === 0) this.onInflightDrained?.(); this.runBacklog(); });
       this.activeJobs.add(job);
@@ -1086,7 +1088,7 @@ export class UserComputerProvider implements UserComputerTransport {
     await dispatchExec({ root: this.opts.root, requestId: q.requestId,
       // Authorised once above (as official: no second permission gate inside the exec handlers).
       // Approval does not reach back: a later retire/revoke never stops an exec already running (official).
-      serverMessage: q.serverMessage, permission: "always", pullOutput: true, emit: frame => {
+      serverMessage: q.serverMessage, permission: "always", pullOutput: true, execIds: this.execIds, emit: frame => {
         if (this.replies instanceof UcReplyLanes) {
           // Original UC enqueue is synchronous push + flush, not a Promise for Submit success.
           this.replies.push(responseFrames(frame));

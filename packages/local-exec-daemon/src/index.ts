@@ -35,7 +35,7 @@ async function main(): Promise<void> {
   const startedAt = Date.now();
 
   const { key, computerId } = handoff.handoff;
-  const root = path.resolve(localRootFromEnv());
+  const root = localRootFromEnv(); // raw, as wft → lgt root (D:187320)
   const { permission } = await loadSettings();
   const generation = generationFromEnv();
 

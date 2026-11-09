@@ -1,3 +1,4 @@
+import * as os from "node:os";
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -45,8 +46,12 @@ export function dataRootFromEnv(env: NodeJS.ProcessEnv = process.env): string {
   return env.SAND_DATA_ROOT || env.SAND_USER_DATA_DIR || path.join(env.HOME || "/tmp", ".sand-local-exec");
 }
 
+/** wft (D:132542–132545), passed raw as lgt root (D:187320): trimmed SAND_LOCAL_EXEC_ROOT → trimmed
+ *  SAND_AGENT_PROJECT_DIR → os.homedir(). The App sets neither (static main-core env R$e), so a real launch serves the
+ *  home directory; the previous process.cwd() fallback served the inherited cwd instead (t165 drop-in fix). */
 export function localRootFromEnv(env: NodeJS.ProcessEnv = process.env): string {
-  return env.SAND_LOCAL_EXEC_ROOT || process.cwd();
+  const e = env.SAND_LOCAL_EXEC_ROOT?.trim() || env.SAND_AGENT_PROJECT_DIR?.trim();
+  return e != null && e.length > 0 ? e : os.homedir();
 }
 
 export function logInfo(msg: string): void {
