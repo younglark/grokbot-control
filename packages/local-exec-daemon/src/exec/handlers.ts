@@ -24,7 +24,7 @@ import * as url from "node:url";
 import { type ChildProcess } from "node:child_process";
 import { assertRealpathUnderRoot, assertUnderRoot, PathGuardError } from "./path";
 import type { PermissionMode } from "../settings";
-import { commitShell, getSessionCwd, MAX_STATE_BYTES, prepareShell, terminateInitialSnapshot, type PreparedShell } from "./shell-session";
+import { attachSnapshotStdio, commitShell, getSessionCwd, MAX_STATE_BYTES, prepareShell, terminateInitialSnapshot, type PreparedShell } from "./shell-session";
 
 export type ExecFrameOut =
   | { kind: "client"; requestId: string; message: Record<string, unknown> }
@@ -473,14 +473,9 @@ export async function handleShellStream(args: {
       env: prep.env,
       stdio: ["ignore", "pipe", "pipe", "pipe", "pipe"],
     }, policy);
-    const stateIn = child.stdio?.[3] as NodeJS.WritableStream | null;
-    const stateOut = child.stdio?.[4] as NodeJS.ReadableStream | null;
     const dumpChunks: Buffer[] = [];
     let dumpSize = 0;
-    stateIn?.on("error", () => undefined);
-    stateIn?.end(prep.snapshotIn);
-    stateOut?.on("data", (b: Buffer) => { dumpSize += b.length; if (dumpSize <= MAX_STATE_BYTES) dumpChunks.push(b); });
-    stateOut?.on("error", () => undefined);
+    attachSnapshotStdio(child, prep.snapshotIn, (b) => { dumpSize += b.length; if (dumpSize <= MAX_STATE_BYTES) dumpChunks.push(b); });
     let finished = false;
     let backgrounded = false;
     let interleaved = "";
@@ -757,9 +752,8 @@ export async function handleBackgroundShellSpawn(args: {
       ? ["pipe", "pipe", "pipe", "pipe", "pipe"]
       : ["ignore", "pipe", "pipe", "pipe", "pipe"];
     const child = Ko(prep.bash, prep.args, { cwd, detached: true, env: prep.env, stdio }, policy); // $3 → Ko (D:110741–110750, 22948)
-    const stateIn = child.stdio?.[3] as NodeJS.WritableStream | null;
-    stateIn?.on("error", () => undefined);
-    stateIn?.end(prep.snapshotIn);
+    // Drain fd 4 or a large `__gb_dump_state` blocks bash and hangs node --test (CI after t181).
+    attachSnapshotStdio(child, prep.snapshotIn);
     const shellId = mgr.generateShellId();
     await mgr.adopt({
       shellId, command, workingDirectory: cwd, pid: child.pid, initialOutput: "",

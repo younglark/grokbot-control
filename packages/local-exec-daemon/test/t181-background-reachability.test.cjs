@@ -84,3 +84,49 @@ test('adopt of an already-exited child writes exit_code and lets the process exi
   });
   assert.equal(result.code,0,result.out||'subprocess should exit 0 after adopt of an already-exited child');
 });
+
+test('background spawn drains fd 4 so a large state dump cannot hang the shell', async () => {
+  const root = tmp();
+  const cmd = 'export T181_FAT="$(python3 -c \'print("x"*200000)\')"; echo HI';
+  const f = [];
+  await H.dispatchExec({
+    root, requestId: 'fat', permission: 'always',
+    serverMessage: { id: 1, backgroundShellSpawnArgs: { command: cmd, workingDirectory: '' } },
+    emit: (x) => { f.push(x); },
+  });
+  const id = f[0].message.backgroundShellSpawnResult.success.shellId;
+  const mgr = require('../dist/exec/background-shell').backgroundShellManagerFor(root);
+  const start = Date.now();
+  while (mgr.isRunning(id) && Date.now() - start < 8000) await new Promise((r) => setTimeout(r, 50));
+  assert.equal(mgr.isRunning(id), false, 'fd 4 must be drained or bash blocks on __gb_dump_state');
+  assert.match(fs.readFileSync(path.join(root, 'terminals', `${id}.txt`), 'utf8'), /exit_code: 0/);
+});
+
+test('background spawn with a large dump lets the worker process exit', async () => {
+  const script = `
+    const {mkdtempSync}=require('node:fs');
+    const path=require('node:path'), os=require('node:os');
+    const H=require(${JSON.stringify(require('node:path').join(__dirname,'../dist/exec/handlers'))});
+    const {backgroundShellManagerFor}=require(${JSON.stringify(require('node:path').join(__dirname,'../dist/exec/background-shell'))});
+    (async()=>{
+      const root=mkdtempSync(path.join(os.tmpdir(),'t181-fd4-'));
+      const f=[];
+      const cmd='export T181_FAT="$(python3 -c \\'print("x"*200000)\\')"; echo HI';
+      await H.dispatchExec({root,requestId:'fat',permission:'always',serverMessage:{id:1,backgroundShellSpawnArgs:{command:cmd,workingDirectory:''}},emit:x=>f.push(x)});
+      const id=f[0].message.backgroundShellSpawnResult.success.shellId;
+      const mgr=backgroundShellManagerFor(root);
+      const start=Date.now();
+      while(mgr.isRunning(id) && Date.now()-start<8000) await new Promise(r=>setTimeout(r,50));
+      if(mgr.isRunning(id)) { process.stderr.write('still running\\n'); process.exit(3); }
+    })().catch((e)=>{ process.stderr.write(String(e)+'\\n'); process.exit(1); });
+  `;
+  const child = spawn(process.execPath, ['-e', script], { stdio: ['ignore', 'pipe', 'pipe'] });
+  let out = '';
+  child.stdout.on('data', (d) => { out += d; });
+  child.stderr.on('data', (d) => { out += d; });
+  const result = await new Promise((resolve) => {
+    const t = setTimeout(() => { child.kill('SIGKILL'); resolve({ code: 'timeout', out }); }, 15000);
+    child.once('close', (code, signal) => { clearTimeout(t); resolve({ code: code ?? signal, out }); });
+  });
+  assert.equal(result.code, 0, result.out || 'subprocess should exit after draining fd 4');
+});

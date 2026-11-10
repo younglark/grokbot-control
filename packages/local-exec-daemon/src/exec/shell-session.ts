@@ -187,7 +187,8 @@ export function initialSnapshot(bash: string, timeoutMs = 10000): Promise<string
     const chunks: Buffer[] = [];
     let size = 0;
     let done = false;
-    const finish = (v: string) => { if (done) return; done = true; clearTimeout(t); if (snapshot === null) snapshot = v; resolve(snapshot); };
+    let t: NodeJS.Timeout | undefined;
+    const finish = (v: string) => { if (done) return; done = true; if (t !== undefined) clearTimeout(t); if (snapshot === null) snapshot = v; resolve(snapshot); };
     let child: ReturnType<typeof spawn>;
     try {
       // D:22705–22720: the snapshot spawn goes through Ko(…, {type:"insecure_none"}) (b0 + Md + spawnWorkload).
@@ -200,7 +201,7 @@ export function initialSnapshot(bash: string, timeoutMs = 10000): Promise<string
     initClosed = new Promise<void>((r) => child.once("close", () => r()));
     // Timeout: clean our (not yet retired) group whether or not the leader already exited; same-group
     // residue holding the stdout pipe would otherwise survive (review probe init-timeout).
-    const t = setTimeout(() => { if (group) cleanupInitGroup(group); finish(""); }, timeoutMs);
+    t = setTimeout(() => { if (group) cleanupInitGroup(group); finish(""); }, timeoutMs);
     child.stdout?.on("data", (b: Buffer) => { size += b.length; if (size <= MAX_STATE_BYTES * 2) chunks.push(b); });
     child.once("error", () => finish(""));
     child.once("close", () => {
@@ -218,6 +219,27 @@ export function initialSnapshot(bash: string, timeoutMs = 10000): Promise<string
 }
 
 export type PreparedShell = { bash: string; args: string[]; env: NodeJS.ProcessEnv; snapshotIn: string };
+
+
+/**
+ * Snapshot travels on fd 3 (in) and fd 4 (out). Fd 4 MUST be read or resumed:
+ * `__gb_dump_state >&4` after the user command will block forever once the dump
+ * exceeds the pipe buffer (64 KiB on Linux). GitHub Actions runners have a
+ * large environment, so a spawn that never drains fd 4 hangs `node --test`.
+ */
+export function attachSnapshotStdio(
+  child: { stdio?: unknown[] },
+  snapshotIn: string,
+  onDump?: (chunk: Buffer) => void,
+): void {
+  const stateIn = child.stdio?.[3] as NodeJS.WritableStream | undefined;
+  const stateOut = child.stdio?.[4] as NodeJS.ReadableStream | undefined;
+  stateIn?.on("error", () => undefined);
+  stateIn?.end(snapshotIn);
+  stateOut?.on("error", () => undefined);
+  stateOut?.on("data", (b: Buffer) => { onDump?.(b); });
+  if (typeof stateOut?.resume === "function") stateOut.resume();
+}
 
 /**
  * Snapshot travels on fd 3 (in, read with the `read` builtin) and fd 4 (out); both are closed for
