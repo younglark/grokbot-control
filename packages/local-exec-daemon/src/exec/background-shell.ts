@@ -161,14 +161,23 @@ export class BackgroundShellManager {
       pid: args.pid,
       child: args.child,
       stdin: args.child.stdin,
-      abort: () => { groupKill("SIGTERM"); setTimeout(() => groupKill("SIGKILL"), 250); },
+      abort: () => {
+        groupKill("SIGTERM");
+        // unref so abort() cannot keep a test or CLI process alive if the child is already gone
+        setTimeout(() => groupKill("SIGKILL"), 250).unref();
+      },
       cleanup: args.onCleanup,
     };
     this.running.set(args.shellId, entry);
 
-    args.child.once("close", (code) => {
-      const aborted = false; // signal-based abort tracked via abort()
-      void (async () => {
+    let settled = false;
+    const settle = (work: () => Promise<void>) => {
+      if (settled) return;
+      settled = true;
+      void work();
+    };
+    const onChildClose = (code: number | null) => {
+      settle(async () => {
         await finish(
           code === 0 ? "succeeded" : "failed",
           `exit_code: ${code ?? "unknown"}`,
@@ -176,16 +185,24 @@ export class BackgroundShellManager {
         await closeFiles();
         this.running.delete(args.shellId);
         args.onCleanup?.();
-      })();
-    });
-    args.child.once("error", () => {
-      void (async () => {
+      });
+    };
+    const onChildError = () => {
+      settle(async () => {
         await finish("failed");
         await closeFiles();
         this.running.delete(args.shellId);
         args.onCleanup?.();
-      })();
-    });
+      });
+    };
+    // Attach first, then handle an already-exited child. `echo` / `true` can exit
+    // before adopt() runs; missing the close event used to leak the 5s header
+    // interval and hang `node --test` until the job was killed.
+    args.child.once("close", onChildClose);
+    args.child.once("error", onChildError);
+    if (args.child.exitCode !== null || args.child.signalCode !== null) {
+      onChildClose(args.child.exitCode);
+    }
 
     // Detach request-side listeners: keep pipes flowing into the terminal file.
     args.child.stdout?.resume();
