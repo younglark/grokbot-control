@@ -118,7 +118,7 @@ Watch：按需、有界、可取消订阅；断连/CLI 退出 **默认不** Inte
 | `--json` 字段稳定 + schema_version | **规范要求** | 人类文本可迭代 |
 | 列表默认 limit + truncated hint | **规范要求** | |
 | dry-run 纯 + `--confirm=<id>` | **规范要求**（破坏性确认共识） | 避免万能 `--yes` |
-| 默认输出文本还是 JSON | **有争议**→**本项目决定**：人机默认文本，脚本/agent 显式 `--json` | |
+| 默认输出文本还是 JSON | **有争议**→**本项目决定（0.2.0）**：成功 stdout 在 TTY 和管道下都是同一套 ResultEnvelope；`--json` 为紧凑 JSON（推荐给 agent）；TTY 未加 `--json` 时美化同一封套；`--plain` 只输出 data | 不再按 TTY 切换对象形状 |
 | 幂等键对 create/send | **待验证** | 未证实服务端去重前不承诺 |
 | `--agent` / `--no-input` 命名 | **有争议** | 先用 isatty + 无提示；命名后定 |
-| 默认只读全局开关 | **有争议**→倾向 MCP `--read-only` toolset；CLI 写操作自带 confirm | |
+| 默认只读全局开关 | **有争议**→**本项目决定（0.2.0）**：MCP 默认不注册写工具，需 `GBT_ALLOW_WRITES=1` 或 `--allow-writes`；`GBT_MCP_READONLY=1` 更严并优先。CLI 写操作仍需 `--allow-writes` + confirm | |

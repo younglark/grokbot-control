@@ -4,7 +4,7 @@
 
 ## 1. 一句话现状
 
-- **控制面**（`grokbot-control`）：已实现并发布 0.1.3。离线测试覆盖完整；live 只验证过登录和三个只读 RPC，以及一次隔离的同步验收。
+- **控制面**（`grokbot-control`）：已实现并发布 0.1.3。`feat/agent-friendly-cli-mcp` 建议下一版本 0.2.0（尚未发布，见 packages/grokbot-control/CHANGELOG.md）。离线测试覆盖完整；live 只验证过登录和三个只读 RPC，以及一次隔离的同步验收。
 - **local-exec-daemon**：按 App 0.79.3 原版 daemon 逐函数移植。Linux 上可达、可观测的路径已对齐，有 D: 行号证据和测试；通过了合成后端的门控验收（48 步矩阵：41 步一致、7 步发现差异已修复；另有 2 项 Linux 不可达）。**完整替换验收没有做**，不能说是无条件 drop-in。
 - **无头注册 / Docker**：只有设计边界，没有代码。
 

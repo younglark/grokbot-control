@@ -2,7 +2,7 @@
 
 **人通过 Grok Bot App 驱动 → agent CLI 经 MCP / CLI 驱动同一 Bot。**
 
-可编程控制面（原生 Connect RPC），不是另建任务系统。CLI 入口 **`gbc`**，MCP stdio 入口 **`gbc-mcp`**。当前 npm 版本 **0.1.3**。
+可编程控制面（原生 Connect RPC），不是另建任务系统。CLI 入口 **`gbc`**，MCP stdio 入口 **`gbc-mcp`**。建议版本 **0.2.0**（本分支尚未发布；已发布的仍是 0.1.3）。
 
 > 非官方产品。协议来自 Grok Bot 桌面 App 的静态逆向，**不是**公开 API。自动化测试以 mock 为主；部分选定 RPC 曾做过隔离 live 验收，范围见 [docs/control-plane/implementation-status.md](https://github.com/younglark/grokbot-control/blob/main/docs/control-plane/implementation-status.md)，不能据此推定全部 RPC / OAuth 刷新已验证。
 
@@ -20,7 +20,8 @@ App 里能做的 Bot 生命周期、发消息、侧边栏、进度与中断，�
 - **鉴权**：独立 Cursor 浏览器登录；凭据存 `~/.gbc`（0600）；不读取 App 的 `sand-secrets.json`
 - **文件同步**：`sync pull|status|render|attachments`（无 SQLite；细节见 [docs/control-plane/sync-format.md](https://github.com/younglark/grokbot-control/blob/main/docs/control-plane/sync-format.md)）
 - **双入口**：同一 shared SDK → CLI（`gbc`）与 MCP（`gbc-mcp`）
-- **写安全**：远端写需 `--allow-writes`；危险操作需 `--confirm=<id>`；`--dry-run` 纯本地计划
+- **写安全**：远端写需 `--allow-writes`；危险操作需 `--confirm=<id>`；`--dry-run` 纯本地计划。MCP 默认只注册只读工具与 auth，写工具需 `GBT_ALLOW_WRITES=1` 或 `--allow-writes`
+- **Agent 输出**：CLI 成功 stdout 在终端和管道下都是同一套 ResultEnvelope；`--plain` 只输出 data。未知 flag 以退出码 2 拒绝。列表默认 `--limit=50`，截断时带 `truncated` / `next` / `hint`
 
 ## Install
 
@@ -29,9 +30,9 @@ App 里能做的 Bot 生命周期、发消息、侧边栏、进度与中断，�
 ### npx（推荐）
 
 ```bash
-npx --yes --package=grokbot-control@0.1.3 gbc --help
-npx --yes --package=grokbot-control@0.1.3 gbc --mock --json bot list
-npx --yes --package=grokbot-control@0.1.3 gbc-mcp
+npx --yes --package=grokbot-control@0.2.0 gbc --help
+npx --yes --package=grokbot-control@0.2.0 gbc --mock --json bot list
+npx --yes --package=grokbot-control@0.2.0 gbc-mcp
 ```
 
 也可用 `@latest`；MCP 建议钉版本，避免宿主静默升级。
@@ -39,7 +40,7 @@ npx --yes --package=grokbot-control@0.1.3 gbc-mcp
 ### 全局安装
 
 ```bash
-npm install --global grokbot-control@0.1.3
+npm install --global grokbot-control@0.2.0
 gbc --help
 gbc-mcp
 ```
@@ -62,12 +63,12 @@ node packages/grokbot-control/dist/cli/main.js --help
 结果带 `simulated: true`，不是在线成功。跨进程状态：`GBT_MOCK_STATE` 或 `~/.gbc/mock-state.json`。
 
 ```bash
-npx --yes --package=grokbot-control@0.1.3 gbc --mock --json --allow-writes \
+npx --yes --package=grokbot-control@0.2.0 gbc --mock --json --allow-writes \
   bot create --name demo --description "test"
-npx --yes --package=grokbot-control@0.1.3 gbc --mock --json bot list
-npx --yes --package=grokbot-control@0.1.3 gbc --mock --json --allow-writes \
+npx --yes --package=grokbot-control@0.2.0 gbc --mock --json bot list
+npx --yes --package=grokbot-control@0.2.0 gbc --mock --json --allow-writes \
   message send --agent-id <id> --session-id <sid> --text "hello"
-npx --yes --package=grokbot-control@0.1.3 gbc --mock --json bot status --agent-id <id>
+npx --yes --package=grokbot-control@0.2.0 gbc --mock --json bot status --agent-id <id>
 ```
 
 ### Live（真实后端）
@@ -94,12 +95,18 @@ Token 刷新需自行配置公开的 `GBT_OAUTH_CLIENT_ID`（本工具**不内�
 
 stdio；**stdout 仅协议帧**，不要把 CLI 日志打到 stdout。
 
+**默认只读。** `gbc-mcp` 只注册只读业务工具和 `auth_*`（以便登录）。写工具（`create_bot`、`delete_bot`、`send_message`、`reset_computer`、`interrupt_run`、sidebar 写等）不会出现在 `tools/list` 里，除非宿主显式开启写权限。
+
+从 0.1.x 迁移：以前只要在工具参数里传 `allow_writes=true` 就能写。0.2.0 起必须在 MCP 配置里设置 `GBT_ALLOW_WRITES=1` 或给进程加 `--allow-writes`，写工具才会出现。单靠工具参数不能再自我授权。`GBT_MCP_READONLY=1` 仍然更严（连 login/logout/refresh 也隐藏），并且优先于 `GBT_ALLOW_WRITES`。
+
+默认（只读 + 可登录）：
+
 ```json
 {
   "mcpServers": {
     "grokbot-control": {
       "command": "npx",
-      "args": ["--yes", "--package=grokbot-control@0.1.3", "gbc-mcp"],
+      "args": ["--yes", "--package=grokbot-control@0.2.0", "gbc-mcp"],
       "env": {
         "GBT_OAUTH_CLIENT_ID": "<your-public-oauth-client-id>"
       }
@@ -108,22 +115,41 @@ stdio；**stdout 仅协议帧**，不要把 CLI 日志打到 stdout。
 }
 ```
 
+需要写工具时：
+
+```json
+{
+  "mcpServers": {
+    "grokbot-control": {
+      "command": "npx",
+      "args": ["--yes", "--package=grokbot-control@0.2.0", "gbc-mcp", "--allow-writes"],
+      "env": {
+        "GBT_OAUTH_CLIENT_ID": "<your-public-oauth-client-id>",
+        "GBT_ALLOW_WRITES": "1"
+      }
+    }
+  }
+}
+```
+
+CLI 输出：成功结果在 TTY 和管道下都是同一套 `schema_version` 封套。`--json` 为紧凑 JSON（推荐给 agent）；TTY 未加 `--json` 时美化同一封套；只要 data 时用 `--plain`。未知 flag 退出码 2。
+
 常用环境变量：
 
 | 变量 | 说明 |
 |---|---|
-| `GBT_MCP_READONLY=1` | 仅 `auth_whoami` + 只读业务工具（不含 login/logout/cancel/refresh 及写工具） |
-| `GBT_ALLOW_WRITES=1` | 允许远端写工具 |
+| `GBT_ALLOW_WRITES=1` 或启动参数 `--allow-writes` | 注册并允许远端写工具（默认不注册） |
+| `GBT_MCP_READONLY=1` | 仅 `auth_whoami` + 只读业务工具（不含 login/logout/cancel/refresh 及写工具）；优先于 `GBT_ALLOW_WRITES` |
 | `GBT_OAUTH_CLIENT_ID` | 公开 OAuth client id（刷新用；不内置） |
 | `GBT_CREDENTIALS_DIR` | 凭据目录，默认 `~/.gbc` |
 | `GBT_SYNC_ROOT` | 设置后才提供 `sync_status` |
-| `GBT_SYNC_ALLOW_LOCAL_WRITES=1` | 另需才提供 `sync_pull` / `sync_render` / `sync_attachments` |
+| `GBT_SYNC_ALLOW_LOCAL_WRITES=1` | 在已开启 `GBT_ALLOW_WRITES` 时，另需才提供 `sync_pull` / `sync_render` / `sync_attachments` |
 | `GBT_SYNC_ACCOUNT_ID` / `GBT_SYNC_TEAM_ID` / `GBT_SYNC_ACK_UNVERIFIED_SCOPE=1` | sync pull 作用域（操作者声明，非服务端验证） |
 
-只读试跑：
+更严的只读试跑（连 auth 变更工具也去掉）：
 
 ```bash
-GBT_MCP_READONLY=1 npx --yes --package=grokbot-control@0.1.3 gbc-mcp
+GBT_MCP_READONLY=1 npx --yes --package=grokbot-control@0.2.0 gbc-mcp
 ```
 
 主要工具：`list_bots`、`get_bot`、`create_bot`、`update_bot`、`delete_bot`、`get_computer_state`、`reset_computer`、`send_message`、`get_send_status`、`list_transcript`、`list_sessions`、`get_bot_status`、`list_agent_todos`、`list_agent_tasks`、`list_agent_subagents`、`interrupt_run`、sidebar 系列、`auth_*`、可选 `sync_*`。完整契约见 [docs/protocol/protocol-map.md](https://github.com/younglark/grokbot-control/blob/main/docs/protocol/protocol-map.md)。

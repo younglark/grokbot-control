@@ -10,7 +10,7 @@
 | 写安全 | 远端写需 `--allow-writes` / `GBT_ALLOW_WRITES=1`；危险操作需 `--confirm=<id>`；写失败不确定时 `outcome=unknown`（exit 10），**从不自动重发** |
 | 鉴权 | 独立 Cursor 浏览器登录；凭据带 provenance / revision / session 绑定；`client_id` 只来自 `GBT_OAUTH_CLIENT_ID` 或登录时持久化，不内置不猜；临期 < 300 s 刷新；进程内 singleflight + 原生跨进程锁（[auth-lock.md](auth-lock.md)）；RPC 401 只对只读白名单刷新重试一次 |
 | 同步 `sync pull/status/render/attachments` | 文件归档（无 SQLite）、head 刷新与 backfill 分离、预算与轮转、附件按需下载（仅已证实的 store alias）、可选 `--hydrate missing` 正文补读；格式与限制见 [sync-format.md](sync-format.md) |
-| MCP | 与 CLI 共用 SDK；`GBT_MCP_READONLY=1` 排除所有写工具与凭据写入工具；stdout 只有 JSON-RPC |
+| MCP | 与 CLI 共用 SDK；默认只注册只读业务工具和 auth；写工具需 `GBT_ALLOW_WRITES=1` 或 `--allow-writes` 才出现在 `tools/list`；`GBT_MCP_READONLY=1` 更严并优先；input schema 严格拒绝未知参数；stdout 只有 JSON-RPC |
 
 ## live 验证范围（2026-11-07，隔离测试 bot，结束后已删除）
 

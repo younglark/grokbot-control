@@ -16,7 +16,7 @@ gbc sync attachments --agent-id BOT --dir /absolute/archive --account-id STABLE_
 `message send/status` 省略 --session-id 使用默认会话，MCP/SDK一致。附件不在pull中默认下载。
 --dry-run不读写归档、不登录或RPC。未知/重复flag拒绝。CLI显式命令即本地写授权，不需远端allow-writes。
 MCP root/身份启动固定：GBT_SYNC_ROOT、GBT_SYNC_ACCOUNT_ID、GBT_SYNC_TEAM_ID、GBT_SYNC_ACK_UNVERIFIED_SCOPE=1；
-另需GBT_SYNC_ALLOW_LOCAL_WRITES=1暴露pull/render/attachments；GBT_MCP_READONLY=1排除所有本地写工具。
+暴露pull/render/attachments还需GBT_ALLOW_WRITES=1（或--allow-writes）以及GBT_SYNC_ALLOW_LOCAL_WRITES=1；GBT_MCP_READONLY=1排除所有本地写工具并优先于写开关。
 GBT_ALLOW_WRITES不打开本地同步写开关。scope在任何下载RPC前核对backend/account/team/assurance。
 此绑定不能发现操作者在相同声明ID下实际换凭据。换账户必须重新确认，使用独立archive。
 
