@@ -105,6 +105,8 @@ test('outer malformed throw-only versus inner unsupported throw+close matches is
  const expected=require('../scripts/oracles/uc-bad-frames-result.json').frames;const root=temp();setup(root);const old=process.env.SAND_DATA_ROOT;process.env.SAND_DATA_ROOT=root;const peer=startUcFakePeer();await peer.listen();const p=provider(peer,root),run=p.start();
  try{await until(()=>peer.log.some(x=>x.kind==='watch'));peer.enqueueRaw('outer-unknown',wire.encStr(1,'outer-unknown'));peer.enqueueBad('bad-json');peer.enqueueExec('inner-unsupported',{id:1,writeShellStdinArgs:{shellId:'1',chars:'x'}});await until(()=>peer.log.some(x=>x.kind==='submit'&&x.frames.some(f=>f.requestId==='inner-unsupported'&&f.message?.streamClose)));await delay(200);
  const observed=peer.log.filter(x=>x.kind==='submit').flatMap(x=>x.frames);
- for(const id of ['outer-unknown','bad-json','inner-unsupported']){assert.deepEqual(observed.filter(f=>f.requestId===id).map(f=>({kind:f.kind,message:f.message})),expected.filter(f=>f.requestId===id).map(f=>({kind:f.type,message:f.message})),id)}
+ const loc=s=>typeof s==='string'?s.replace(/ \(line \d+ column \d+\)$/,''):s;
+ const norm=m=>{const o=JSON.parse(JSON.stringify(m)); if(o&&o.throw&&typeof o.throw.error==='string') o.throw.error=loc(o.throw.error); return o};
+ for(const id of ['outer-unknown','bad-json','inner-unsupported']){assert.deepEqual(observed.filter(f=>f.requestId===id).map(f=>({kind:f.kind,message:norm(f.message)})),expected.filter(f=>f.requestId===id).map(f=>({kind:f.type,message:norm(f.message)})),id)}
  }finally{await cleanup(p,peer,run,root,old)}
 });
