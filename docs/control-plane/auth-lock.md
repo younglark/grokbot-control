@@ -1,4 +1,4 @@
-# Native auth locks (t50u)
+# Native auth locks
 
 ## Selection and evidence
 

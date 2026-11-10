@@ -1,4 +1,8 @@
-# Repository organization and validation — t95u
+# 仓库 workspace 重组记录（历史）
+
+> 存档：原 `docs/organization.md`，t95u 把仓库重组为 npm workspaces 时的目录说明与验证记录。当前目录与规则以 [architecture.md](../architecture.md) 和根 [README](../../README.md) 为准。
+
+原标题：Repository organization and validation — t95u
 
 ## Actual tree / responsibilities
 

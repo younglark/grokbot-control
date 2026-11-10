@@ -1,4 +1,4 @@
-# local-exec-daemon 替换验收（t165，t168/t169 更新）
+# local-exec-daemon 替换验收矩阵
 
 Harness：`packages/local-exec-daemon/test/dropin-acceptance.test.cjs`，辅助模块 `test/helpers/dropin-backend.cjs`。
 它启动**我们构建出的** `dist/index.js`，对接一个合成后端，覆盖：生成的 Connect `GrokBotService`
@@ -11,19 +11,19 @@ plain-HTTP 的 `/sand-box/local-exec-connection`。凭据、HOME、数据目录�
   其中包含真实的 15 s 静默 watchdog（t9r，D:177837）、两次 10 s channelRetry（Q1t，D:177841/177925）和 1/2/4 s reconnect（Q8r，D:177834）。
   原版这些计时器都没有 env 覆盖，所以不能缩短。在全量并行套件里，真实计时器容易被负载拖慢，因此不纳入默认套件。
 - 证据：`DROPIN_EVIDENCE_DIR=<dir>` 会写出 `observed.json`，含每一步的观测值、后端事件时间线和 daemon 日志尾部。
-  证据在 `/tmp/exec-t165-evidence/run{1..5}` 和 `/tmp/exec-t166-evidence/{dev1,final}`。
+  证据在 `/tmp/exec-t165-evidence/run{1..5}` 和 `/tmp/exec-t166-evidence/{dev1,final}`。（`/tmp/...` 下的证据目录都是当时的临时目录，可能已被清理；需要时按文中方法重新生成。）
 - 启动方式：用 `spawn(process.execPath,[dist/index.js],{detached:true,stdio:['ignore',log,log,'ipc'],cwd})` 启动，
   再 `send({type:'sand-local-exec-file-key',key,computerId})`。这对应 App 的 fallback L$e。
   环境变量取 R$e 的形状：`SAND_LOCAL_EXEC_GENERATION`、`NODE_USE_SYSTEM_CA=1`，并去掉 `ELECTRON_RUN_AS_NODE`。
-  以上依据来自静态读取的 main-core.cjs，见 scenario-matrix.md §1；t166 已对照 0.79.3 asar 中的 main-core.cjs 核实，见下文。
+  以上依据来自静态读取的 main-core.cjs，见 [scenario-matrix.md](scenario-matrix.md) §1；t166 已对照 0.79.3 asar 中的 main-core.cjs 核实，见下文。
 
-## 第二个门控 harness（t168）
+## 第二个门控 harness
 `packages/local-exec-daemon/test/dropin-extra.test.cjs`，同样由 `DROPIN_ACCEPTANCE=1` 门控；辅助模块 `test/helpers/dropin-launch.cjs`、`test/helpers/ai-tool-fixture.cjs`、`test/helpers/electron-utility-host.cjs`。
 - network-change：自身用 `unshare -rn node <file>` 重新执行（非特权 user+net namespace），在里面加真实 veth/地址；需要 `unshare` 可用。
 - Electron：`DROPIN_ELECTRON=<npm 公开 electron 二进制>` 才跑；有 `xvfb-run` 时额外跑 `utilityProcess.fork`。**从不使用 App 自带的 electron。**
 - 证据写到 `DROPIN_EVIDENCE_DIR`：netns.json、box-heartbeat.json、discover-{uc,box}.json、mb-*.json、electron-headers.json、node-proxy.json。t168 证据在 `/tmp/exec-t168-evidence/{dev1,final}`。
 
-## 汇总（t171 更新）
+## 汇总
 
 | 类别 | 数 |
 |---|---|
@@ -34,8 +34,8 @@ plain-HTTP 的 `/sand-box/local-exec-connection`。凭据、HOME、数据目录�
 | Linux 不可达 | 2 |
 | 未验证 | 0 |
 
-矩阵之外的剩余差异（安全轮询生命周期、outageLedger、多账号、ownership 容忍、日志文本等）逐项根因见 `remaining-diffs.md`（t171）。
-t175 函数级覆盖审计（`port-coverage.md`）另修 4 项 MISSING（crash guard、PLe、settings 全 schema、t5e 30 s 默认超时），并把 Box 接入 Ki 通道。这些都不改变上表 48 行的结论；Sentry、后台 shell、denylist/沙箱列为 MISSING 大项（只给计划）。
+矩阵之外的剩余差异（安全轮询生命周期、outageLedger、多账号、ownership 容忍、日志文本等）逐项根因见 [remaining-diffs.md](remaining-diffs.md)。
+函数级覆盖审计（[port-coverage.md](port-coverage.md)）另修了 crash guard、PLe、settings 全 schema、shell 默认 30 s 超时、Box 接入 Ki 通道，以及后台 shell、denylist、沙箱策略。这些都不改变上表 48 行的结论。仍未移植：Sentry 崩溃上报。
 
 ## 逐步对照
 
@@ -95,13 +95,10 @@ t175 函数级覆盖审计（`port-coverage.md`）另修 4 项 MISSING（crash g
 ## Linux 上不可达
 - messages sidecar：真实的 iMessage 读写和发送。Linux 上只有 `sidecar_missing`，已验证。
 - macOS 本地工具，例如 mac_read_obsidian 和 computer-use 截图。只验证了 "no tool" 分支。
-（`utilityProcess.fork` 已在 t168 用公开 Electron + xvfb 观测，移入第 42 行。）
 
 ## 未验证（e2e）
-- 无。t168 剩余的两项已在 t169 静态核实，移入上表第 46–47 行。
+- 无。原先列出的项都已观测或静态核实，并入上表。
 
-（t166 列出的 6 项已在 t168 观测，移入上表第 36–41 行。）
-（t165 列出的 Watch 401、cancel、retireApproval、mb 头、backendReturn 已在 t166 final 运行中观测到，已移入上表第 28–35 行；“真实 App 的 cwd”已由 0.79.3 静态核实，见下节。）
 
 ## localRoot（F2）对 0.79.3 的核实（t166）
 - 来源：`/workspace/grokbot-linux-0.79.3/extracted/opt/Grok Bot/resources/app.asar`（package.json version 0.79.3）。`dist/electron-main/main-core.cjs` 的 sha256 为 910cc6bf…e34d，与 `/tmp/gbproto-0793`、`/workspace/grokbot-sync-evidence-0793` 中的副本一致。只做了静态读取，抽取的文件在 `/tmp/exec-t166-evidence/app-0793/`。
@@ -113,7 +110,7 @@ t175 函数级覆盖审计（`port-coverage.md`）另修 4 项 MISSING（crash g
   - 两处都**不传 cwd**，即继承父进程 cwd。
 - 结论：0.79.3 的 App 不设置这两个变量（除非用户的进程环境里本来就有），所以原版 localRoot 等于 `os.homedir()`。F2 成立。
 - 注：`/workspace/grokbot-node-analysis-0793/main.cjs` 是 daemon bundle（不含 `require("electron")`），不是 App 主进程。
-## 本轮修复（单列）
+## 修复清单（F1–F7 及之后）
 - **F1** `src/box/provider.ts`：Box exec 改为先 `execRefusal({...boxRefusalInput(), approvalId: ev.approvalId, describes: describeExec(serverMessage, root/terminals)})`。
   被拒时发 control throw（x9）；放行后以 `permission:"always"` 执行，不再做第二道闸。
   依据 D:136309–136332、D:136410、D:137564。
@@ -123,6 +120,6 @@ t175 函数级覆盖审计（`port-coverage.md`）另修 4 项 MISSING（crash g
 - **F5**（t168）`src/bootstrap/boot-env.ts`（新）+ `src/index.ts`：sqr 的 env 清理与继承 fd 关闭。依据 D:78805–78806、D:79641–79658、D:187194–187210。
 - 测试：`test/t168-node-proxy.test.cjs`，共 5 项；e2e 见 dropin-extra 的 SAND_NODE_PROXY_ENV 用例。
 - **F6**（t169）`src/box/provider.ts`：Box SSE GET 由 `http.request` 改为全局 `fetch`，状态判定、重定向、默认头、TextDecoder 分帧与 streamRequests 一致；其余不变。依据 D:137186、137205、137396–137402、137441–137471。测试 `test/t169-box-sse-fetch.test.cjs`，共 5 项。
-- **F7**（t171）`src/bootstrap/handoff.ts` + `src/bootstrap/boot-env.ts` + `src/index.ts`：handoff 改为 iqr/Uae/oqr 语义（忽略非法消息、trim computerId、坏 key→null key、IPC disconnect/超时→null key、finally 断开 IPC）。依据 D:79662–79687、D:187212–187303。其余 t171 修复见 `remaining-diffs.md`。
-- **t175** `src/bootstrap/crash-guard.ts`（新）、`src/index.ts`、`src/state/discovery.ts`、`src/settings.ts`、`src/exec/handlers.ts`、`src/box/provider.ts`：见 `port-coverage.md` §4。测试 `test/t175-port-coverage.test.cjs`，共 7 项。
-- **t176** `src/exec/denylist.ts`、`sandbox.ts`、`background-shell.ts` + `handlers.ts` / `settings.ts`：后台 shell、denylist、requestedSandboxPolicy、settings 读错误 rethrow。测试 `test/t176-background-denylist-sandbox.test.cjs`，共 6 项。详见 `port-coverage.md` §6。
+- **F7**（t171）`src/bootstrap/handoff.ts` + `src/bootstrap/boot-env.ts` + `src/index.ts`：handoff 改为 iqr/Uae/oqr 语义（忽略非法消息、trim computerId、坏 key→null key、IPC disconnect/超时→null key、finally 断开 IPC）。依据 D:79662–79687、D:187212–187303。其余修复见 [remaining-diffs.md](remaining-diffs.md)。
+- **t175** `src/bootstrap/crash-guard.ts`（新）、`src/index.ts`、`src/state/discovery.ts`、`src/settings.ts`、`src/exec/handlers.ts`、`src/box/provider.ts`：见 [port-coverage.md](port-coverage.md) §4。测试 `test/t175-port-coverage.test.cjs`，共 7 项。
+- **t176** `src/exec/denylist.ts`、`sandbox.ts`、`background-shell.ts` + `handlers.ts` / `settings.ts`：后台 shell、denylist、requestedSandboxPolicy、settings 读错误 rethrow。测试 `test/t176-background-denylist-sandbox.test.cjs`，共 6 项。详见 [port-coverage.md](port-coverage.md) §6。

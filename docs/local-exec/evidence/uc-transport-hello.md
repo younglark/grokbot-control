@@ -1,4 +1,4 @@
-# UC transport, hello capabilities, watch reasons, servingAt, credential, QPe — t160
+# UC transport, hello capabilities, watch reasons, servingAt, credential, QPe
 
 ## 1. Hello golden check (D:178137–178175, gE D:97145)
 - **Original.** `hello()` always constructs `capabilities` itself:
@@ -59,31 +59,12 @@
 - `test/uc-lifecycle.test.cjs` (t160 cases).
 - `test/followup-fixes.test.cjs` (strict field 8).
 
-## t160 follow-up: runLoop per-reason backoff (D:178223–178289)
+## runLoop per-reason backoff (D:178223–178289)
 
-The single root full-suite run failed `oracle retry-expiry: ours vs official golden (expiry)`
-(`scheduled rounds official=11 ours=10`). The cause was the new 15 s silence watchdog. The fake peer
-keeps Watch open without heartbeats, so the Watch now ends `silent`. Our old generic 100 ms redial
-did not match the official timing; the official golden shows re-Watches at about 16.9 s and 32.6 s.
-
-The fix ports the original branches:
 - `lifetime`: redial immediately.
-- `silent`:
-  - `renew` builds a fresh E9r client and emits `{kind:"renewed",cause}` (D:178314).
-  - It then waits `silentRenewalBackoff` (Pu: r9r = 2000 ms, max X1t = 60000 ms, full jitter, so `random()*min(60000, 2000*2^(r-1))`).
-  - r becomes 1 if the Watch heard any event after `connected` (D:178381), otherwise r+1.
-- `stall`/`error`: wait `reconnectBackoff` (Q8r = 1000 ms doubling to 60000 ms, no jitter). Then e += 1, and `connected` resets e to 1 (D:178249).
-- `unauthorized`: e is reset to 1. This port keeps its admissionClosed fencing instead of the original `channel = undefined` + 10 s channelRetry. This difference is kept on purpose.
-
-All of these sleeps are unref'd and end early on close or stop.
-
-Not ported:
-- `backendReturn` early wake (sleepUnlessBackendReturns).
-- `pollAbort` in renew.
-- network-change.
-
-Afterwards, the single oracle test ran once and passed. The silent wait uses jitter, so its timing varies by design.
-
-## t162 update
-- The `unauthorized` branch, backendReturn early wake, renew `pollAbort`, and `network-change` are now ported. See `uc-unauthorized-renewal-evidence.md`.
+- `silent`: `renew` builds a fresh E9r client and emits `{kind:"renewed",cause}` (D:178314), then waits `silentRenewalBackoff` (Pu: r9r = 2000 ms, max X1t = 60000 ms, full jitter, `random()*min(60000, 2000*2^(r-1))`). r becomes 1 if the Watch heard any event after `connected` (D:178381), otherwise r+1.
+- `stall`/`error`: wait `reconnectBackoff` (Q8r = 1000 ms doubling to 60000 ms, no jitter); e += 1, and `connected` resets e to 1 (D:178249).
+- `unauthorized`, backendReturn early wake, renew `pollAbort` and `network-change`: see [uc-unauthorized-renewal.md](uc-unauthorized-renewal.md).
 - The 8 MiB UC transport read/write cap is removed: L1t sets none, so the defaults are 0xFFFFFFFF (D:174740–174748).
+
+The silent wait uses jitter, so the `retry-expiry` oracle pins `random` (see [remaining-diffs.md](../remaining-diffs.md) #12). The original t160/t162 round notes are in [history](../../history/local-exec-evidence-rounds.md).

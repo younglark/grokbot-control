@@ -1,4 +1,4 @@
-# UC unauthorized / backend return / network change (t162)
+# UC unauthorized / backend return / network change
 
 Evidence: `daemon.formatted.cjs` (cited as D:line). Tests: `packages/local-exec-daemon/test/t162-uc-unauthorized-renewal.test.cjs`,
 plus the updated tests in `uc-lifecycle`, `uc-keepalive`, `uc-close-channel`, and `followup-fixes`. All tests use synthetic data only.
@@ -61,11 +61,6 @@ plus the updated tests in `uc-lifecycle`, `uc-keepalive`, `uc-close-channel`, an
 - The 8 MiB transport cap that this port added has been removed.
 - The original's own 8 MiB result limits stay: K_ (D:177275, messages result → Od), the reply-lane budget, and the PJe/Od file caps.
 
-## Remaining differences (by design / not ported)
-- **Sleeps on close.** Every loop sleep in this port also ends early on close/stop. In the original, these timers are just unref'd and the loop exits on its next check; nothing is visible on the wire.
-- **Safety poll.** The 30 s safety poll is still a provider-lifetime interval. In the original it runs only while a Watch is connected (`d`, D:178393).
-- **Not ported:**
-  - outageLedger diagnostics;
-  - the `ot` device-tool nudge in Rt;
-  - `presence-withdraw-failed` logging.
-- **Oracle `retry-expiry`.** This oracle depends on the silent-renewal full jitter (random 0–2 s, then 0–4 s), which the original has too. The number of rounds counted as scheduled versus Watch-woken can vary from run to run, so this golden comparison is inherently probabilistic.
+## 后续状态
+
+本文写作时列出的剩余差异后来已经处理：安全轮询改为只在 Watch 期间运行；outageLedger、`ot` nudge（Linux 上为 no-op）、presence-withdraw-failed 日志已移植或确认；retry-expiry oracle 的随机性已固定。仍保留的只有 close 时提前结束 sleep（线上无区别）。详见 [remaining-diffs.md](../remaining-diffs.md) #4–#8、#12。

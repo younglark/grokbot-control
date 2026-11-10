@@ -1,6 +1,6 @@
-# UC outer download / attached file source (t151)
+# UC outer download / attached file source
 
-Scope: one read-file chain only, static 0.79.3 evidence + isolated synthetic tests. Not full drop-in acceptance. No official complete daemon execution. Previous uncommitted cancellation/UC Ki work is retained.
+Scope: one read-file chain only, static 0.79.3 evidence + isolated synthetic tests. Not full drop-in acceptance. No official complete daemon execution. 
 
 All D references are to the existing locally formatted 0.79.3 daemon source (`daemon.formatted.cjs`, not committed); it is read as text, not executed.
 
@@ -8,7 +8,7 @@ All D references are to the existing locally formatted 0.79.3 daemon source (`da
 
 - D:178882–178889 maps **outer UserComputer RequestFrame.download** to `{kind:'download', path, approvalId, authorization:c5(...)}`. It is not an agent ExecServerMessage variant, not URL transfer, and not upload. D:178890–178892 ignores putFileToUrl/getFileFromUrl in this original mapping.
 - D:135989–136009 authorizes that request before download; 136384–136392 checks path and preflight size and returns `{kind:'file-stream', chunks:oqe(...)}`. D:178665–178671 attaches that source to the UC replies lane. By contrast exec outputs are consumed synchronously into materialized client/control frames from Ki (136337–136350). They are never attached file sources.
-- Box has its own outer download conversion/consumption; it remains unchanged, including its existing download stub. This batch does not implement upload/discover-ai-tool/URL transfer or new exec variants.
+- Box has its own outer download conversion/consumption; it is documented in [upload-box-url.md](upload-box-url.md). This file does not implement upload/discover-ai-tool/URL transfer or new exec variants.
 - Frozen `src/generated/aiserver.v1_pb.ts`: Download 82815–82865 has path(1), optional approval_id(2), standing(3), approval(4); File 82925–82969 has bytes data(1), uint32 seq(2), bool last(3). Existing generated RequestFrame/ResponseFrame and Connect Submit are sufficient. No generated schema change or handwritten wire codec is necessary or made.
 
 ## Authorization BEFORE filesystem access
@@ -39,14 +39,6 @@ All D references are to the existing locally formatted 0.79.3 daemon source (`da
 
 No upload, file URL transfer, Box streaming, download-to-agent storage pipeline, non-global approval classes, all-standing/multi-account/ripgrep, disk outbox or new queue limits are added. Historical ownership timeout root cause remains unknown and original ownership race is unchanged. This is not complete drop-in compatibility.
 
-## Actual validation for this batch
+## Related
 
-- Added 18 fixed-expectation tests in `test/uc-file-source.test.cjs`; target command ran that file plus uc-close-channel, uc-approvals, exec-output-channel: **56/56 passed**, no skips or functional test failures. Download admission/source/Submit tests use an in-process fake peer and generated protobuf roundtrips, not a complete daemon subprocess or real network download service.
-- `UC_SKIP_OFFICIAL=1 npm test --workspace=local-exec-daemon`: 269 total, **265 passed / 4 skipped / 0 failed**.
-- Root `npm run build`: passed. `UC_SKIP_OFFICIAL=1 npm test`: control **227/227**, daemon **265 passed / 4 skipped / 0 failed** (269 total), organization **6/6**. Each planned functional scope ran once; no test failure was rerun away.
-- Development failures are NOT erased: first `node --check` failed for a missing brace in the short-read mock; it was corrected before testing. First daemon build failed TS2322 because frozen generated File.data infers `Uint8Array<ArrayBuffer>` while FileRead initially declared ArrayBufferLike. The source already allocates an owned ArrayBuffer; only its declaration was narrowed, without changing schema, adding a cast or copying frames. A subsequent build validated that specific type correction. Raw failed build and correction notes are retained in local, uncommitted validation evidence; the original syntax diagnostic also remains in the tool transcript.
-- Historical evidence untouched; no commit/push. HEAD remained `7cff6e9efa732f5ed4f7ebaaa67d9e690dfe8f5f`.
-
-## Related t153
-
-UC outer **upload** and Box JSON **materialized download** are documented in `upload-box-url-evidence.md`. They are not the same as this attached-source download path. URL transfer remains unimplemented because original v9r ignores those frames.
+UC outer **upload** and Box JSON **materialized download** are documented in [upload-box-url.md](upload-box-url.md). They are not the same as this attached-source download path. URL transfer remains unimplemented because original v9r ignores those frames.

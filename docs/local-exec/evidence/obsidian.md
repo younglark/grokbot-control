@@ -1,4 +1,4 @@
-# Obsidian vault device tools (Ipt) — t159
+# Obsidian vault device tools (Ipt)
 
 **Reachable on Linux.** Ppt (D:135510) always builds Ipt with `rootDir: () => Zn()`; readGate is QR. Location (vft) and the mac tools (ppt) are inert on Linux, but Ipt is not.
 

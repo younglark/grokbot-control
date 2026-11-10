@@ -1,6 +1,6 @@
-# Box JSON channel upload (t154)
+# Box JSON channel upload
 
-Static 0.79.3 evidence (`daemon.formatted.cjs`, D:; offline main.cjs SHA256 5c1424ed…6be). "Box" = local-exec Box JSON control plane (`BoxProvider`), never Box.com. Synthetic fake peer only; official binary not run. Excerpts: `/tmp/exec-t154-evidence/`.
+Static 0.79.3 evidence (`daemon.formatted.cjs`, D:; offline main.cjs SHA256 5c1424ed…6be). "Box" = local-exec Box JSON control plane (`BoxProvider`), never Box.com. Synthetic fake peer only; official binary not run. （当时的摘录放在 `/tmp/exec-t154-evidence/`，属于临时目录，可能已不存在。）
 
 ## Original mechanism
 
@@ -26,20 +26,10 @@ Static 0.79.3 evidence (`daemon.formatted.cjs`, D:; offline main.cjs SHA256 5c14
 - `download` also moved under `withInflight` and schema check (original same v_.handle branch).
 - `maxFileBytes` option (original `options.maxFileBytes`, default 104857600) and exported `maxUploadFrameBytes` / `uploadFrameTooLarge`.
 
-## Not implemented / retained differences
-
-- `cp` lock table (yI/gUe) and exact fsync edge cases: still the existing `writeUploadFile` approximation (documented in t153).
-- Box hello is still posted on `welcome` (original posts hello right after connect, 137410–137430); pre-existing difference, unchanged.
-- `Mwr` messages-op parse-failure reply is not added (Box messages-op is not implemented).
-- Exec frames keep the existing `seen` set (not changed this batch).
-
 ## Tests
 
 `test/box-upload-discover-ai-tool.test.cjs`: Box upload success (non-empty + empty), size refusal Od text, path escape, schema-invalid drop, ask refusal under forced none; oversized single block and split unterminated block → kJe with requestId and the stream continues.
 
-## t154 test record (box-upload / discover-ai-tool / ls)
+## 剩余差异
 
-- New file first run: 9 tests, 5 pass / 4 fail — all 4 were wrong expectations written by hand (QJe counts depth-2 files because recursion is `a < e`; a 200×`a` title is hex-like and hits Ojt[8] `[redacted]` first). Implementation unchanged; expectations corrected from the original code; second run 9/9. ls test added → 10/10.
-- Target set (new + uc-upload-box-download + review-fixes + exec-codec): 36/36.
-- Root build passed. Root full run 1: control 227/227; daemon 287 total, 262 pass / 24 fail / 1 skip — all 24 in `uc-lifecycle.test.cjs`, cause `unmocked module ./uc/ai-tool-discovery` (vm harness strict module map vs. new `index.ts` import); organization not run (`&&` chain). Fix: harness mock entry. That file alone 26/26. Root full run 2: control 227/227, daemon 287 total 286 pass / 1 skip / 0 fail, organization 6/6.
-- **Incident**: both root runs were launched without `UC_SKIP_OFFICIAL=1`, so the 3 `oracle cancel-overflow* (official)` tests in `uc-keepalive.test.cjs` executed the offline lab official `main.cjs` (bwrap, fake peer) — 6 executions total. Earlier batches set `UC_SKIP_OFFICIAL=1` (4 skips). No lab files were modified; no process left running.
+无。当时记录的差异后来都已处理：hello 改为 connect 后立即发送（[box-hello.md](box-hello.md)）；Box messages-op 和 Mwr 解析失败回复已实现（[box-messages-op.md](box-messages-op.md)）；cp 写入器已移植（[cp-write.md](cp-write.md)）。原记录见 [history](../../history/local-exec-evidence-rounds.md)。

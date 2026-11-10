@@ -4,7 +4,7 @@
 
 `vendor/proto-gen` is **本仓库从App恢复生成** (regenerated in this repo from the App; not a byte copy of upstream).
 
-**Immutable App proto.cjs archive = [packages/protocol/baselines/schema-0.79.3](../../packages/protocol/baselines/schema-0.79.3/)** (t95u; sibling SHA256). **Current generator input (t98u) = [schema-0.79.3-daemon-exec](../../packages/protocol/baselines/schema-0.79.3-daemon-exec/)** — additive Exec* closure from daemon compact descriptors; parent archive untouched.
+**Immutable App proto.cjs archive = [packages/protocol/baselines/schema-0.79.3](../../packages/protocol/baselines/schema-0.79.3/)** (sibling SHA256 manifest). **Current generator input = [schema-0.79.3-daemon-exec](../../packages/protocol/baselines/schema-0.79.3-daemon-exec/)** — additive Exec* closure from daemon compact descriptors; parent archive untouched.
 
 | Item | Value | Level |
 |---|---|---|
@@ -71,6 +71,14 @@ prettier; their line numbers drift between versions — use the string anchors i
   done with the **old 0.78.4 vendor**. The 0.79.3 vendor is verified **offline only**.
 - macOS builds were not analysed for 0.79.x.
 
-## t95u location-only update
+## Current layout
 
-Runtime vendor path is now packages/grokbot-control/vendor/proto-gen; all six ESM JS files are byte-identical to the pre-reorganization a9231c2 output. SOURCE.json adds canonical input/tool provenance. A shared generator also emits daemon TS→CJS, with identical input hashes. The archived baseline bytes and upstream evidence/hash records are unchanged.
+Runtime vendor path is `packages/grokbot-control/vendor/proto-gen`; daemon output is `packages/local-exec-daemon/src/generated`. Both come from `npm run generate` (Buf 1.50.0, see [update-runbook.md](update-runbook.md)); the vendor hashes in the table above are a historical record of the original grpcio-tools run (the workspace generator reproduced them byte-for-byte at the move, a9231c2). The input later switched to `schema-0.79.3-daemon-exec` (additive Exec* types), so current output hashes may differ; the source of truth is now `SOURCE.json` (input hashes + tool versions) plus `npm run generate:check` (byte check of outputs).
+
+## Daemon bundle (local-exec-daemon parity source)
+
+| Item | Value |
+|---|---|
+| `dist/local-exec-daemon/main.cjs` (0.79.3) | sha256 `5c1424ed3784704abbb20e83ced15ab8ebd161ddef5e7f1a74eed374453d36be`; identical in the Linux deb and the macOS 0.79.3 App |
+| `dist/local-exec-daemon/messages-worker.cjs` | 121022 bytes, sha256 `b6f5c672…667b` (matches asar integrity) |
+| Formatted copy used for **D:** line numbers | `daemon.formatted.cjs`, 187 625 lines, sha256 `ad69a772b5a725c051ac423138889dc0e328de023d6414f7da9a3885c520684c` (prettier, babel parser; not committed) |

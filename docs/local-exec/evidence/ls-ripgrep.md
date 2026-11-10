@@ -1,4 +1,4 @@
-# ls / ripgrep parity (t154)
+# ls / ripgrep parity
 
 ## Evidence
 
@@ -10,11 +10,11 @@
   - otherwise `getDirectoryTree` → `buildTreeFromRipgrepStream` (129495–129542) → `kO` (107439): `rg --files --hidden --no-require-git --no-config --color=never [--threads N] [--iglob !x]... --cursor-ignore …` via `yer` → `Ud(nl(), …)`.
 - `nl()` (19007–19013) throws `"Ripgrep path not configured. Call configureRipgrepPath() at startup."` because `Z2` is declared (19015) and never assigned anywhere in the bundle (`configureRipgrepPath` has no definition/call). The throw propagates through the disposal stacks to execute's catch → `LsResult.error{path:i, error}`. Previously confirmed by the isolated official oracle (`scenario-matrix.md` rows 21/62).
 
-## Decision (t154, superseded by t196)
+## Earlier decision (superseded by the next section)
 
 - t154 implemented only the reachable part (stat preamble + unchanged RIPGREP_UNCONFIGURED). That default is unchanged.
 
-## t196: configured-ripgrep path ported (`packages/local-exec-daemon/src/exec/ls-ripgrep.ts`)
+## Configured-ripgrep path ported (`packages/local-exec-daemon/src/exec/ls-ripgrep.ts`)
 
 Default stays the 0.79.3 App state: `Z2` unset → `nl()` throws the same text → `LsResult.error`. Nothing auto-configures:
 no PATH probe and no read of `CURSOR_RIPGREP_PATH` (the bundle only *writes* that variable, in `b0` D:19002–19005; no reader
@@ -43,7 +43,7 @@ PATH key name, `IGe`/`mWt`) and sets `CURSOR_RIPGREP_PATH`.
 
 Wire plumbing: `dispatchExec` now passes `lsArgs.ignore`, `lsArgs.timeoutMs`, `lsArgs.sandboxPolicy` (LsArgs fields 2/5/4).
 
-### t198: remaining items (each checked for reachability first)
+### Remaining items (each checked for reachability first)
 
 | Item | Reachable in 0.79.3? | Evidence | Result |
 |---|---|---|---|

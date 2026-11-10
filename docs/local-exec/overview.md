@@ -54,7 +54,7 @@ Daemon 侧负责：在本机执行工具、把结果帧送回 Box/UC、维持 pr
 ### 执行器（Tft 注册：shellStream / backgroundShell / read / ls）
 - **shellStream**：超时默认 30 s；`timeoutBehavior=BACKGROUND` 软超时转后台 + `terminals/{id}.txt`；`hardTimeout`；取消/abort 帧（`src/exec/handlers.ts`、`background-shell.ts`）。
 - **管理员命令 denylist** + **requestedSandboxPolicy**（Linux 无 helper → `sandboxUnsupported`；tree-sitter 解析，`src/exec/denylist.ts`、`sandbox.ts`）。
-- **read / ls**：路径与 symlink 守卫；ls 默认对存在的目录返回与原版相同的 `Ripgrep path not configured…`（0.79.3 从未配置 `Z2`）；若调用 `configureRipgrepPath()`，按原版 `kO`/`buildTreeFromRipgrepStream` 用外部 `rg` 建 `directoryTreeRoot`（2500 字符预算、5 s 默认超时→`timeout`）。见 [ls-ripgrep-evidence.md](./ls-ripgrep-evidence.md)。
+- **read / ls**：路径与 symlink 守卫；ls 默认对存在的目录返回与原版相同的 `Ripgrep path not configured…`（0.79.3 从未配置 `Z2`）；若调用 `configureRipgrepPath()`，按原版 `kO`/`buildTreeFromRipgrepStream` 用外部 `rg` 建 `directoryTreeRoot`（2500 字符预算、5 s 默认超时→`timeout`）。见 [ls-ripgrep.md](./evidence/ls-ripgrep.md)。
 - **输出通道 Ki + 心跳**：UC/Box exec 结果进入无界 outbox（`src/exec/output-channel.ts`）。
 - **未注册消息**：通用 `No handler found…`；`computerUseArgs` / `recordScreenArgs` 固定拒绝文案（jHt，D:98041–98046）。
 
@@ -82,10 +82,10 @@ Daemon 侧负责：在本机执行工具、把结果帧送回 Box/UC、维持 pr
 
 | 类别 | 说明 | 文档 |
 |---|---|---|
-| **Sentry 出站崩溃上报** | T7t 等；需 `@sentry/node` + 脱敏；仍标 MISSING 大项 | port-coverage §6、remaining-diffs #20 |
+| **Sentry 出站崩溃上报** | T7t 等；需 `@sentry/node` + 脱敏；默认不移植，未完成项 | port-coverage §6、remaining-diffs #20 |
 | **macOS sidecar / Messages** | `.app` 查找；Linux → `sidecar_missing` | remaining-diffs #2、dropin-acceptance「Linux 不可达」 |
 | **darwin 本地工具 / computer-use / 截图** | 平台门控；Linux 仅「无工具」或未注册拒绝 | port-coverage §3、remaining-diffs #3 |
-| **后台三组件** | `forceBackgroundByToolCallId`、outputNotification 观察器、backgroundWorkRegistry 完成队列：原版 Tft 不传 registry / 未注册 / 无调用点 → 不可达且无可观测效果 | port-coverage §9、t181 |
+| **后台三组件** | `forceBackgroundByToolCallId`、outputNotification 观察器、backgroundWorkRegistry 完成队列：原版 Tft 不传 registry / 未注册 / 无调用点 → 不可达且无可观测效果 | port-coverage §9 |
 | **settings keepDamaged / noFollow 写链** | daemon 对 settings 只用 getter；读损坏 `copyPath:null` | port-coverage §10 |
 | **`invariant_violation` 事件** | App 只解析 `watch_outage` | port-coverage §7 |
 | **死常量 ein/tin/…、深链 routeString 等** | 无 Linux 线上帧 / App 日志缺口 | port-coverage §10 |
@@ -102,7 +102,7 @@ Daemon 侧负责：在本机执行工具、把结果帧送回 Box/UC、维持 pr
   - 验收以**合成后端 + 合成凭据**为主；门控 harness 设 `DROPIN_ACCEPTANCE=1`。
   - 测试与证据流水线使用 **`UC_SKIP_OFFICIAL=1`**，**禁止**执行官方 main.cjs / App 内嵌 electron / worker。
   - Electron 烟测可用公开 npm 的 Electron 二进制；**不等于**官方 App 所嵌 42.x 的验收。
-  - 已知有意边界（如 Sentry 未接；ls 的 ripgrep 树默认不可达，配置后路径已移植；exec spawn 经 Ko/Ud（Md、CE、cgroup/FUSE 跳转）见 t198）见包内 README、[ls-ripgrep-evidence.md](./ls-ripgrep-evidence.md) 与 remaining-diffs。
+  - 已知有意边界（如 Sentry 未接；ls 的 ripgrep 树默认不可达，配置后路径已移植；exec spawn 已统一经 Ko/Ud（Md、CE、cgroup/FUSE 跳转））见包内 README、[ls-ripgrep.md](./evidence/ls-ripgrep.md) 与 remaining-diffs。
 - 目录内 [README.md](./README.md) 是兼容边界短声明；本文是职责与能力总览。
 
 ---
@@ -111,16 +111,14 @@ Daemon 侧负责：在本机执行工具、把结果帧送回 Box/UC、维持 pr
 
 | 文档 | 内容 |
 |---|---|
-| [README.md](./README.md) | 兼容边界一页纸；指向包内 README / headless |
+| [README.md](./README.md) | 兼容边界与文档索引 |
 | [dropin-acceptance.md](./dropin-acceptance.md) | 替换验收矩阵与门控 harness 观测 |
-| [port-coverage.md](./port-coverage.md) | 函数级覆盖审计、MISSING/有意不移植、§9–§10 |
+| [port-coverage.md](./port-coverage.md) | 函数级覆盖审计、未移植/有意不移植、§9–§10 |
 | [remaining-diffs.md](./remaining-diffs.md) | 剩余差异逐项根因与状态 |
-| [close-stream-evidence.md](./close-stream-evidence.md) | Ki 通道、关停/取消顺序、附件源边界 |
 | [scenario-matrix.md](./scenario-matrix.md) | 场景与 App 启动静态对照 |
-| [ownership-oracle.md](./ownership-oracle.md) | ownership 对照与 fixture 说明 |
-| `*-evidence.md` | 单点证据（Box hello/upload、UC download、connection-exchange 等） |
+| [evidence/](./README.md#单点证据) | 单点证据（Ki/关停、ownership、Box hello/upload、UC download、connection-exchange 等） |
 
-包内文档：`packages/local-exec-daemon/README.md`（命令与状态表）、`REVIEW-FIXES.md`、`INTEGRATION.md`。
+包内文档：`packages/local-exec-daemon/README.md`（命令与状态）。历史审查与集成记录在 [docs/history/](../history/README.md)。
 
 ---
 
@@ -138,4 +136,4 @@ packages/local-exec-daemon/src/
   generated/               冻结 proto 生成代码
 ```
 
-构建：`npm run build`（包内）。测试：`npm test`；门控替换集：`DROPIN_ACCEPTANCE=1` + `UC_SKIP_OFFICIAL=1`。
+构建与测试命令见 [docs/development.md](../development.md)；所有测试必须先 `export UC_SKIP_OFFICIAL=1`。

@@ -1,4 +1,4 @@
-# Compatibility matrix & remaining risks
+# 版本兼容矩阵与未验证项
 
 | App version | Schema source | Used surface vs 0.78.4 | Auth anchors | Live |
 |---|---|---|---|---|
@@ -18,3 +18,13 @@
 - 0.79.3 vendor has had no live call.
 - macOS vs Linux bundles for the same version not byte-compared.
 - Third-party use of the desktop client identity / protocol is not an official API and may change or be disallowed.
+
+## Create / sidebar drift（0.78.4 vs App 0.79.x，静态）
+
+| 项 | 状态 |
+|---|---|
+| `CreateGrokBotTemporalAgent` 的 I/O = `CreateGrokBotAgentRequest` | 已使用 |
+| App 另传 visibility / teamId / botBuilderRequested | 0.79.3 vendor 已有字段 18/19/20，语义未验证，本实现**不发送** |
+| `ListGrokBotSubagents`（不是 ListGrokBotAgentSubagents） | 已对齐生成客户端 |
+| `sidebar_sections_base` 冲突的线上错误码 | App 映射为 SaveConflict；精确码待真机 |
+| delete bot 后 sidebar 是否残留引用 | 未证实 |

@@ -1,7 +1,7 @@
 /** UC `local-tool` — port of v_.handleLocalTool (D:136131–136240) for what a Linux daemon can reach.
  * Device tools (location / ppt / Obsidian) and Mac Mail are absent on Linux (D:vft 132673 darwin-only, ppt 134878
  * `y()` false → mail()/helperName() undefined, Ipt 135418 gated by a host gate file + vault, see
- * docs/local-exec/local-tools-evidence.md). Computer use: UL (D:136514) with availableHelper → undefined on Linux
+ * docs/local-exec/evidence/local-tools.md). Computer use: UL (D:136514) with availableHelper → undefined on Linux
  * (Xpt 136712 non-darwin), so every valid call ends in BL.
  */
 import { CANCELLED_BEFORE_START } from "../box/messages-op";

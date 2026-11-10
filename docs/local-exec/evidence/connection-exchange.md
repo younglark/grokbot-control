@@ -1,4 +1,4 @@
-# Box connection exchange (O9r / ge) — t159
+# Box connection exchange (O9r / ge)
 
 Evidence lines refer to D: daemon.formatted.cjs. The port lives in `src/state/connection-exchange.ts`, `src/state/connection.ts`, `src/index.ts` and `src/box/provider.ts`.
 
@@ -34,9 +34,9 @@ Evidence lines refer to D: daemon.formatted.cjs. The port lives in `src/state/co
   - channel-missing → wake.
   - A change in x republishes discovery (`rejectedAccountScopes`, sorted, D:179205).
 
-## Port differences (remaining, after t160)
-- t160 closed four of the earlier gaps: QPe validation, UC reasons, plaintext credentials and servingAt. See uc-transport-hello-evidence.md.
-- The UC runLoop still uses this port's own backoff after each reason. The original's per-reason branches are not ported: renew on silent/network-change (D:178266–178290), channelRetry on unauthorized, and backendReturn sleeps.
+## Later changes
+
+UC 按 reason 分支（silent/network-change 时 renew、unauthorized 时 channelRetry、backendReturn sleep）后来已移植，见 [uc-unauthorized-renewal.md](uc-unauthorized-renewal.md)；QPe、UC reasons、明文凭据和 servingAt 见 [uc-transport-hello.md](uc-transport-hello.md)。
 
 ## Tests
 - `test/t159-exchange-obsidian-cp.test.cjs`, run against a fake local HTTP server: mb headers, request shape, every result kind, sealed/plain connection file, and the Cwr=3 stale trigger on a fake clock.

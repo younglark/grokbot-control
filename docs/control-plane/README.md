@@ -1,13 +1,15 @@
-# Control plane: SDK / CLI / MCP
+# 控制面：SDK / CLI / MCP
 
-Implementation: [packages/grokbot-control](../../packages/grokbot-control/README.md). Public name `grokbot-control`, bins `gbc` / `gbc-mcp`, SDK exports unchanged. Auth, operations, sync/attachments, native auth lock and shared CLI/MCP semantics stay together; no forced task layer or new micro-packages.
+实现：[packages/grokbot-control](../../packages/grokbot-control/README.md)。公开包名 `grokbot-control`，bin `gbc` / `gbc-mcp`，SDK 导出不变。鉴权、业务操作、同步/附件、原生鉴权锁和 CLI/MCP 共享语义都在这一个包里，不拆微包，不引入强制 task 层。
 
-- [Architecture](architecture.md)
-- [Requirements](requirements.md)
-- [Implementation status](implementation-status.md)
-- [Acceptance](acceptance.md)
-- [Auth locking](auth-lock.md)
-- [Sync format](sync-format.md)
-- [Protocol methods/evidence](../protocol/README.md)
+| 文档 | 内容 |
+|---|---|
+| [requirements.md](requirements.md) | 产品定义、核心能力、非目标、验收场景 |
+| [architecture.md](architecture.md) | 模块、结果契约、退出码、写安全、进展模型 |
+| [implementation-status.md](implementation-status.md) | 已实现、live 验证范围、未验证项 |
+| [auth-lock.md](auth-lock.md) | 原生跨进程刷新锁（路径被代码里的错误提示引用，不要移动） |
+| [sync-format.md](sync-format.md) | 文件归档格式、分页/backfill、附件与正文补读 |
+| [../protocol/protocol-map.md](../protocol/protocol-map.md) | App 动作 ↔ RPC ↔ SDK/CLI/MCP 契约 |
+| [../protocol/auth-flow.md](../protocol/auth-flow.md) | 登录/刷新协议证据 |
 
-Old one-package root commands in historical plans refer to the control package. Current root `npm run build` / `npm test` orchestrate workspaces; targeted commands use `-w grokbot-control`. Historical evidence/logs are not relabeled as new validation. No full research-doc tree is shipped in the public tarball; its README links to canonical repository docs.
+单包命令：`npm test -w grokbot-control`、`npm run dev:gbc -- --mock --json bot list`。

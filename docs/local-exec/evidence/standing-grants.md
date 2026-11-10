@@ -1,4 +1,4 @@
-# Standing grants and non-exec approval classes (t155)
+# Standing grants and non-exec approval classes
 
 | Item | Evidence | Port (`src/uc/approvals.ts`) |
 |---|---|---|

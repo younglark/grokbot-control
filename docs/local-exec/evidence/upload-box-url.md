@@ -1,4 +1,4 @@
-# UC upload / Box download / URL transfer (t153)
+# UC upload / Box download / URL transfer
 
 Static 0.79.3 evidence from the existing locally formatted daemon source (`daemon.formatted.cjs`, not committed). Synthetic isolation only. Not full drop-in. No official complete daemon execution and no real network transfer.
 
@@ -18,7 +18,7 @@ Static 0.79.3 evidence from the existing locally formatted daemon source (`daemo
 - Executor still runs `isLocalUseBlocked` with k6r read-file description (135989–136009). Ceiling, effective permission, and matching local approvals still apply under authorization none.
 - Result path D:137519–137544: `file-stream` is **not** attached to UC oee. `enqueueWholeFile` awaits `iqe` (97895–97906) to materialize every chunk, then enqueues one JSON `{kind:'file', bytesBase64}` (or file-error).
 - Current implementation: Box provider calls `downloadRefusal` with `serverAuthoritative:false` + authorization none, then `handleDownload` → `prepareDownload` + `readWholeFile` → `prepareBoxExecFrame` bytesBase64. Existing Never/Ask/symlink integration expectations remain.
-- Box upload exists in original Nwr (137571–137578); implemented in t154, see `box-upload-evidence.md`.
+- Box upload exists in original Nwr (137571–137578); implemented in t154, see [box-upload.md](box-upload.md).
 
 ## 3) URL transfer — evidence only, not implemented
 
@@ -27,8 +27,7 @@ Static 0.79.3 evidence from the existing locally formatted daemon source (`daemo
 - No handler body for performing HTTP PUT/GET, hashing, or emitting `urlTransfer` was found on the local-exec admission path. Response-size accounting mentions `urlTransfer` (177413–177414, 178818) but that is not an implementation of the transfer.
 - Therefore this batch does **not** invent a network transfer, fake a capability, or change the frozen baseline. A later stage would need explicit original handler evidence beyond v9r ignore, plus an offline fake-peer plan that never hits the public internet.
 
-## Remaining gaps
+## Remaining gaps（当前）
 
-- (t154: Box upload and discover-ai-tool now implemented.) messages/local-tool, standing-grant subject actions, multi-account, exact cp lock table, full official write fsync edge cases.
-- Historical ownership 20s timeout root cause still unknown; original ownership race preserved.
-- Existing UC download attached-source path, Ki producer channel, cancel-terminal ordering, retry/fairness/256/8MiB/1MiB, newline-cwd security fix, and approval quirks are retained.
+- URL transfer：按原版不实现（见上节）。
+- 本文写作时列出的其他缺口后来都已处理：messages-op 和 local-tool（[box-messages-op.md](box-messages-op.md)、[uc-messages-op.md](uc-messages-op.md)、[local-tools.md](local-tools.md)）、多账号（[remaining-diffs.md](../remaining-diffs.md) #9）、cp 锁表与 fsync（[cp-write.md](cp-write.md)）、ownership 间歇超时根因（remaining-diffs #11）。standing-grant 的 consent 流程见 [standing-grants.md](standing-grants.md)。

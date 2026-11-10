@@ -26,7 +26,7 @@ The RPC list is derived from code (`client.<rpc>(` in `src/`) by `tools/protocol
 Live note (2026-11-07): the three **L** reads succeeded with only `authorization: Bearer`.
 No write RPC has been executed live.
 
-## Key semantics (see also ../protocol-map.md)
+## Key semantics (see also [protocol-map.md](protocol-map.md))
 
 - SidebarSections: `GrokBotSidebarSection{1 id, 2 name, 3 agent_ids*}`; write sends full `sidebar_sections` (6)
   plus `sidebar_sections_base` (12) as optimistic base. Server conflict code: unverified.

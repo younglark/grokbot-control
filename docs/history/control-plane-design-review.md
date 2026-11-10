@@ -1,14 +1,18 @@
-# 方案审查（2026-11-07 Asia/Shanghai）
+# 控制面方案审查与分期（历史）
+
+> 存档：2026-11-07 设计阶段的审查记录和分期计划。结论已落实到 [control-plane/requirements.md](../control-plane/requirements.md) 和 [control-plane/architecture.md](../control-plane/architecture.md)；Open questions 的现状见 [protocol/compat-matrix.md](../protocol/compat-matrix.md)。
+
+## 方案审查（2026-11-07 Asia/Shanghai）
 
 范围：`grokbot-control` 规划细化。无实现、无登录、无 push。
 
-## 严重级别说明
+### 严重级别说明
 
 - **P0**：会直接导致错误产品方向或不安全承诺  
 - **P1**：实施前必须钉死，否则易误删/丢更新/双写  
 - **P2**：质量/可运维；可分期但要写清  
 
-## 问题 → 修订 → 依据
+### 问题 → 修订 → 依据
 
 | # | 级别 | 旧表述/风险 | 修订 | 依据 |
 |---|---|---|---|---|
@@ -26,7 +30,7 @@
 | 12 | P2 | CLI/MCP 混用 stdout | CLI：stdout 数据 stderr 进度；MCP stdio 专用于 JSON-RPC，禁止夹带 CLI JSON | MCP transports；agent-cli-design / clig |
 | 13 | P2 | Playwright/Chrome MCP 当同构对照 | 仅借鉴「MCP+CLI 双入口 / 风险声明」；**UI 自动化 ≠ Connect 原生 API** | 各自 README |
 
-## Open questions（少问卷）
+### Open questions（少问卷）
 
 1. 「分组」是否确认 = SidebarSections？（计划默认是）  
 2. create 对个人 bot：是否一律 `CreateGrokBotTemporalAgent` + TEMPORAL harness？（App 现路径倾向是；BOX harness 路径未完整静态追完）  
@@ -34,3 +38,20 @@
 4. 服务端对 `sidebar_sections_base` 冲突的确切错误码/条件？（App 有映射；线上码待验）  
 5. delete 后 sidebar 是否仍引用已删 agent_id？（观察项）  
 6. 第三方身份政策是否允许独立控制面登录？（鉴权报告已标未验）
+
+---
+
+## 附：最初的实施分期（已全部实现，仅存档）
+
+不实现本轮。原始功能不得静默缩水。
+
+| 阶段 | 内容 | 出口（另授真机后） |
+|---|---|---|
+| **S0** | 鉴权 bootstrap；0.78.4↔0.79.2；Create/Sidebar 冲突码；session 默认规则 | 只读+创建字段矩阵实测记录 |
+| **S1** | bot CRUD + auth whoami；dry-run/confirm；toolsets | App 级 bot 管理可编程 |
+| **S2** | message send/status/history；session；progress+interrupt；outcome=unknown 路径 | 主对话闭环 |
+| **S3** | sidebar sections patch+verify+conflict；Room 独立命令（可选启用） | 分组读回验证通过 |
+
+**P1 可选：** Watch 封装、toolset 细拆、HTTP MCP、观测辅助——不挡 S1–S2。
+
+**每期测试：** MCP/CLI 参数语义等价；无 TTY/JSON；mock 仅离线；真机用独立 test bot。

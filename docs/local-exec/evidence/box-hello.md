@@ -1,4 +1,4 @@
-# Box hello / heartbeat timing (t155)
+# Box hello / heartbeat timing
 
 Source: `daemon.formatted.cjs` (D:), offline copy main.cjs sha256 5c1424ed…6be. Static reading only; the official binary was not run.
 
@@ -14,9 +14,6 @@ Source: `daemon.formatted.cjs` (D:), offline copy main.cjs sha256 5c1424ed…6be
 | stream end | `finally` disposes the watchdog and heartbeat and sets `providerId=undefined` (D:137472–137474) | `finally` in `start()` |
 | redial | `resolveConnection` re-reads the connection on every dial | `resolveConnection: loadConnection` (index.ts) |
 
-Not ported (documented):
-- the stallWatchdog Iwr=35 s;
-- the exact connect deadline Rwr=15 s and the reconnect backoff constants (the old backoff, min(2 s, 100·2^n), is kept; it is reset after a successful connect);
-- the SA/UC switch inside resolveConnection (X()), which is handled by index.ts exclusivity.
+Stall watchdog Iwr 35 s, connect deadline Rwr 15 s, reconnect backoff 1 s→10 s and the X() SA/UC switch inside resolveConnection were ported later; see [box-connection.md](box-connection.md) and [connection-exchange.md](connection-exchange.md).
 
 Tests: `test/box-hello-messages-op.test.cjs` (first 6 tests).

@@ -22,6 +22,6 @@ byte-for-byte (and upstream `descriptor/desc.pb`), so differences in these files
 Do **not** import from `../grokbot-proto` or absolute `/workspace` paths at runtime.
 Hashes and verification: `docs/protocol/baseline-manifest.md`. Regenerate: `docs/protocol/update-runbook.md`.
 
-## Workspace generation (t95u)
+## Workspace generation
 
-Current generator: packages/protocol/scripts/generate.cjs, Buf CLI1.50.0 + protoc-gen-es1.10.1 / protoc-gen-connect-es1.6.1. This replaces the historical grpcio-tools invocation above without changing schema fields. SOURCE.json records the same immutable input hashes as the daemon output. The public tarball carries these ESM artifacts locally; it has no private protocol workspace runtime dependency. Schema licence limitations above remain.
+Current generator: packages/protocol/scripts/generate.cjs, Buf CLI1.50.0 + protoc-gen-es1.10.1 / protoc-gen-connect-es1.6.1. This replaces the historical grpcio-tools invocation above without changing schema fields. Input is now `packages/protocol/baselines/schema-0.79.3-daemon-exec` (the immutable 0.79.3 archive plus the additive Exec* closure); SOURCE.json records the same input hashes as the daemon output. The public tarball carries these ESM artifacts locally; it has no private protocol workspace runtime dependency. Schema licence limitations above remain.

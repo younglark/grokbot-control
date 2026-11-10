@@ -1,4 +1,4 @@
-# UC messages-op (t156)
+# UC messages-op
 
 Evidence comes from two sources, read statically only:
 - D: = daemon.formatted.cjs.
@@ -47,7 +47,7 @@ For a draftCard messages-op, A9, F5e and Gl map to codes through Fpt (D:135897):
 handleCancel (D:136353) sets `cancelled` on the in-flight entry. The port uses the provider's `cancelledIds`, the same signal used by the cancel ACK path.
 
 ## spent-sends xUe
-In D:179371–179381, `spendSendApproval` serves only `mac_send_mail` (local-tool / Mpt x6r). It is **not on the messages-op path**. See local-tools-evidence.md.
+In D:179371–179381, `spendSendApproval` serves only `mac_send_mail` (local-tool / Mpt x6r). It is **not on the messages-op path**. See [local-tools.md](local-tools.md).
 
 ## Unreachable on Linux, not ported
 - The `messages-result` payload (TJe/qpe/R6r turnedOff, I6r timings) needs a working helper.

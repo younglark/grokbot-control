@@ -1,34 +1,35 @@
-# Protocol archive & restore method
+# 协议：归档、还原方法、契约
 
-Everything needed to (1) know which Grok Bot protocol this repo is built on, (2) re-derive it
-from a new official App build, and (3) update SDK + CLI + MCP safely.
+本仓库基于哪个 Grok Bot 协议、如何从新版 App 重新还原，以及 SDK/CLI/MCP 如何安全更新。
 
-| Doc | Purpose |
+| 文档 | 内容 |
 |---|---|
-| [baseline-manifest.md](baseline-manifest.md) | Exact upstream proto commit, App versions, file hashes, vendored files |
-| [surface-map.md](surface-map.md) | RPCs / messages this repo uses → SDK / CLI / MCP, with evidence level |
-| [auth-flow.md](auth-flow.md) | Independent Cursor login / poll / refresh, stable code anchors |
-| [static-restore.md](static-restore.md) | How the protocol and auth were recovered statically (download → extract → schema → anchors) |
-| [update-runbook.md](update-runbook.md) | Step-by-step when the official App ships a new version |
-| [compat-matrix.md](compat-matrix.md) | Version compatibility + remaining risks |
-| [canonical schema](../../packages/protocol/baselines/schema-0.79.3/) | **唯一冻结协议源** — unchanged App0.79.3 archive; shared generator feeds both consumer artifacts |
-| [baselines/](baselines) | Historical versioned used-surface/diff evidence; frozen schema now lives in packages/protocol/baselines |
-| [../../tools/protocol/](../../tools/protocol/README.md) | Offline scripts: ASAR reader, anchor fingerprint, used-surface diff, generated-code verifier |
+| [update-runbook.md](update-runbook.md) | **App 更新后重新还原协议的操作步骤**（含 daemon D: 行号重新锚定） |
+| [baseline-manifest.md](baseline-manifest.md) | 上游提取器 commit、App 版本、输入/产物哈希、daemon bundle 哈希 |
+| [static-restore.md](static-restore.md) | 静态还原方法：下载 → 解包 → schema → 锚点 |
+| [surface-map.md](surface-map.md) | 本仓库用到的 RPC/消息 → SDK/CLI/MCP，附证据等级 |
+| [protocol-map.md](protocol-map.md) | App 动作 ↔ RPC ↔ CLI/MCP 契约、错误/重试/写安全 |
+| [auth-flow.md](auth-flow.md) | 独立 Cursor 登录/poll/刷新，代码锚点 |
+| [transcript-body-0.79.3.md](transcript-body-0.79.3.md) | 0.79.3 transcript 正文（body/blob/omitted）读取证据（路径被代码引用） |
+| [attachment-pagination-0.79.3.md](attachment-pagination-0.79.3.md) | 0.79.3 附件与分页证据 |
+| [compat-matrix.md](compat-matrix.md) | 版本兼容、create/sidebar 漂移、未 live 验证项 |
+| [references.md](references.md) | 外部参考 |
+| [冻结 schema](../../packages/protocol/baselines/) | `schema-0.79.3`（不可变归档）与 `schema-0.79.3-daemon-exec`（生成器输入） |
+| [baselines/](baselines) | 历史版本的 used-surface / 全量 schema diff |
+| [tools/protocol](../../tools/protocol/README.md) | 离线脚本：ASAR 读取、锚点指纹、used-surface diff、生成代码校验 |
 
-## Evidence levels (used throughout)
+## 证据等级
 
-| Tag | Meaning |
+| 标记 | 含义 |
 |---|---|
-| **S** | Static reverse engineering of an official App build (not official API docs) |
-| **O** | Verified offline in this repo (fake transport / local fake backend tests) |
-| **L** | Confirmed against the live service (state the date and what exactly) |
+| **S** | 对官方 App 构建做静态逆向（不是官方 API 文档） |
+| **O** | 本仓库离线验证（fake transport / 本地 fake 后端） |
+| **L** | 对线上服务确认（写明日期和具体内容） |
 
-Mock/offline passing (O) is never evidence of live behaviour (L).
+O 通过不代表 L。
 
-## What is NOT here (by design)
+## 不在仓库里的东西（有意为之）
 
-- No App installer, ASAR, full bundle, or prettified bundle copies (download them from the official
-  source; see static-restore.md). Only hashes, anchors and small schema-derived data are archived.
-- No credentials, tokens, client_id values, account data, bot IDs or login URLs.
-- No `.proto` comments: the App ships compact descriptors without source comments; restored `.proto`
-  files (upstream repo) cannot recover original comments or proto file layout.
+- App 安装包、ASAR、完整或格式化后的 bundle（从官方下载，见 static-restore）。只归档哈希、锚点和少量 schema 派生数据。
+- 凭据、token、client_id、账户数据、bot ID、登录 URL。
+- `.proto` 注释：App 只带紧凑描述符，原始注释和文件布局无法还原。

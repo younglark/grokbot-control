@@ -4,7 +4,7 @@
 
 可编程控制面（原生 Connect RPC），不是另建任务系统。CLI 入口 **`gbc`**，MCP stdio 入口 **`gbc-mcp`**。当前 npm 版本 **0.1.3**。
 
-> 非官方产品。协议来自 Grok Bot 桌面 App 的静态逆向，**不是**公开 API。自动化测试以 mock 为主；部分选定 RPC 曾做过隔离 live 验收，范围见 [docs/implementation-status.md](https://github.com/younglark/grokbot-control/blob/main/docs/control-plane/implementation-status.md)，不能据此推定全部 RPC / OAuth 刷新已验证。
+> 非官方产品。协议来自 Grok Bot 桌面 App 的静态逆向，**不是**公开 API。自动化测试以 mock 为主；部分选定 RPC 曾做过隔离 live 验收，范围见 [docs/control-plane/implementation-status.md](https://github.com/younglark/grokbot-control/blob/main/docs/control-plane/implementation-status.md)，不能据此推定全部 RPC / OAuth 刷新已验证。
 
 ## Why
 
@@ -18,7 +18,7 @@ App 里能做的 Bot 生命周期、发消息、侧边栏、进度与中断，�
 - **侧边栏**：SidebarSections CRUD、移动成员（删除分组 ≠ 删除 Bot）
 - **进度**：status、原生 todos / tasks / subagents、interrupt
 - **鉴权**：独立 Cursor 浏览器登录；凭据存 `~/.gbc`（0600）；不读取 App 的 `sand-secrets.json`
-- **文件同步**：`sync pull|status|render|attachments`（无 SQLite；细节见 [docs/sync-format.md](https://github.com/younglark/grokbot-control/blob/main/docs/control-plane/sync-format.md)）
+- **文件同步**：`sync pull|status|render|attachments`（无 SQLite；细节见 [docs/control-plane/sync-format.md](https://github.com/younglark/grokbot-control/blob/main/docs/control-plane/sync-format.md)）
 - **双入口**：同一 shared SDK → CLI（`gbc`）与 MCP（`gbc-mcp`）
 - **写安全**：远端写需 `--allow-writes`；危险操作需 `--confirm=<id>`；`--dry-run` 纯本地计划
 
@@ -126,7 +126,7 @@ stdio；**stdout 仅协议帧**，不要把 CLI 日志打到 stdout。
 GBT_MCP_READONLY=1 npx --yes --package=grokbot-control@0.1.3 gbc-mcp
 ```
 
-主要工具：`list_bots`、`get_bot`、`create_bot`、`update_bot`、`delete_bot`、`get_computer_state`、`reset_computer`、`send_message`、`get_send_status`、`list_transcript`、`list_sessions`、`get_bot_status`、`list_agent_todos`、`list_agent_tasks`、`list_agent_subagents`、`interrupt_run`、sidebar 系列、`auth_*`、可选 `sync_*`。完整契约见 [docs/protocol-map.md](https://github.com/younglark/grokbot-control/blob/main/docs/protocol/protocol-map.md)。
+主要工具：`list_bots`、`get_bot`、`create_bot`、`update_bot`、`delete_bot`、`get_computer_state`、`reset_computer`、`send_message`、`get_send_status`、`list_transcript`、`list_sessions`、`get_bot_status`、`list_agent_todos`、`list_agent_tasks`、`list_agent_subagents`、`interrupt_run`、sidebar 系列、`auth_*`、可选 `sync_*`。完整契约见 [docs/protocol/protocol-map.md](https://github.com/younglark/grokbot-control/blob/main/docs/protocol/protocol-map.md)。
 
 ## Auth
 
@@ -145,8 +145,8 @@ GBT_MCP_READONLY=1 npx --yes --package=grokbot-control@0.1.3 gbc-mcp
 
 - **不内置 `client_id`**；刷新依赖 `GBT_OAUTH_CLIENT_ID` 或登录持久化绑定。旧凭据可用 `GBT_AUTH_CONFIRM_MIGRATE=1` 确认迁移。
 - 凭据独立于 App；logout 不吊销服务端会话。
-- 跨进程 refresh 使用原生 OS advisory lock（`fs-native-extensions`）；缺失 binding 则 fail closed。升级前请停止全部旧 MCP 进程。详见 [docs/auth-lock.md](https://github.com/younglark/grokbot-control/blob/main/docs/control-plane/auth-lock.md)。
-- 协议与证据：[docs/protocol/auth-flow.md](https://github.com/younglark/grokbot-control/blob/main/docs/protocol/auth-flow.md)、[docs/protocol-map.md](https://github.com/younglark/grokbot-control/blob/main/docs/protocol/protocol-map.md)。
+- 跨进程 refresh 使用原生 OS advisory lock（`fs-native-extensions`）；缺失 binding 则 fail closed。升级前请停止全部旧 MCP 进程。详见 [docs/control-plane/auth-lock.md](https://github.com/younglark/grokbot-control/blob/main/docs/control-plane/auth-lock.md)。
+- 协议与证据：[docs/protocol/auth-flow.md](https://github.com/younglark/grokbot-control/blob/main/docs/protocol/auth-flow.md)、[docs/protocol/protocol-map.md](https://github.com/younglark/grokbot-control/blob/main/docs/protocol/protocol-map.md)。
 
 示例环境变量见 [.env.example](.env.example)。
 
@@ -183,7 +183,7 @@ gbc [--json] [--mock] [--allow-writes] [--dry-run] [--base-url URL] [--auth-kind
 | 10 | unknown outcome（写后无法排除副作用时勿盲目重试） |
 | 1 | other |
 
-统一 JSON 结果契约见 [docs/architecture.md](https://github.com/younglark/grokbot-control/blob/main/docs/control-plane/architecture.md)。
+统一 JSON 结果契约见 [docs/control-plane/architecture.md](https://github.com/younglark/grokbot-control/blob/main/docs/control-plane/architecture.md)。
 
 ### Sync（摘要）
 
@@ -196,23 +196,21 @@ gbc sync attachments --dir /absolute/private/root \
   --account-id <stable-id> --team-id none --ack-unverified-scope
 ```
 
-身份是操作者显式声明，不是服务端验证；请用稳定 ID，不要用邮箱 / token 哈希。格式、预算与恢复步骤见 [docs/sync-format.md](https://github.com/younglark/grokbot-control/blob/main/docs/control-plane/sync-format.md)。
+身份是操作者显式声明，不是服务端验证；请用稳定 ID，不要用邮箱 / token 哈希。格式、预算与恢复步骤见 [docs/control-plane/sync-format.md](https://github.com/younglark/grokbot-control/blob/main/docs/control-plane/sync-format.md)。
 
 ## Docs
 
 | 文档 | 内容 |
 |---|---|
-| [docs/requirements.md](https://github.com/younglark/grokbot-control/blob/main/docs/control-plane/requirements.md) | 需求与非目标 |
-| [docs/architecture.md](https://github.com/younglark/grokbot-control/blob/main/docs/control-plane/architecture.md) | 模块、错误、写安全 |
-| [docs/protocol-map.md](https://github.com/younglark/grokbot-control/blob/main/docs/protocol/protocol-map.md) | 覆盖矩阵 / RPC / Auth 契约 |
+| [docs/control-plane/requirements.md](https://github.com/younglark/grokbot-control/blob/main/docs/control-plane/requirements.md) | 需求、非目标、验收场景 |
+| [docs/control-plane/architecture.md](https://github.com/younglark/grokbot-control/blob/main/docs/control-plane/architecture.md) | 模块、错误、写安全 |
+| [docs/control-plane/implementation-status.md](https://github.com/younglark/grokbot-control/blob/main/docs/control-plane/implementation-status.md) | 实现状态与验收边界 |
+| [docs/control-plane/sync-format.md](https://github.com/younglark/grokbot-control/blob/main/docs/control-plane/sync-format.md) | 文件同步格式与限制 |
+| [docs/control-plane/auth-lock.md](https://github.com/younglark/grokbot-control/blob/main/docs/control-plane/auth-lock.md) | 原生跨进程 refresh 锁 |
+| [docs/protocol/protocol-map.md](https://github.com/younglark/grokbot-control/blob/main/docs/protocol/protocol-map.md) | 覆盖矩阵 / RPC / Auth 契约 |
 | [docs/protocol/](https://github.com/younglark/grokbot-control/blob/main/docs/protocol/README.md) | 协议基线、静态还原、App 更新 runbook |
-| [docs/sync-format.md](https://github.com/younglark/grokbot-control/blob/main/docs/control-plane/sync-format.md) | 文件同步格式与限制 |
-| [docs/auth-lock.md](https://github.com/younglark/grokbot-control/blob/main/docs/control-plane/auth-lock.md) | 原生跨进程 refresh 锁 |
-| [docs/implementation-status.md](https://github.com/younglark/grokbot-control/blob/main/docs/control-plane/implementation-status.md) | 实现状态与验收边界 |
-| [docs/implementation-plan.md](https://github.com/younglark/grokbot-control/blob/main/docs/control-plane/implementation-plan.md) | 分期计划 |
-| [docs/acceptance.md](https://github.com/younglark/grokbot-control/blob/main/docs/control-plane/acceptance.md) | 验收 |
-| [docs/review.md](https://github.com/younglark/grokbot-control/blob/main/docs/control-plane/review.md) | 审查 |
-| [docs/references.md](https://github.com/younglark/grokbot-control/blob/main/docs/protocol/references.md) | 一手来源 |
+| [docs/protocol/references.md](https://github.com/younglark/grokbot-control/blob/main/docs/protocol/references.md) | 一手来源 |
+| [docs/HANDOFF.md](https://github.com/younglark/grokbot-control/blob/main/docs/HANDOFF.md) | 项目现状与交接 |
 | [vendor/proto-gen/NOTICE.md](vendor/proto-gen/NOTICE.md) | 生成客户端来源与许可说明 |
 
 ## Development
@@ -266,19 +264,9 @@ GitHub Release **不会**触发发布；可在 tag 推送后再基于该 tag 建
 - 本仓库**未**附带根目录 SPDX LICENSE 文件。
 - 生成器 / 运行时（Buf、Connect）为 **Apache-2.0**。
 - 协议 schema 与 `vendor/proto-gen`：**无单独官方许可声明**，由维护者从 App 静态提取恢复生成；事实来自逆向 schema，见 [vendor/proto-gen/NOTICE.md](vendor/proto-gen/NOTICE.md) 与 [docs/protocol/baseline-manifest.md](https://github.com/younglark/grokbot-control/blob/main/docs/protocol/baseline-manifest.md)。
-- 跨进程锁依赖 `fs-native-extensions@1.5.3`（Apache-2.0）；Node 20+，Linux / macOS / Windows 预编译。详见 [docs/auth-lock.md](https://github.com/younglark/grokbot-control/blob/main/docs/control-plane/auth-lock.md)。
+- 跨进程锁依赖 `fs-native-extensions@1.5.3`（Apache-2.0）；Node 20+，Linux / macOS / Windows 预编译。详见 [docs/control-plane/auth-lock.md](https://github.com/younglark/grokbot-control/blob/main/docs/control-plane/auth-lock.md)。
 
 ## 本地执行端子包：local-exec-daemon
 
-独立实现位于 [`local-exec-daemon/`](https://github.com/younglark/grokbot-control/tree/main/packages/local-exec-daemon)，与现有 SDK、`gbc` CLI、`gbc-mcp` 分开安装和构建，公开包仍为 `grokbot-control`（仓库根仅 private 编排）。公开包 npm 发布文件清单不自动包含这个私有子包。
+同仓库的私有子包 [`packages/local-exec-daemon`](https://github.com/younglark/grokbot-control/tree/main/packages/local-exec-daemon)，目标是与 App 0.79.3 原版 local-exec-daemon 行为一致。它不随本包发布，与 SDK、`gbc`、`gbc-mcp` 分开构建；目前只做过离线合成环境的验证，不是完整 drop-in。说明见 [docs/local-exec/](https://github.com/younglark/grokbot-control/blob/main/docs/local-exec/README.md)。
 
-```bash
-npm ci
-cd packages/local-exec-daemon
-npm run build
-npm test
-npm run smoke:uc
-# 可选：LOCAL_EXEC_DAEMON_ELECTRON=/path/to/electron npm run smoke:electron
-```
-
-目标基线为 App 0.79.3；目前仅离线合成控制面对照，不是完整 drop-in。审批/scope、UC 内层 ID 分配、generation/PID 抢占、完整压力与后台资源等仍有缺口，见 [修复矩阵](https://github.com/younglark/grokbot-control/blob/main/packages/local-exec-daemon/REVIEW-FIXES.md) 和 [来源/许可说明](https://github.com/younglark/grokbot-control/blob/main/packages/local-exec-daemon/NOTICE.md)。未修改官方安装、未接真实控制面；合成 fixture key 均明确为测试数据。

@@ -1,4 +1,4 @@
-# local-tool and device tools: evidence and plan (t156, not implemented)
+# local-tool and device tools
 
 ## Dispatch: handleLocalTool, D:136131–136240
 The order is:
@@ -25,17 +25,7 @@ The order is:
 - `local-tool-accepted{permissionGranted?}`, `local-tool-permission-pending{reason?}`, `local-tool-result` (R9r: done / failed / needs_permission / ask→outputJson app).
 - Lane budget a9r is 180 s. Box Dwr does not relay any local-tool frame.
 
-## Port today and plan
-- **Port today:** UC localTool frames fall into the "not understood" closing reply (`control throw z2`). That **differs** from the original, which always maps v9r localTool.
-- **Plan, reachable parts in order:**
-  - (a) v9r localTool intake.
-  - (b) unknown tool → B5e.
-  - (c) computer_* → accepted + BL, including the per-conversation queue and the onStillQueued keepalive.
-  - (d) mail tools → hke for accounts. For send, the x6r path with xUe spent-sends.
-  - (e) Obsidian vault tools (Ipt/ypt/bpt/Apt) need a separate reverse-engineering pass.
-- Local-tool replies also need the hello capability fields (mobileLocalTools).
-
-## t158 implementation (`src/uc/local-tools.ts`, `src/uc/provider.ts`)
+## Implementation (`src/uc/local-tools.ts`, `src/uc/provider.ts`)
 Implemented:
 - **Intake:** parseQueued handles `case "localTool"`.
 - **Mail (Opt → Mpt D:135625):** on Linux mail is undefined.
@@ -53,6 +43,6 @@ Implemented:
 - **UC hello capabilities (D:178137–178175, Linux):** `{messagesOp/localStandingGrants only if a sidecar is present, messagesOpGeneration:4, aiToolSetup:true, mobileLocalTools:[]}`. computerUse and device are empty, so localToolAppConsent, localToolGrantSeen and localToolHelperName are omitted.
 
 Documented only, not ported:
-- **Obsidian:** implemented in t159; see obsidian-evidence.md.
+- **Obsidian:** implemented separately; see [obsidian.md](obsidian.md).
 - **The computer-use dev override:** on non-darwin, the helper is still found if the sand-dev `local-cua-helper.json` override exists and the NLe gate is open (Xpt D:136712). This is not ported; the port always returns BL.
 - **The darwin helper / sidecar path:** not ported.

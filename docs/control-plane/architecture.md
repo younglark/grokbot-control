@@ -1,4 +1,4 @@
-# 架构（细化）
+# 控制面架构
 
 ## 1. 定位
 
@@ -18,22 +18,18 @@
                                       GrokBotService / DashboardService
 ```
 
-## 2. 建议模块与目录（设计，未实现）
+## 2. 模块与目录（`packages/grokbot-control/src/`）
 
 ```
 src/
   auth/           # bootstrap, store, refresh single-flight, logout(本地)
   connect/        # transport, headers, deadline, error map
-  ops/
-    bot.ts        # list/create/get(via list)/update/delete
-    message.ts    # send/status/history
-    session.ts
-    sidebar.ts    # sections read/patch/verify
-    progress.ts   # status/todos/tasks/subagents/interrupt
-    room.ts       # 显式分列，非默认分组
-  dto/            # 稳定 JSON schema_version
-  cli/            # 薄适配
-  mcp/            # 薄适配 + toolsets
+  ops/          # bot / message / session / sidebar / progress / computer / auth（Room 未实现）
+  sync/         # 文件归档、附件、正文补读
+  dto/          # 稳定 JSON schema_version
+  cli/          # 薄适配
+  mcp/          # 薄适配 + toolsets
+  testing/      # mock 后端
 ```
 
 **禁止默认提供：** 任意 `raw_rpc`、Admin/Internal 代理、Vault 明文工具。

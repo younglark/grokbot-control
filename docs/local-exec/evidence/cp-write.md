@@ -1,4 +1,4 @@
-# Atomic file writer cp — t159
+# Atomic file writer cp
 
 **Original cp (D:80591–80603), default path (no noFollow).**
 1. yLe: `mkdirSync(dirname, {recursive: true})`.

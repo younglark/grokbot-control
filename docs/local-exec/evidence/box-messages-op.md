@@ -1,4 +1,4 @@
-# Box `messages-op` and Mwr replies (t155)
+# Box `messages-op` and Mwr replies
 
 Evidence:
 - D: is daemon.formatted.cjs.

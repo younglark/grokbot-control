@@ -1,4 +1,4 @@
-# discover-ai-tool (t154)
+# discover-ai-tool
 
 Static 0.79.3 evidence (`daemon.formatted.cjs`, D:). Implemented against synthetic fixture homes only; the real `~/.claude` / `~/.codex` were never read by tests.
 

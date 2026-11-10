@@ -1,4 +1,8 @@
-# cf2ba0c review repairs — t89u worktree (including independent follow-up)
+# local-exec-daemon 审查修复轮次（历史）
+
+> 存档：原 `packages/local-exec-daemon/REVIEW-FIXES.md`，t89u 起各轮审查发现、红/绿证据和当时剩余缺口的逐轮记录。很多“剩余缺口”后来已修复；当前状态以 [local-exec/remaining-diffs.md](../local-exec/remaining-diffs.md) 为准。
+
+原标题：cf2ba0c review repairs — t89u worktree (including independent follow-up)
 
 Historical t89u review was worktree-only (no push/Page/install/account changes). Under t90u, the reviewed work is integrated into `local-exec-daemon/` in grokbot-control, with an authorized repository commit/push. Original test statistics below remain historical; integration validation is recorded separately.
 

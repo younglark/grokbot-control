@@ -1,7 +1,7 @@
 # Auth flow (independent Cursor browser login)
 
-Implementation: `src/auth/provider.ts`, `src/auth/store.ts`, `src/ops/auth.ts`. Contract table and CLI/MCP
-commands: [../protocol-map.md#auth-independent-cursor-browser-login](protocol-map.md). This page records
+Implementation: `packages/grokbot-control/src/auth/provider.ts`, `src/auth/store.ts`, `src/ops/auth.ts`. Contract table and CLI/MCP
+commands: [protocol-map.md](protocol-map.md) (section Auth). This page records
 **where the evidence lives** so it can be re-found in a new build.
 
 | Step | Behaviour | Stable anchor (search the extracted bundle) | 0.79.2 location (A=main-app.cjs) | Level |
@@ -24,7 +24,7 @@ Boundaries:
 - App credential storage (`sand-secrets.json` under Electron userData) is documented only so it is NOT reused.
 
 
-## Token auto-refresh hardening (t47u)
+## Token auto-refresh state machine
 
 State machine (minimal, App-aligned):
 
@@ -42,7 +42,7 @@ State machine (minimal, App-aligned):
    unconfigured/client_mismatch/malformed/redirect — not only `retryable`). `shouldLogout`/policy: rescue newer
    pair under lock, else conditional clear — never fallback revoked token; `invalid_grant` after an ambiguous
    timeout keeps creds. New access JWT `sub` must match expected account subject or the rotation is refused.
-5. **logout/login/save** share `withCredentialLock` with refresh; native advisory-lock ownership is OS-managed (Linux OFD / macOS flock / Windows LockFileEx; see ../auth-lock.md); never stale-break/unlink lock files.
+5. **logout/login/save** share `withCredentialLock` with refresh; native advisory-lock ownership is OS-managed (Linux OFD / macOS flock / Windows LockFileEx; see [auth-lock.md](../control-plane/auth-lock.md)); never stale-break/unlink lock files.
 6. **CLI/MCP**: `auth refresh` vs `--force` / `force:true`; whoami offline; AuthOps returns non-secret metadata;
    MCP `auth_refresh` excluded from READONLY.
 7. **RPC 401**: pass the rejected bearer into force refresh; if disk already rotated, adopt without another

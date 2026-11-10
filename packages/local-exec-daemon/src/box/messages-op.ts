@@ -1,6 +1,6 @@
 /** Box `messages-op` — static port of local-exec-daemon 0.79.3 (D: = daemon.formatted.cjs) and the Linux asar
  * `dist/local-exec-daemon/messages-worker.cjs` (W: = /tmp/exec-t155-evidence/messages-worker.formatted.cjs,
- * asar integrity sha256 b6f5c672…667b). Reachable Linux behaviour only; see docs/local-exec/box-messages-op-evidence.md.
+ * asar integrity sha256 b6f5c672…667b). Reachable Linux behaviour only; see docs/local-exec/evidence/box-messages-op.md.
  */
 import * as fs from "node:fs";
 import * as os from "node:os";
