@@ -10,7 +10,7 @@
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present && node --test test/*.test.mjs",
+    "test": "npm run test --workspaces --if-present && node --test --test-timeout=600000 test/*.test.mjs",
     "generate": "npm run generate -w @grokbot-control/protocol",
     "generate:check": "npm run generate:check -w @grokbot-control/protocol",
     "test:protocol-tools": "python3 -m unittest discover -s tools/protocol",
