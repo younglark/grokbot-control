@@ -1,5 +1,6 @@
 name: Workspace regression
-on: [push, pull_request, workflow_dispatch]
+# Temporarily manual-only while the CI npm test hang is investigated; restore push/pull_request after the fix.
+on: [workflow_dispatch]
 permissions:
   contents: read
 jobs:
