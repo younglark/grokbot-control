@@ -53,6 +53,13 @@ test('public lifecycle ships only runtime artifacts and no workflow publishes to
  const rootPkg=json('package.json');
  assert.equal(rootPkg.scripts['release:github'],'node scripts/release-github.mjs');
  assert.ok(existsSync(join(root,'scripts/release-github.mjs')));
+ const release=readFileSync(join(root,'.github/workflows/release-github.yml'),'utf8');
+ assert.match(release,/tags:\s*\n\s*-\s*'v\[0-9\]\*'/);
+ assert.doesNotMatch(release,/-\s*['"]npm-v/);
+ assert.match(release,/contents:\s*write/);
+ assert.match(release,/UC_SKIP_OFFICIAL/);
+ assert.match(release,/release-github\.mjs --ci --skip-tests/);
+ assert.doesNotMatch(release,/--force/);
 });
 test('headless and Docker boundaries are documentation, not fake implemented products',()=>{
  for(const p of ['packages/headless-node/package.json','packages/headless-node/src/cli.ts','deploy/headless/Dockerfile','deploy/headless/docker-compose.yml'])assert.equal(existsSync(join(root,p)),false,p);

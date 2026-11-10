@@ -1,0 +1,64 @@
+# Mint a parentless npm-v<version> tag for GitHub installs of grokbot-control.
+#
+# Trigger: push of a v* version tag only. The glob v[0-9]* does not match
+# npm-v* tags, and the job also refuses a source ref that is npm-v*.
+# This workflow does not publish to npmjs.
+#
+# Official flow (after main is updated):
+#   git tag -a vX.Y.Z <main-commit>
+#   git push origin refs/tags/vX.Y.Z
+# Then this job packs packages/grokbot-control, writes an orphan commit,
+# and pushes npm-vX.Y.Z. If that tag already exists, the job fails
+# without force-pushing. A failing test step never reaches the tag step.
+#
+# Do not push v* until GitHub Actions can run for this repository.
+
+name: Release GitHub install tag
+
+on:
+  push:
+    tags:
+      - 'v[0-9]*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-github-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: startsWith(github.ref, 'refs/tags/v') && !startsWith(github.ref_name, 'npm-')
+    runs-on: ubuntu-latest
+    env:
+      UC_SKIP_OFFICIAL: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install
+        run: npm ci
+
+      - name: Install ripgrep
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+
+      - name: Check generated code
+        run: npm run generate:check
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Create and push npm-v tag
+        run: node scripts/release-github.mjs --ci --skip-tests

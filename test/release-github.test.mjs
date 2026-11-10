@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync, mkdirSync, readFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,6 +10,9 @@ import {
   LIFECYCLE_SCRIPTS,
   parseArgs,
   tagName,
+  versionTagName,
+  parseSourceTag,
+  assertCiSourceTag,
   stripLifecycleScripts,
   assertPreconditions,
   pushCommands,
@@ -21,19 +24,47 @@ import {
 const repo = join(dirname(fileURLToPath(import.meta.url)), '..');
 const script = join(repo, 'scripts/release-github.mjs');
 
-test('parseArgs accepts known flags and rejects unknown ones', () => {
-  assert.deepEqual(parseArgs([]), { skipTests: false, allowBranch: false, dryRun: false, push: false, help: false });
+test('parseArgs accepts known flags and rejects --push and unknown ones', () => {
+  assert.deepEqual(parseArgs([]), {
+    skipTests: false,
+    allowBranch: false,
+    dryRun: false,
+    writeLocalTag: false,
+    ci: false,
+    help: false,
+  });
   assert.equal(parseArgs(['--skip-tests', '--allow-branch', '--dry-run']).dryRun, true);
+  assert.equal(parseArgs(['--write-local-tag']).writeLocalTag, true);
+  assert.equal(parseArgs(['--ci', '--skip-tests']).ci, true);
   assert.equal(parseArgs(['--help']).help, true);
   assert.throws(() => parseArgs(['--force']), (err) => err.exit === EXIT.usage && /unknown flag/.test(err.message));
   assert.throws(() => parseArgs(['--skip']), (err) => err.exit === EXIT.usage);
-  assert.throws(() => parseArgs(['--push', '--dry-run']), (err) => err.exit === EXIT.usage && /cannot be combined/.test(err.message));
+  assert.throws(() => parseArgs(['--push']), (err) => err.exit === EXIT.usage && /Actions/.test(err.message));
+  assert.throws(() => parseArgs(['--write-local-tag', '--dry-run']), (err) => err.exit === EXIT.usage);
+  assert.throws(() => parseArgs(['--ci', '--dry-run']), (err) => err.exit === EXIT.usage);
+  assert.throws(() => parseArgs(['--ci', '--write-local-tag']), (err) => err.exit === EXIT.usage);
+  assert.throws(() => parseArgs(['--ci', '--allow-branch']), (err) => err.exit === EXIT.usage);
 });
 
 test('tagName formats npm-v and rejects junk', () => {
   assert.equal(tagName('0.2.0'), 'npm-v0.2.0');
   assert.equal(tagName('1.0.0-rc.1'), 'npm-v1.0.0-rc.1');
+  assert.equal(versionTagName('0.2.0'), 'v0.2.0');
   assert.throws(() => tagName('latest'), (err) => err.exit === EXIT.usage);
+});
+
+test('parseSourceTag accepts v* refs and rejects npm-v*', () => {
+  assert.deepEqual(parseSourceTag('refs/tags/v0.2.0'), { tag: 'v0.2.0', version: '0.2.0' });
+  assert.deepEqual(parseSourceTag('v1.0.0-rc.1'), { tag: 'v1.0.0-rc.1', version: '1.0.0-rc.1' });
+  assert.throws(() => parseSourceTag('refs/tags/npm-v0.2.0'), (err) => err.exit === EXIT.precondition && /not npm-v/.test(err.message) === false ? /must be v\*/.test(err.message) : true);
+  assert.throws(() => parseSourceTag('npm-v0.2.0'), (err) => err.exit === EXIT.precondition);
+  assert.throws(() => parseSourceTag('refs/tags/latest'), (err) => err.exit === EXIT.precondition);
+  assert.throws(() => parseSourceTag(''), (err) => err.exit === EXIT.precondition);
+  assert.deepEqual(assertCiSourceTag({ version: '0.2.0', ref: 'refs/tags/v0.2.0' }), { tag: 'v0.2.0', version: '0.2.0' });
+  assert.throws(
+    () => assertCiSourceTag({ version: '0.2.0', ref: 'refs/tags/v0.1.3' }),
+    (err) => err.exit === EXIT.precondition && /does not match/.test(err.message),
+  );
 });
 
 test('stripLifecycleScripts removes pack/install hooks and keeps bins/runtime scripts', () => {
@@ -68,16 +99,22 @@ test('assertPreconditions and pushCommands cover the main safety rails', () => {
   assert.doesNotThrow(() =>
     assertPreconditions({ branch: 'build/github-distribution', porcelain: '', allowBranch: true, tag: 'npm-v0.2.0', tagExists: false }),
   );
+  assert.doesNotThrow(() => assertWorktree({ branch: '', porcelain: '', allowBranch: false, ci: true }));
+  assert.throws(
+    () => assertWorktree({ branch: '', porcelain: '', allowBranch: false, ci: false }),
+    (err) => err.exit === EXIT.precondition && /detached HEAD/.test(err.message),
+  );
   assert.throws(
     () => assertPreconditions({ branch: 'main', porcelain: '', allowBranch: false, tag: 'npm-v0.2.0', tagExists: true }),
     (err) => err.exit === EXIT.conflict,
   );
-  assert.deepEqual(pushCommands({ branch: 'build/github-distribution', tag: 'npm-v0.2.0' }), {
+  assert.deepEqual(pushCommands({ branch: 'build/github-distribution', version: '0.2.0' }), {
     branch: 'git push -u origin build/github-distribution',
     main: 'git push origin main',
-    tag: 'git push origin refs/tags/npm-v0.2.0',
+    version_tag: 'git push origin refs/tags/v0.2.0',
   });
-  assert.equal(pushCommands({ branch: 'main', tag: 'npm-v0.2.0' }).branch, null);
+  assert.equal(pushCommands({ branch: 'main', version: '0.2.0' }).branch, null);
+  assert.equal(Object.prototype.hasOwnProperty.call(pushCommands({ branch: 'main', version: '0.2.0' }), 'tag'), false);
   const err = formatError(Object.assign(new Error('x'), { code: 'usage', hint: 'try --help' }));
   assert.equal(err.ok, false);
   assert.equal(err.hint, 'try --help');
@@ -99,11 +136,13 @@ function spawn(args, opts = {}) {
   }
 }
 
-test('CLI --help writes usage to stdout and exits 0; unknown flags exit 2 with JSON on stderr', () => {
+test('CLI --help writes usage to stdout and exits 0; unknown flags and --push exit 2 with JSON on stderr', () => {
   const help = spawn(['--help']);
   assert.equal(help.status, 0);
   assert.match(help.stdout, /EXIT CODES/);
   assert.match(help.stdout, /--allow-branch/);
+  assert.match(help.stdout, /--ci/);
+  assert.match(help.stdout, /Do not push npm-v/);
   const bad = spawn(['--limt']);
   assert.equal(bad.status, EXIT.usage);
   const payload = JSON.parse(bad.stderr);
@@ -111,6 +150,10 @@ test('CLI --help writes usage to stdout and exits 0; unknown flags exit 2 with J
   assert.equal(payload.code, 'usage');
   assert.match(payload.hint, /--skip-tests/);
   assert.equal(bad.stdout, '');
+  const push = spawn(['--push']);
+  assert.equal(push.status, EXIT.usage);
+  assert.match(JSON.parse(push.stderr).message, /Actions/);
+  assert.equal(push.stdout, '');
 });
 
 test('inspectRepo and assertWorktree reject a missing git dir and a dirty tree', () => {

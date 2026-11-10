@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 /**
- * Pack packages/grokbot-control and create a parentless local tag npm-v<version>
- * whose tree is the installable package (for npx github:...#npm-v<version>).
- * Does not push unless --push is passed; --push sends only the tag, never main.
+ * Pack packages/grokbot-control into a parentless commit whose tree is the
+ * installable package (for npx github:...#npm-v<version>).
+ *
+ * Default is a local preview: checks, pack, and an orphan commit. It does not
+ * create or push the official npm-v<version> tag. Official tags are minted by
+ * .github/workflows/release-github.yml after a v* tag is pushed.
  */
 import { mkdtempSync, readFileSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -30,34 +33,44 @@ export const LIFECYCLE_SCRIPTS = Object.freeze([
   'build',
 ]);
 
-const HELP = `release-github — pack grokbot-control and tag a parentless GitHub-install tree
+const HELP = `release-github — pack grokbot-control into a parentless GitHub-install tree
 
 USAGE:
   npm run release:github -- [flags]
   node scripts/release-github.mjs [flags]
 
 FLAGS:
-  --skip-tests      Skip generate:check, build, and npm test
-  --allow-branch    Allow a branch other than main (worktree must still be clean)
-  --dry-run         Run checks and pack; do not create a commit or tag
-  --push            After tagging, push only the tag to origin (never pushes main)
-  --help            Show this help
+  --skip-tests        Skip generate:check, build, and npm test
+  --allow-branch      Allow a branch other than main (worktree must still be clean)
+  --dry-run           Run checks and pack; do not create a commit or tag
+  --write-local-tag   Also create a local npm-v<version> tag for verification
+  --ci                Actions mode: require GITHUB_REF=refs/tags/v*, mint and
+                      push npm-v<version> (never force-pushes)
+  --help              Show this help
 
 EXAMPLES:
   npm run release:github --
   npm run release:github -- --dry-run
-  npm run release:github -- --allow-branch
+  npm run release:github -- --allow-branch --skip-tests
 
 EXIT CODES:
   0  success
   2  usage (unknown or invalid flag)
-  3  precondition (dirty worktree, not on main, not a git repo)
-  6  conflict (tag already exists)
+  3  precondition (dirty worktree, not on main, not a git repo, missing CI ref)
+  6  conflict (npm-v tag already exists locally or on origin)
   1  command failed (generate, build, test, pack, git)
 
 stdout is a JSON result object. Progress, warnings, and errors go to stderr.
---push is opt-in and only runs git push origin refs/tags/npm-v<version>.
-Push main or the source branch as a separate, explicit command after review.
+
+Default is preview only: an orphan commit is created, but the official
+npm-v<version> tag is NOT written or pushed. Official release is:
+
+  git push origin main
+  git tag -a v<version> <main-commit>
+  git push origin refs/tags/v<version>
+
+Then GitHub Actions mints and pushes npm-v<version>. Do not push npm-v*
+from a laptop. Do not push v* until Actions can run.
 `;
 
 export function tagName(version) {
@@ -67,12 +80,56 @@ export function tagName(version) {
   return `npm-v${version}`;
 }
 
+export function versionTagName(version) {
+  return `v${version}`;
+}
+
+export function parseSourceTag(ref) {
+  if (typeof ref !== 'string' || !ref.trim()) {
+    throw Object.assign(new Error('missing source tag ref'), {
+      code: 'precondition',
+      exit: EXIT.precondition,
+      hint: '--ci requires GITHUB_REF to be refs/tags/v<version>',
+    });
+  }
+  const name = ref.replace(/^refs\/tags\//, '');
+  if (name.startsWith('npm-v')) {
+    throw Object.assign(new Error(`source tag must be v*, not ${name}`), {
+      code: 'precondition',
+      exit: EXIT.precondition,
+      hint: 'this workflow must run only on v* tags; npm-v* is the output tag',
+    });
+  }
+  const match = /^v(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)$/.exec(name);
+  if (!match) {
+    throw Object.assign(new Error(`invalid source tag: ${ref}`), {
+      code: 'precondition',
+      exit: EXIT.precondition,
+      hint: 'expected refs/tags/vMAJOR.MINOR.PATCH',
+    });
+  }
+  return { tag: name, version: match[1] };
+}
+
+export function assertCiSourceTag({ version, ref }) {
+  const parsed = parseSourceTag(ref);
+  if (parsed.version !== version) {
+    throw Object.assign(new Error(`source tag ${parsed.tag} does not match package version ${version}`), {
+      code: 'precondition',
+      exit: EXIT.precondition,
+      hint: 'the v* tag and packages/grokbot-control package.json version must be the same',
+    });
+  }
+  return parsed;
+}
+
 export function parseArgs(argv) {
   const opts = {
     skipTests: false,
     allowBranch: false,
     dryRun: false,
-    push: false,
+    writeLocalTag: false,
+    ci: false,
     help: false,
   };
   for (const arg of argv) {
@@ -86,9 +143,18 @@ export function parseArgs(argv) {
       case '--dry-run':
         opts.dryRun = true;
         break;
-      case '--push':
-        opts.push = true;
+      case '--write-local-tag':
+        opts.writeLocalTag = true;
         break;
+      case '--ci':
+        opts.ci = true;
+        break;
+      case '--push':
+        throw Object.assign(new Error('--push is not supported; official npm-v tags are minted by GitHub Actions after a v* tag is pushed'), {
+          code: 'usage',
+          exit: EXIT.usage,
+          hint: 'run a local preview without --push; push main, then push v<version> once Actions can run',
+        });
       case '--help':
       case '-h':
         opts.help = true;
@@ -97,15 +163,34 @@ export function parseArgs(argv) {
         throw Object.assign(new Error(`unknown flag: ${arg}`), {
           code: 'usage',
           exit: EXIT.usage,
-          hint: 'valid flags: --skip-tests --allow-branch --dry-run --push --help',
+          hint: 'valid flags: --skip-tests --allow-branch --dry-run --write-local-tag --ci --help',
         });
     }
   }
-  if (opts.push && opts.dryRun) {
-    throw Object.assign(new Error('--push cannot be combined with --dry-run'), {
+  if (opts.writeLocalTag && opts.dryRun) {
+    throw Object.assign(new Error('--write-local-tag cannot be combined with --dry-run'), {
       code: 'usage',
       exit: EXIT.usage,
-      hint: 'run a local tag first, then rerun without --dry-run; add --push only after review',
+      hint: 'rerun without --dry-run if you need a local verification tag',
+    });
+  }
+  if (opts.ci && opts.dryRun) {
+    throw Object.assign(new Error('--ci cannot be combined with --dry-run'), {
+      code: 'usage',
+      exit: EXIT.usage,
+    });
+  }
+  if (opts.ci && opts.writeLocalTag) {
+    throw Object.assign(new Error('--ci cannot be combined with --write-local-tag'), {
+      code: 'usage',
+      exit: EXIT.usage,
+      hint: '--ci already mints and pushes the official npm-v tag',
+    });
+  }
+  if (opts.ci && opts.allowBranch) {
+    throw Object.assign(new Error('--ci cannot be combined with --allow-branch'), {
+      code: 'usage',
+      exit: EXIT.usage,
     });
   }
   return opts;
@@ -117,11 +202,12 @@ export function stripLifecycleScripts(pkg) {
   return next;
 }
 
-export function pushCommands({ branch, tag }) {
+export function pushCommands({ branch, version }) {
+  const sourceTag = versionTagName(version);
   return {
     branch: branch && branch !== 'main' ? `git push -u origin ${branch}` : null,
     main: 'git push origin main',
-    tag: `git push origin refs/tags/${tag}`,
+    version_tag: `git push origin refs/tags/${sourceTag}`,
   };
 }
 
@@ -177,7 +263,7 @@ export function inspectRepo(repo) {
   return { gitDir, branch, porcelain };
 }
 
-export function assertWorktree({ branch, porcelain, allowBranch }) {
+export function assertWorktree({ branch, porcelain, allowBranch, ci = false }) {
   if (porcelain) {
     throw Object.assign(new Error('worktree is not clean'), {
       code: 'precondition',
@@ -185,6 +271,7 @@ export function assertWorktree({ branch, porcelain, allowBranch }) {
       hint: 'commit or stash local changes, then rerun',
     });
   }
+  if (ci) return;
   if (!branch) {
     throw Object.assign(new Error('detached HEAD is not allowed'), {
       code: 'precondition',
@@ -196,17 +283,17 @@ export function assertWorktree({ branch, porcelain, allowBranch }) {
     throw Object.assign(new Error(`must run on main (current branch: ${branch})`), {
       code: 'precondition',
       exit: EXIT.precondition,
-      hint: 'merge to main first, or pass --allow-branch for a local-only tag from this branch',
+      hint: 'merge to main first, or pass --allow-branch for a local preview from this branch',
     });
   }
 }
 
-export function assertTagAvailable({ tag, tagExists }) {
+export function assertTagAvailable({ tag, tagExists, remote = false }) {
   if (tagExists) {
-    throw Object.assign(new Error(`tag ${tag} already exists`), {
+    throw Object.assign(new Error(remote ? `tag ${tag} already exists on origin` : `tag ${tag} already exists`), {
       code: 'conflict',
       exit: EXIT.conflict,
-      hint: 'do not overwrite an existing release tag; choose a new version or delete the tag only with explicit approval',
+      hint: 'do not overwrite an existing release tag; choose a new version. never force-push npm-v tags',
     });
   }
 }
@@ -216,12 +303,30 @@ export function assertPreconditions(opts) {
   if ('tagExists' in opts) assertTagAvailable(opts);
 }
 
-function tagExists(repo, tag) {
+function localTagExists(repo, tag) {
   try {
     git(repo, ['rev-parse', '--verify', '--quiet', `refs/tags/${tag}`]);
     return true;
   } catch {
     return false;
+  }
+}
+
+export function remoteTagExists(repo, tag, remote = 'origin') {
+  try {
+    const out = run('git', ['ls-remote', '--exit-code', '--tags', remote, `refs/tags/${tag}`], {
+      cwd: repo,
+      timeout: 60_000,
+    }).trim();
+    return out.length > 0;
+  } catch (err) {
+    if (err.status === 2) return false;
+    throw Object.assign(new Error(`failed to query ${remote} for tag ${tag}`), {
+      code: 'failed',
+      exit: EXIT.failed,
+      hint: 'check git remotes and credentials; the job must fail closed if the tag cannot be queried',
+      stderr: err.stderr,
+    });
   }
 }
 
@@ -280,20 +385,33 @@ function countTrackedFiles(repo, gitDir, commit) {
   return out.trim() ? out.trim().split('\n') : [];
 }
 
-export async function releaseGithub(repo, opts) {
+export async function releaseGithub(repo, opts, env = process.env) {
   const inspect = inspectRepo(repo);
   assertWorktree({
     branch: inspect.branch,
     porcelain: inspect.porcelain,
     allowBranch: opts.allowBranch,
+    ci: opts.ci,
   });
   const controlPkg = JSON.parse(readFileSync(join(repo, 'packages/grokbot-control/package.json'), 'utf8'));
   const version = controlPkg.version;
   const tag = tagName(version);
-  assertTagAvailable({ tag, tagExists: tagExists(repo, tag) });
+  const sourceTag = versionTagName(version);
 
-  if (inspect.branch !== 'main') {
-    log(`warning: tagging from branch ${inspect.branch} because --allow-branch was set`);
+  if (opts.ci) {
+    assertCiSourceTag({ version, ref: env.GITHUB_REF || env.GITHUB_REF_NAME });
+  }
+
+  const shouldWriteTag = Boolean(opts.ci || opts.writeLocalTag);
+  if (shouldWriteTag) {
+    assertTagAvailable({ tag, tagExists: localTagExists(repo, tag) });
+  }
+  if (opts.ci) {
+    assertTagAvailable({ tag, tagExists: remoteTagExists(repo, tag), remote: true });
+  }
+
+  if (!opts.ci && inspect.branch && inspect.branch !== 'main') {
+    log(`warning: preview from branch ${inspect.branch} because --allow-branch was set`);
   }
 
   if (!opts.skipTests) {
@@ -321,6 +439,7 @@ export async function releaseGithub(repo, opts) {
     }
 
     const message = `release: grokbot-control ${version} (GitHub install tree)`;
+    const commands = pushCommands({ branch: inspect.branch, version });
     if (opts.dryRun) {
       const files = packed.files?.length ?? null;
       return {
@@ -328,13 +447,15 @@ export async function releaseGithub(repo, opts) {
         dry_run: true,
         version,
         tag,
+        source_tag: sourceTag,
         commit: null,
-        source_branch: inspect.branch,
+        source_branch: inspect.branch || null,
         tests_run: !opts.skipTests,
+        tagged: false,
         pushed: false,
         files,
-        push_commands: pushCommands({ branch: inspect.branch, tag }),
-        hint: `dry run only; rerun without --dry-run to create local tag ${tag}`,
+        push_commands: commands,
+        hint: `dry run only; official ${tag} is minted by GitHub Actions after pushing ${sourceTag}. Do not push ${tag} from this machine.`,
       };
     }
 
@@ -344,7 +465,25 @@ export async function releaseGithub(repo, opts) {
       workTree,
       message,
     });
-    run('git', ['tag', '-a', tag, commit, '-m', message], { cwd: repo });
+
+    let tagged = false;
+    let pushed = false;
+    if (shouldWriteTag) {
+      assertTagAvailable({ tag, tagExists: localTagExists(repo, tag) });
+      run('git', ['tag', '-a', tag, commit, '-m', message], { cwd: repo });
+      tagged = true;
+      if (opts.ci) {
+        assertTagAvailable({ tag, tagExists: remoteTagExists(repo, tag), remote: true });
+        log(`pushing ${tag} to origin (never force, never pushes main)`);
+        run('git', ['push', 'origin', `refs/tags/${tag}`], { cwd: repo });
+        pushed = true;
+      } else {
+        log(`wrote local verification tag ${tag} -> ${commit}; do not push this tag`);
+      }
+    } else {
+      log(`preview orphan commit ${commit} for ${tag}; official tag is minted by Actions after pushing ${sourceTag}`);
+    }
+
     const files = countTrackedFiles(repo, inspect.gitDir, commit);
     const after = inspectRepo(repo);
     if (after.porcelain || after.branch !== inspect.branch) {
@@ -355,34 +494,35 @@ export async function releaseGithub(repo, opts) {
       });
     }
 
-    let pushed = false;
-    if (opts.push) {
-      log(`pushing ${tag} to origin (main is not pushed)`);
-      run('git', ['push', 'origin', `refs/tags/${tag}`], { cwd: repo });
-      pushed = true;
-    }
-
-    const commands = pushCommands({ branch: inspect.branch, tag });
-    log(`local tag ${tag} -> ${commit} (${files.length} files). Push commands:`);
+    log(`orphan commit ${commit} (${files.length} files). Push commands (do not push ${tag}):`);
     if (commands.branch) log(`  ${commands.branch}`);
     log(`  ${commands.main}`);
-    log(`  ${commands.tag}`);
+    log(`  ${commands.version_tag}   # only after Actions can run`);
+
+    let hint;
+    if (pushed) {
+      hint = `official tag ${tag} was pushed from ${sourceTag}`;
+    } else if (tagged) {
+      hint = `local tag ${tag} is for verification only; do not push it. Official release is push main, then push ${sourceTag} once Actions can run.`;
+    } else {
+      hint = `preview only: created orphan commit ${commit}. Official ${tag} is minted by GitHub Actions after pushing ${sourceTag}. Do not push ${tag} from this machine.`;
+    }
 
     return {
       ok: true,
       dry_run: false,
       version,
       tag,
+      source_tag: sourceTag,
       commit,
-      source_branch: inspect.branch,
+      source_branch: inspect.branch || null,
       tests_run: !opts.skipTests,
+      tagged,
       pushed,
       files: files.length,
       paths: files,
       push_commands: commands,
-      hint: pushed
-        ? `tag ${tag} was pushed; push main or the source branch as a separate command after review`
-        : `tag ${tag} is local only; push the branch/main and the tag as separate commands after review`,
+      hint,
     };
   } finally {
     rmSync(sandbox, { recursive: true, force: true });
