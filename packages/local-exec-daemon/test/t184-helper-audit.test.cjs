@@ -12,6 +12,8 @@ const D =
   process.env.DAEMON_FORMATTED ||
   "/workspace/grokbot-node-analysis-0793/daemon.formatted.cjs";
 const SRC = path.join(__dirname, "..", "src");
+// The formatted official daemon is a local reverse-engineering artifact, not in the repo or CI.
+const SKIP_D = fs.existsSync(D) ? false : `set DAEMON_FORMATTED (missing ${D})`;
 
 function readSrcTree(dir, acc = []) {
   for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -25,7 +27,7 @@ function readSrcTree(dir, acc = []) {
 }
 
 describe("t184 helper-unit audit pins", () => {
-  it("D: noFollow is only consumed by cp/YR; sole root caller is sce→WUe (keepDamaged)", () => {
+  it("D: noFollow is only consumed by cp/YR; sole root caller is sce→WUe (keepDamaged)", { skip: SKIP_D }, () => {
     const text = fs.readFileSync(D, "utf8");
     const lines = text.split("\n");
     // Every "noFollow" occurrence
@@ -43,7 +45,7 @@ describe("t184 helper-unit audit pins", () => {
     assert.match(text, /keepDamagedCopy:\s*\(\)\s*=>/);
   });
 
-  it("D: lgt settingsStore uses getters only (no loadForWrite/persist)", () => {
+  it("D: lgt settingsStore uses getters only (no loadForWrite/persist)", { skip: SKIP_D }, () => {
     const lines = fs.readFileSync(D, "utf8").split("\n");
     // lgt body roughly 179109–179470; collect N.<method>
     const body = lines.slice(179108, 179469).join("\n");
@@ -61,7 +63,7 @@ describe("t184 helper-unit audit pins", () => {
     assert.ok(!body.includes("keepDamagedCopy"));
   });
 
-  it("D: settings read onDamage always passes copyPath: null", () => {
+  it("D: settings read onDamage always passes copyPath: null", { skip: SKIP_D }, () => {
     const lines = fs.readFileSync(D, "utf8").split("\n");
     // reportUnreadable / readText onDamage sites
     const slice = lines.slice(82230, 82270).join("\n");
