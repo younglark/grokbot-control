@@ -31,6 +31,7 @@ jobs:
   release:
     if: startsWith(github.ref, 'refs/tags/v') && !startsWith(github.ref_name, 'npm-')
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       UC_SKIP_OFFICIAL: '1'
     steps:
@@ -53,6 +54,7 @@ jobs:
         run: npm run build
 
       - name: Test
+        timeout-minutes: 15
         run: npm test
 
       - name: Configure git identity

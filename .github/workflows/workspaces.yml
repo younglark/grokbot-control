@@ -4,6 +4,9 @@ permissions:
   contents: read
 jobs:
   offline:
+    timeout-minutes: 30
+    env:
+      UC_SKIP_OFFICIAL: '1'
     strategy:
       fail-fast: false
       matrix:
@@ -19,6 +22,7 @@ jobs:
       - run: npm run generate:check
       - run: npm run build
       - run: npm test
+        timeout-minutes: 15
       - run: npm run test:protocol-tools
       - run: npm run smoke:uc
       # Electron is optional: a missing external host must report skip, not acceptance.
