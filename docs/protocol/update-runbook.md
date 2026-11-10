@@ -60,4 +60,4 @@ daemon 的 oneof/cancel 测试和独立 golden 测试必须全部通过。
 ## 6. live 与发布
 
 - live 检查需单独批准，顺序是：独立登录 → 只读 RPC → 明确批准的一次性写入。离线/mock/codegen 检查不算 live 验收。不确定的写操作绝不盲目重试。
-- 控制面（`gbc` / `gbc-mcp`）通过 `npm run release:github` 打出本地 tag `npm-v<version>` 分发，不再向 npmjs 发布。私有 root/protocol/daemon 不进入安装树。没有授权不推送 tag。步骤见 [development.md](../development.md)。
+- 控制面（`gbc` / `gbc-mcp`）通过 GitHub tag `npm-v<version>` 分发，不再向 npmjs 发布：先推送源码 tag `v<version>`，由 Actions 生成安装树 tag。私有 root/protocol/daemon 不进入安装树。没有授权不推送 tag；`v*` 应等 Actions 能跑再推。步骤见 [development.md](../development.md)。

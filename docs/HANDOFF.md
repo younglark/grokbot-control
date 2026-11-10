@@ -4,7 +4,7 @@
 
 ## 1. 一句话现状
 
-- **控制面**（`grokbot-control`）：已实现。从 0.2.0 起通过 GitHub tag `npm-v0.2.0` 分发（`npx -y --package=github:younglark/grokbot-control#npm-v0.2.0 gbc`），不再向 npmjs 发布。npmjs 上的 `grokbot-control@0.1.3` 已停止更新。离线测试覆盖完整；live 只验证过登录和三个只读 RPC，以及一次隔离的同步验收。详见 packages/grokbot-control/CHANGELOG.md 与 [development.md](development.md) 的发版一节。
+- **控制面**（`grokbot-control`）：已实现。从 0.2.0 起通过 GitHub tag `npm-v0.2.0` 分发（`npx -y --package=github:younglark/grokbot-control#npm-v0.2.0 gbc`），由推送 `v0.2.0` 后的 Actions 生成该 tag，不再向 npmjs 发布。npmjs 上的 `grokbot-control@0.1.3` 已停止更新。离线测试覆盖完整；live 只验证过登录和三个只读 RPC，以及一次隔离的同步验收。详见 packages/grokbot-control/CHANGELOG.md 与 [development.md](development.md) 的发版一节。
 - **local-exec-daemon**：按 App 0.79.3 原版 daemon 逐函数移植。Linux 上可达、可观测的路径已对齐，有 D: 行号证据和测试；通过了合成后端的门控验收（48 步矩阵：41 步一致、7 步发现差异已修复；另有 2 项 Linux 不可达）。**完整替换验收没有做**，不能说是无条件 drop-in。
 - **无头注册 / Docker**：只有设计边界，没有代码。
 
@@ -75,4 +75,4 @@ App 更新后如何重建这些材料，见 [protocol/update-runbook.md](protoco
 3. 和用户确认 §4 两处安全偏离是否也要改成与原版一致。
 4. 申请授权后做 daemon 的真实环境替换验收（受控机器、测试账号），先只读观察，再逐步放开。
 5. 无头注册：先静态查清 App 的电脑注册/凭据下发流程，写证据文档，再设计宿主进程。
-6. 发版改走 `npm run release:github` 与 tag `npm-v*` 之后，在 npmjs 包设置里撤销 GitHub Actions Trusted Publisher，避免旧绑定在误恢复 `publish.yml` 时重新发版。
+6. 发版改走「推送 `v*`，由 Actions 生成 `npm-v*`」之后，在 npmjs 包设置里撤销 GitHub Actions Trusted Publisher，避免旧绑定在误恢复 `publish.yml` 时重新发版。推 `v*` 前须确认 Actions 账单/消费限额已恢复，工作流能跑完。

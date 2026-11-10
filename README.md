@@ -40,7 +40,7 @@ packages/
 deploy/headless/       占位：未来 Docker 部署文档（无 Dockerfile）
 tools/protocol/        离线协议还原/校验脚本（Python + 一个 Node 校验器）
 scripts/verify-package.mjs   真实打包 + 隔离安装检查
-scripts/release-github.mjs   本地打出 npm-v* 安装树 tag（默认不推送）
+scripts/release-github.mjs   本地预览 GitHub 安装树（默认不打、不推官方 npm-v* tag）
 test/organization.test.mjs   跨包边界与文档链接测试
 docs/                  全部文档（见下）
 ```

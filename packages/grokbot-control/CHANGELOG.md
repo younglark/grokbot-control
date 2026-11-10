@@ -13,7 +13,7 @@
 - **列表默认上限。** `message history`、`session list`、`sidebar list`（以及已有的 `bot list`）默认 `--limit=50`（最大 1000）。截断时结果带 `truncated`、`next`（可传回的 `--offset` / `offset`）和 `hint`。以前 `session list` / `sidebar list` 会返回全部条目；`message history` 会截断但不标记。
 - **MCP 默认只读。** 写工具默认不出现在 `tools/list`。必须在宿主配置里设置 `GBT_ALLOW_WRITES=1` 或启动 `gbc-mcp --allow-writes`。只在工具参数里传 `allow_writes=true` 不再足够。`GBT_MCP_READONLY=1` 仍然隐藏 auth 变更工具，并且优先于写开关。sync 的 `sync_pull` / `sync_render` / `sync_attachments` 还需要 `GBT_SYNC_ALLOW_LOCAL_WRITES=1`。
 - **MCP input schema 改为严格校验。** 未知参数会被拒绝（`additionalProperties: false` 与运行时一致）。无参数工具同样拒绝多余键。
-- **分发改为 GitHub tag，不再发到 npmjs。** 安装使用 `npx -y --package=github:younglark/grokbot-control#npm-v0.2.0 gbc`（`gbc-mcp` 同样要加 `--package`）。npmjs 上的 0.1.3 已停止更新。
+- **分发改为 GitHub tag，不再发到 npmjs。** 安装使用 `npx -y --package=github:younglark/grokbot-control#npm-v0.2.0 gbc`（`gbc-mcp` 同样要加 `--package`）。正式 `npm-v*` tag 由推送 `v*` 后的 GitHub Actions 生成，不要从本机推送。npmjs 上的 0.1.3 已停止更新。
 
 ### 迁移
 

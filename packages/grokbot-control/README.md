@@ -270,12 +270,12 @@ npm run mcp                   # 或：GBT_MOCK=1 node packages/grokbot-control/d
 
 包名仍是 `grokbot-control`。从 0.2.0 起**不再发布到 npmjs**；[npmjs 上的 0.1.3](https://www.npmjs.com/package/grokbot-control) 已停止更新。**未声明 SPDX `license`**：`vendor/proto-gen` 来自逆向恢复的 schema，许可不清，见 [vendor/proto-gen/NOTICE.md](vendor/proto-gen/NOTICE.md)；请自行评估分发风险。
 
-发版在仓库根进行，产出本地 git tag `npm-v<version>`（父提交为空的安装树，不含 main 历史）：
+正式发版在仓库根进行：先把源码变更推到 `main`，再推送 `v<version>`，由 GitHub Actions 生成父提交为空的安装树 tag `npm-v<version>`（`npm pack` 产物，已去掉生命周期脚本，不含 main 历史）。
 
-1. 在干净的 `main` 上准备好版本号。需要 bump 时：`npm version patch -w grokbot-control --no-git-tag-version`（或 minor/major），审查后提交。不要再走 `v*` + npmjs Trusted Publishing。
-2. `export UC_SKIP_OFFICIAL=1`
-3. `npm run verify:package`，再 `npm run release:github`。默认会跑 `generate:check`、`build`、`npm test`；`--skip-tests` 可跳过，但默认要跑。tag 已存在则直接失败。默认只写本地 tag，stdout 是 JSON 结果，并打印需要你确认后执行的推送命令。
-4. 确认后**分开**推送：`git push origin main` 与 `git push origin refs/tags/npm-v0.2.0`。脚本的 `--push` 只会推 tag，不会推 main。
+1. 在干净的 `main` 上准备好版本号。需要 bump 时：`npm version patch -w grokbot-control --no-git-tag-version`（或 minor/major），审查后提交并推送 `main`。不要再走 npmjs Trusted Publishing。
+2. `export UC_SKIP_OFFICIAL=1` 后可先跑 `npm run verify:package` 和 `npm run release:github` 做本地预览（默认会跑 `generate:check`、`build`、`npm test`；`--skip-tests` 可跳过，但默认要跑）。预览只会生成孤立 commit，默认不打官方 `npm-v*` tag。
+3. 确认 Actions 能跑之后，在对应的 `main` 提交上执行 `git tag -a v0.2.0 <main-commit>`，再 `git push origin refs/tags/v0.2.0`。工作流会打并推送 `npm-v0.2.0`。不要从本机推送 `npm-v*`。同名 tag 已存在时任务失败，不会 force-push。
+4. **请等 GitHub Actions 账单/消费限额恢复、工作流能跑完再推 `v*`。**
 
 仓库里已删除 `.github/workflows/publish.yml`，推送任何 tag 都不会再发布到 registry.npmjs.org。建议同时在 npmjs 包设置里撤销 Trusted Publisher 绑定。
 
