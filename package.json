@@ -20,8 +20,9 @@
     "dev:mcp": "npm run dev:mcp -w grokbot-control --",
     "gbc": "npm run gbc -w grokbot-control --",
     "mcp": "npm run mcp -w grokbot-control --",
-    "prepublishOnly": "node -e \"throw new Error('Workspace root is private. Publish only the reviewed release package.')\"",
-    "verify:package": "node scripts/verify-package.mjs"
+    "prepublishOnly": "node -e \"throw new Error('Workspace root is private. Do not publish to npmjs; use npm run release:github to tag the GitHub install tree.')\"",
+    "verify:package": "node scripts/verify-package.mjs",
+    "release:github": "node scripts/release-github.mjs"
   },
   "engines": {
     "node": ">=20"
