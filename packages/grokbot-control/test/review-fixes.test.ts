@@ -297,21 +297,15 @@ describe("fix6: limits validated (SDK/MCP), never empty success; get vs truncate
   }
   it("MCP list_bots / list_transcript schemas reject limit 0 and 1001", () => {
     const tools = buildTools();
-    for (const name of ["list_bots", "list_transcript"]) {
-      const t = tools.find((x) => x.name === name)!;
-      assert.equal(
-        t.inputSchema.safeParse({ agent_id: "a", limit: 0 }).success,
-        false,
-      );
-      assert.equal(
-        t.inputSchema.safeParse({ agent_id: "a", limit: 1001 }).success,
-        false,
-      );
-      assert.equal(
-        t.inputSchema.safeParse({ agent_id: "a", limit: 5 }).success,
-        true,
-      );
-    }
+    const bots = tools.find((x) => x.name === "list_bots")!;
+    const transcript = tools.find((x) => x.name === "list_transcript")!;
+    assert.equal(bots.inputSchema.safeParse({ limit: 0 }).success, false);
+    assert.equal(bots.inputSchema.safeParse({ limit: 1001 }).success, false);
+    assert.equal(bots.inputSchema.safeParse({ limit: 5 }).success, true);
+    assert.equal(bots.inputSchema.safeParse({ limit: 5, typo_limit: 1 }).success, false);
+    assert.equal(transcript.inputSchema.safeParse({ agent_id: "a", limit: 0 }).success, false);
+    assert.equal(transcript.inputSchema.safeParse({ agent_id: "a", limit: 1001 }).success, false);
+    assert.equal(transcript.inputSchema.safeParse({ agent_id: "a", limit: 5 }).success, true);
   });
   it("get on truncated list without match -> lookup_incomplete (unknown), not not_found", async () => {
     const { plane } = listFake(true);

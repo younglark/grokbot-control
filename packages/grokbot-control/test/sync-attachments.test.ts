@@ -458,7 +458,7 @@ it("attachment store paths cannot follow symlink into another location", async (
   assert.deepEqual(fs.readdirSync(outside), []);
 });
 it("MCP send/status permit omitted default session and still require message identifiers", () => {
-  const tools = buildTools(),
+  const tools = buildTools({ allowWrites: true }),
     send = tools.find((t) => t.name === "send_message")!,
     status = tools.find((t) => t.name === "get_send_status")!;
   assert.equal(

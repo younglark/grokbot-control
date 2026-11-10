@@ -51,7 +51,7 @@ describe("CLI/MCP parameter equivalence", () => {
       simulated: true,
       auth: staticTokenProvider({ kind: "cursor", backend: "https://api2.cursor.sh", accessToken: "t" }),
     });
-    const tools = buildTools();
+    const tools = buildTools({ allowWrites: true });
     const create = tools.find((t) => t.name === "create_bot")!;
     const viaMcp = await create.handler(plane, {
       name: "m",

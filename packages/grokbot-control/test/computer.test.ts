@@ -399,7 +399,7 @@ describe("computer CLI", () => {
 
 describe("computer MCP tools", () => {
   it("exposes state as read-only and reset as a write", () => {
-    const tools = buildTools();
+    const tools = buildTools({ allowWrites: true });
     const state = tools.find((t) => t.name === "get_computer_state")!;
     const reset = tools.find((t) => t.name === "reset_computer")!;
     assert.equal(state.readOnly, true);
@@ -412,7 +412,7 @@ describe("computer MCP tools", () => {
 
   it("reset_computer maps confirm, hard, and wait_seconds", async () => {
     const plane = mockPlane();
-    const reset = buildTools().find((t) => t.name === "reset_computer")!;
+    const reset = buildTools({ allowWrites: true }).find((t) => t.name === "reset_computer")!;
     const r = await reset.handler(plane, {
       confirm: RESET_CONFIRM,
       allow_writes: true,

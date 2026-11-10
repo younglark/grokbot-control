@@ -3,9 +3,25 @@ import { GbcError } from "../errors.js";
 import { z } from "zod";
 import type { ControlPlane } from "../ops/plane.js";
 import type { ResultEnvelope } from "../dto/result.js";
-import { LIMIT_MAX } from "../ops/limits.js";
+import { LIMIT_DEFAULT, LIMIT_MAX } from "../ops/limits.js";
 
-const limitSchema = z.number().int().positive().max(LIMIT_MAX).optional();
+const limitSchema = z
+  .number()
+  .int()
+  .positive()
+  .max(LIMIT_MAX)
+  .optional()
+  .describe(`Max items to return (1..${LIMIT_MAX}, default ${LIMIT_DEFAULT})`);
+const offsetSchema = z
+  .number()
+  .int()
+  .min(0)
+  .optional()
+  .describe("0-based offset into the client-capped list; use next from a truncated page");
+
+function input<T extends z.ZodRawShape>(shape: T) {
+  return z.object(shape).strict();
+}
 
 export type ToolDef = {
   name: string;
@@ -22,6 +38,34 @@ export type ToolDef = {
   ) => Promise<ResultEnvelope>;
 };
 
+
+export function toolAnnotations(t: {
+  name: string;
+  readOnly?: boolean;
+  authTool?: boolean;
+}) {
+  const closedWorld = t.name === "auth_whoami" || t.name === "sync_status";
+  if (t.authTool) {
+    return {
+      readOnlyHint: false,
+      destructiveHint: t.name === "auth_logout",
+      idempotentHint: false,
+      openWorldHint: !closedWorld,
+    };
+  }
+  if (t.readOnly) {
+    return { readOnlyHint: true as const, openWorldHint: !closedWorld };
+  }
+  return {
+    readOnlyHint: false,
+    destructiveHint:
+      t.name.includes("delete") ||
+      t.name === "reset_computer" ||
+      t.name === "interrupt_run",
+    openWorldHint: true,
+  };
+}
+
 const agentId = z.string().min(1);
 const writeFlags = {
   dry_run: z.boolean().optional(),
@@ -36,7 +80,10 @@ export type SyncToolConfig = {
   acknowledgeUnverifiedScope?: boolean;
 };
 export function buildTools(opts?: {
+  /** Hide auth-mutating tools as well as writes (GBT_MCP_READONLY=1). */
   readOnly?: boolean;
+  /** When false/undefined, write tools are not registered (default). */
+  allowWrites?: boolean;
   sync?: SyncToolConfig;
 }): ToolDef[] {
   const all: ToolDef[] = [
@@ -44,20 +91,20 @@ export function buildTools(opts?: {
       name: "list_bots",
       description: "List Grok Bot agents (ListGrokBotAgents)",
       readOnly: true,
-      inputSchema: z.object({ limit: limitSchema }),
-      handler: (p, a) => p.bot.list({ limit: a.limit as number | undefined }),
+      inputSchema: input({ limit: limitSchema, offset: offsetSchema }),
+      handler: (p, a) => p.bot.list({ limit: a.limit as number | undefined, offset: a.offset as number | undefined }),
     },
     {
       name: "get_bot",
       description: "Get one bot by filtering ListGrokBotAgents (no Get RPC)",
       readOnly: true,
-      inputSchema: z.object({ agent_id: agentId }),
+      inputSchema: input({ agent_id: agentId }),
       handler: (p, a) => p.bot.get(String(a.agent_id)),
     },
     {
       name: "create_bot",
       description: "Create temporal harness bot (CreateGrokBotTemporalAgent)",
-      inputSchema: z.object({
+      inputSchema: input({
         name: z.string().min(1),
         description: z.string().optional(),
         title: z.string().optional(),
@@ -82,7 +129,7 @@ export function buildTools(opts?: {
     {
       name: "update_bot",
       description: "Partial update bot (UpdateGrokBotAgent)",
-      inputSchema: z.object({
+      inputSchema: input({
         agent_id: agentId,
         name: z.string().optional(),
         description: z.string().optional(),
@@ -104,7 +151,7 @@ export function buildTools(opts?: {
       name: "delete_bot",
       description:
         "Delete bot; requires confirm=agent_id. Sidebar cleanup unverified.",
-      inputSchema: z.object({
+      inputSchema: input({
         agent_id: agentId,
         confirm: z.string().min(1),
         ...writeFlags,
@@ -120,14 +167,14 @@ export function buildTools(opts?: {
       name: "get_computer_state",
       description: "Get the Grok Bot computer run state (GetSandBoxRunState)",
       readOnly: true,
-      inputSchema: z.object({}),
+      inputSchema: input({}),
       handler: (p) => p.computer.state(),
     },
     {
       name: "reset_computer",
       description:
         "Recreate the shared Grok Bot computer. Destructive and not cancelable after start; requires confirm=RESET_COMPUTER. hard uses ForceRecreateSandBox. wait_seconds follows migration phases for up to 30s.",
-      inputSchema: z.object({
+      inputSchema: input({
         confirm: z.string().min(1),
         hard: z.boolean().optional(),
         wait_seconds: z.number().int().min(0).max(30).optional(),
@@ -149,7 +196,7 @@ export function buildTools(opts?: {
       name: "send_message",
       description:
         "Send user message directly (SendGrokBotUserMessage). No task_id required. Delivery ≠ success.",
-      inputSchema: z.object({
+      inputSchema: input({
         agent_id: agentId,
         session_id: z.string().optional(),
         text: z.string().min(1),
@@ -170,7 +217,7 @@ export function buildTools(opts?: {
       name: "get_send_status",
       description: "Get message send status (delivery path)",
       readOnly: true,
-      inputSchema: z.object({
+      inputSchema: input({
         agent_id: agentId,
         session_id: z.string().optional(),
         message_id: z.string().min(1),
@@ -186,53 +233,58 @@ export function buildTools(opts?: {
       name: "list_transcript",
       description: "List transcript entries; ciphertext not decrypted",
       readOnly: true,
-      inputSchema: z.object({ agent_id: agentId, limit: limitSchema }),
+      inputSchema: input({ agent_id: agentId, limit: limitSchema, offset: offsetSchema }),
       handler: (p, a) =>
         p.message.history({
           agentId: String(a.agent_id),
           limit: a.limit as number | undefined,
+          offset: a.offset as number | undefined,
         }),
     },
     {
       name: "list_sessions",
       description: "List agent sessions",
       readOnly: true,
-      inputSchema: z.object({ agent_id: agentId }),
-      handler: (p, a) => p.session.list(String(a.agent_id)),
+      inputSchema: input({ agent_id: agentId, limit: limitSchema, offset: offsetSchema }),
+      handler: (p, a) =>
+        p.session.list(String(a.agent_id), {
+          limit: a.limit as number | undefined,
+          offset: a.offset as number | undefined,
+        }),
     },
     {
       name: "get_bot_status",
       description: "Native live progress status",
       readOnly: true,
-      inputSchema: z.object({ agent_id: agentId }),
+      inputSchema: input({ agent_id: agentId }),
       handler: (p, a) => p.progress.status([String(a.agent_id)]),
     },
     {
       name: "list_agent_todos",
       description: "Native agent todos (not bridge tasks)",
       readOnly: true,
-      inputSchema: z.object({ agent_id: agentId }),
+      inputSchema: input({ agent_id: agentId }),
       handler: (p, a) => p.progress.todos(String(a.agent_id)),
     },
     {
       name: "list_agent_tasks",
       description: "Native agent tasks",
       readOnly: true,
-      inputSchema: z.object({ agent_id: agentId }),
+      inputSchema: input({ agent_id: agentId }),
       handler: (p, a) => p.progress.tasks(String(a.agent_id)),
     },
     {
       name: "list_agent_subagents",
       description: "ListGrokBotSubagents",
       readOnly: true,
-      inputSchema: z.object({ agent_id: agentId }),
+      inputSchema: input({ agent_id: agentId }),
       handler: (p, a) => p.progress.subagents(String(a.agent_id)),
     },
     {
       name: "interrupt_run",
       description:
         "InterruptGrokBotAgentRun. MCP request cancel does NOT call this.",
-      inputSchema: z.object({
+      inputSchema: input({
         agent_id: agentId,
         confirm: z.string().min(1),
         reason: z.string().optional(),
@@ -252,13 +304,17 @@ export function buildTools(opts?: {
       name: "get_sidebar_sections",
       description: "Read SidebarSections from runtime settings",
       readOnly: true,
-      inputSchema: z.object({}),
-      handler: (p) => p.sidebar.list(),
+      inputSchema: input({ limit: limitSchema, offset: offsetSchema }),
+      handler: (p, a) =>
+        p.sidebar.list({
+          limit: a.limit as number | undefined,
+          offset: a.offset as number | undefined,
+        }),
     },
     {
       name: "create_sidebar_section",
       description: "Create sidebar section (does not delete bots)",
-      inputSchema: z.object({ name: z.string().min(1), ...writeFlags }),
+      inputSchema: input({ name: z.string().min(1), ...writeFlags }),
       handler: (p, a) =>
         p.sidebar.createSection(String(a.name), {
           dryRun: Boolean(a.dry_run),
@@ -267,7 +323,7 @@ export function buildTools(opts?: {
     },
     {
       name: "rename_sidebar_section",
-      inputSchema: z.object({
+      inputSchema: input({
         section_id: z.string().min(1),
         name: z.string().min(1),
         ...writeFlags,
@@ -282,7 +338,7 @@ export function buildTools(opts?: {
     {
       name: "delete_sidebar_section",
       description: "Delete sidebar section only — does not delete bots",
-      inputSchema: z.object({
+      inputSchema: input({
         section_id: z.string().min(1),
         confirm: z.string().min(1),
         ...writeFlags,
@@ -297,7 +353,7 @@ export function buildTools(opts?: {
     {
       name: "move_bot_to_sidebar_section",
       description: "Move bot into a sidebar section",
-      inputSchema: z.object({
+      inputSchema: input({
         agent_id: agentId,
         section_id: z.string().min(1),
         ...writeFlags,
@@ -312,7 +368,7 @@ export function buildTools(opts?: {
       name: "auth_whoami",
       description: "Local credential status (no network; never returns tokens)",
       readOnly: true,
-      inputSchema: z.object({}),
+      inputSchema: input({}),
       handler: (p) => p.authOps.whoami(),
     },
     {
@@ -321,7 +377,7 @@ export function buildTools(opts?: {
         "Start independent Cursor browser login. Returns authorization_url for the user to open; verifier stays in a 0600 pending file.",
       readOnly: true,
       authTool: true,
-      inputSchema: z.object({}),
+      inputSchema: input({}),
       handler: (p) => p.authOps.begin(),
     },
     {
@@ -330,7 +386,7 @@ export function buildTools(opts?: {
         "Poll the pending login until signed in or timeout (default 60s, max 120s). Returns auth_pending (retryable) if not yet signed in.",
       readOnly: true,
       authTool: true,
-      inputSchema: z.object({
+      inputSchema: input({
         timeout_seconds: z.number().int().min(1).max(120).optional(),
       }),
       handler: (p, a) =>
@@ -341,7 +397,7 @@ export function buildTools(opts?: {
       description: "Discard the pending login (local only)",
       readOnly: true,
       authTool: true,
-      inputSchema: z.object({}),
+      inputSchema: input({}),
       handler: (p) => p.authOps.cancel(),
     },
     {
@@ -350,7 +406,7 @@ export function buildTools(opts?: {
         "Remove this tool's own local credential (does not revoke server session or touch the App)",
       readOnly: true,
       authTool: true,
-      inputSchema: z.object({}),
+      inputSchema: input({}),
       handler: (p) => p.authOps.logout(),
     },
     {
@@ -358,7 +414,7 @@ export function buildTools(opts?: {
       description:
         "Refresh local Cursor OAuth credentials (non-secret metadata only). Without force, may report already_fresh with no network call. Auto refresh still happens before RPCs when near expiry. Not exposed under GBT_MCP_READONLY=1.",
       authTool: true,
-      inputSchema: z.object({
+      inputSchema: input({
         force: z.boolean().optional(),
       }),
       handler: (p, a) => p.authOps.refresh({ force: Boolean(a.force) }),
@@ -376,7 +432,7 @@ export function buildTools(opts?: {
       name: "sync_status",
       description: "Read bounded local archive status; no login/RPC",
       readOnly: true,
-      inputSchema: z.object(selectors).strict(),
+      inputSchema: input(selectors),
       handler: (p, a) =>
         p.sync.status({
           dir: c.root,
@@ -384,7 +440,7 @@ export function buildTools(opts?: {
           sessionId: a.session_id as string | undefined,
         }),
     });
-    if (c.allowLocalWrites && !opts.readOnly) {
+    if (c.allowLocalWrites && opts?.allowWrites && !opts.readOnly) {
       all.push({
         name: "sync_pull",
         description:
@@ -495,5 +551,6 @@ export function buildTools(opts?: {
     }
   }
   if (opts?.readOnly) return all.filter((t) => t.readOnly && !t.authTool);
+  if (!opts?.allowWrites) return all.filter((t) => t.readOnly || t.authTool);
   return all;
 }

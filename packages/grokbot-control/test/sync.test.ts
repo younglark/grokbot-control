@@ -375,7 +375,7 @@ it("MCP fixed root + independent local write gates, read-only mode excludes muta
       .map((t) => t.name),
     ["sync_status"],
   );
-  const full = buildTools({ sync: { ...cfg, allowLocalWrites: true } });
+  const full = buildTools({ allowWrites: true, sync: { ...cfg, allowLocalWrites: true } });
   assert.ok(full.some((t) => t.name === "sync_pull"));
   const ro = buildTools({
     readOnly: true,
@@ -485,6 +485,7 @@ it("real generated Connect transport round trip shared by MCP and CLI core (read
   });
   const dir = temp();
   const tool = buildTools({
+    allowWrites: true,
     sync: {
       root: dir,
       allowLocalWrites: true,
@@ -615,7 +616,7 @@ it("MCP stdio advertises gates and executes sync without remote-write permission
       GBT_SYNC_ACCOUNT_ID: "u",
       GBT_SYNC_TEAM_ID: "none",
       GBT_SYNC_ACK_UNVERIFIED_SCOPE: "1",
-      GBT_ALLOW_WRITES: "0",
+      GBT_ALLOW_WRITES: "1",
       GBT_MCP_READONLY: "0",
     }).filter(([, v]) => v !== undefined),
   ) as Record<string, string>;

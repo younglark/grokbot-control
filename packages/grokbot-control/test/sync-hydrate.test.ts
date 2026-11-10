@@ -564,7 +564,7 @@ it("MCP hydration shares gates, strict enums and bounded budgets", async () => {
     ),
     false,
   );
-  const tool = buildTools({ sync: cfg }).find((t) => t.name === "sync_pull")!;
+  const tool = buildTools({ allowWrites: true, sync: cfg }).find((t) => t.name === "sync_pull")!;
   for (const bad of [
     { hydrate: "all" },
     { hydrate: "missing", max_hydrate_requests: 257 },
