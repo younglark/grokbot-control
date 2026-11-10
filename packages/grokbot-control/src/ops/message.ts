@@ -3,11 +3,11 @@ import { mapConnectError } from "../connect/client.js";
 import { failResult, newRequestId, okResult, type ResultEnvelope } from "../dto/result.js";
 import type { SendDelivery, SendStatusView, TranscriptEntryView } from "../dto/types.js";
 import { GbcError } from "../errors.js";
-import { validateLimit } from "./limits.js";
+import { paginate, validateLimit, validateOffset } from "./limits.js";
 
 function requireWrite(allow: boolean | undefined, action: string) {
   if (!allow && process.env.GBT_ALLOW_WRITES !== "1") {
-    throw new GbcError("denied", `refusing ${action}: need --allow-writes / GBT_ALLOW_WRITES=1`, { exitCode: 7 });
+    throw new GbcError("denied", `refusing ${action}: host write authorization required`, { exitCode: 7, hint: "CLI: pass --allow-writes or GBT_ALLOW_WRITES=1. MCP: start gbc-mcp with --allow-writes or GBT_ALLOW_WRITES=1 (write tools are hidden by default). dry-run / dry_run does not call RPC." });
   }
 }
 
@@ -106,16 +106,27 @@ export class MessageOps {
   async history(input: {
     agentId: string;
     limit?: number;
-  }): Promise<ResultEnvelope<{ entries: TranscriptEntryView[]; generation?: number; note: string }>> {
+    offset?: number;
+  }): Promise<
+    ResultEnvelope<{
+      entries: TranscriptEntryView[];
+      generation?: number;
+      note: string;
+      truncated: boolean;
+      next?: string;
+      hint?: string;
+    }>
+  > {
     const request_id = newRequestId();
     try {
       const limit = validateLimit(input.limit);
+      const offset = validateOffset(input.offset);
       // NOTE: server-side `limit`/`session_id` are still not sent (semantics of 0 unverified); client caps.
       const res = await this.client.listGrokBotTranscriptEntries({
         agentId: input.agentId,
       });
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const entries = (res.entries ?? []).slice(0, limit).map((e: any) => {
+      const mapped = (res.entries ?? []).map((e: any) => {
         const id = e.id || e.entryId || e.entry_id;
         const preview =
           e.plaintext || e.text || e.preview ||
@@ -128,12 +139,16 @@ export class MessageOps {
           untrusted: true,
         } satisfies TranscriptEntryView;
       });
+      const page = paginate<TranscriptEntryView>(mapped, limit, offset);
       return this.sim(
         okResult(
           {
-            entries,
+            entries: page.items,
             generation: res.generation,
             note: "Ciphertext/omitted entries are not decrypted. Bodies marked untrusted.",
+            truncated: page.truncated,
+            next: page.next,
+            hint: page.hint,
           },
           { request_id },
         ),

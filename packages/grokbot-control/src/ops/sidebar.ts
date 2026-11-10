@@ -2,6 +2,7 @@ import type { GrokBotClient } from "../connect/client.js";
 import { mapConnectError } from "../connect/client.js";
 import { failResult, newRequestId, okResult, type ResultEnvelope } from "../dto/result.js";
 import type { SidebarSection } from "../dto/types.js";
+import { paginate, validateLimit, validateOffset } from "./limits.js";
 import { GbcError } from "../errors.js";
 import { mapSection } from "./map.js";
 
@@ -38,16 +39,31 @@ export class SidebarOps {
     }
   }
 
-  async list(): Promise<ResultEnvelope<{ sections: SidebarSection[]; note: string }>> {
+  async list(opts?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<
+    ResultEnvelope<{
+      sections: SidebarSection[];
+      note: string;
+      truncated: boolean;
+      next?: string;
+      hint?: string;
+    }>
+  > {
     const request_id = newRequestId();
     try {
       const res = await this.client.getGrokBotUserRuntimeSettings({});
-      const sections = (res.settings?.sidebarSections?.sections ?? []).map(mapSection);
+      const all = (res.settings?.sidebarSections?.sections ?? []).map(mapSection);
+      const page = paginate<SidebarSection>(all, validateLimit(opts?.limit), validateOffset(opts?.offset));
       return this.sim(
         okResult(
           {
-            sections,
+            sections: page.items,
             note: "Read of SidebarSections only. Room/TeamGroup are not sidebar.",
+            truncated: page.truncated,
+            next: page.next,
+            hint: page.hint,
           },
           { request_id },
         ),

@@ -10,7 +10,7 @@ import {
 import type { BotSummary } from "../dto/types.js";
 import { GbcError } from "../errors.js";
 import { mapBot } from "./map.js";
-import { validateLimit } from "./limits.js";
+import { paginate, validateLimit, validateOffset } from "./limits.js";
 
 export type WriteOpts = {
   dryRun?: boolean;
@@ -63,18 +63,35 @@ export class BotOps {
 
   async list(opts?: {
     limit?: number;
-  }): Promise<ResultEnvelope<{ bots: BotSummary[]; truncated: boolean }>> {
+    offset?: number;
+  }): Promise<
+    ResultEnvelope<{
+      bots: BotSummary[];
+      truncated: boolean;
+      next?: string;
+      hint?: string;
+    }>
+  > {
     const request_id = newRequestId();
     try {
       const limit = validateLimit(opts?.limit);
+      const offset = validateOffset(opts?.offset);
       const res = await this.client.listGrokBotAgents({});
       const all = (res.agents ?? []).map(mapBot);
-      const truncated = Boolean(res.truncated) || all.length > limit;
+      const page = paginate<BotSummary>(all, limit, offset);
+      const serverTruncated = Boolean(res.truncated);
+      const truncated = page.truncated || serverTruncated;
+      const hint = page.hint
+        ?? (serverTruncated
+          ? "Server reported a truncated agent list; this page may be incomplete."
+          : undefined);
       return this.wrapSim(
         okResult(
           {
-            bots: all.slice(0, limit),
+            bots: page.items,
             truncated,
+            next: page.next,
+            hint,
           },
           { request_id },
         ),
