@@ -64,7 +64,7 @@
 `.github/workflows/`：
 
 - `workspaces.yml`：Node 20/22，`npm ci --ignore-scripts` → 安装 ripgrep → generate:check → build → test → protocol-tools → smoke:uc → smoke:electron（无 Electron 时跳过）→ verify:package → `git diff --exit-code`。CI 上没有 oracle lab，官方用例自然跳过。
-- `auth-native-lock.yml`：`fs-native-extensions` 三平台预编译与源码构建矩阵。
+- `auth-native-lock.yml`：`fs-native-extensions` 三平台预编译与源码构建矩阵。macOS 使用标准 arm64 标签 `macos-15`（`macos-14` 已于 2026-11-02 退役）。
 - `publish.yml`：推送 `v*` tag 时发布 `packages/grokbot-control`（npm Trusted Publishing / OIDC）。文件名不要改，npm 端绑定了它。
 
 ## 发布（只有公开包）

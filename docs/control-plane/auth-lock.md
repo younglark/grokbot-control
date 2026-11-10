@@ -68,6 +68,7 @@ Source-build recipe (maintainer/CI, **not automatic install fallback**): in the 
 [compile-prebuilds action](https://github.com/holepunchto/actions/blob/v1/compile-prebuilds/action.yml).
 Our `.github/workflows/auth-native-lock.yml` configures prebuilt Node20/22 and source-build jobs for
 Linux/macOS/Windows, with no upload/publish; every job runs real-process lifecycle/exchange tests.
+macOS jobs use the standard arm64 `macos-15` runner (`macos-14` was retired on 2026-11-02).
 Source-building requires network/toolchain dependencies; npm normal install has no source fallback script.
 
 ## Security/platform limits and verification
