@@ -21,6 +21,7 @@
 | `npm run smoke:uc` | daemon UC 通道冒烟（本机回环，合成数据） |
 | `npm run smoke:electron` | 用外部 Electron 跑 daemon 交接冒烟；没有 Electron 时跳过 |
 | `npm run verify:package` | 真实 `npm pack` 公开包并在隔离目录安装，检查 bin / SDK 导出 |
+| `npm run release:github` | 检查、打包、在父提交为空的 commit 上打本地 tag `npm-v<version>`（默认不推送） |
 | `npm run dev:gbc -- <args>` / `npm run dev:mcp` | 从源码运行 CLI / MCP |
 
 **每次跑测试前都先 `export UC_SKIP_OFFICIAL=1`。**
@@ -34,7 +35,7 @@
 | 3. 门控替换验收 | `DROPIN_ACCEPTANCE=1 node --test packages/local-exec-daemon/test/dropin-acceptance.test.cjs packages/local-exec-daemon/test/dropin-extra.test.cjs`（先 build） | 启动**我们构建的** `dist/index.js` 对接合成后端，约 75 s（原版计时器不能缩短）。`DROPIN_EVIDENCE_DIR=<dir>` 输出观测 JSON；`DROPIN_ELECTRON=<npm 公开 electron>` 才跑 Electron 用例。矩阵见 [local-exec/dropin-acceptance.md](local-exec/dropin-acceptance.md) |
 | 4. 冒烟 | `npm run smoke:uc`、`npm run smoke:electron` | Electron 路径用 `LOCAL_EXEC_DAEMON_ELECTRON=/path/to/electron` 指定，只能是公共 npm 的 Electron |
 | 5. 协议 | `npm run generate:check`、`npm run test:protocol-tools` | 协议升级时另跑 `tools/protocol/verify_generated.mjs`，见 [protocol/update-runbook.md](protocol/update-runbook.md) |
-| 6. 打包 | `npm run verify:package` | 发布前必跑 |
+| 6. 打包 | `npm run verify:package`；发版再用 `npm run release:github` | 打 GitHub 安装 tag 前必跑打包检查；`release:github` 默认还会再跑 generate:check / build / test |
 | 7. 官方 oracle | 默认被 `UC_SKIP_OFFICIAL=1` 和 lab 缺失跳过 | 会执行官方 main.cjs，**未经用户明确授权不得运行** |
 
 团队习惯的每轮测试预算：门控 harness 一次、根 build 一次、根全量 `npm test` 一次、单文件重跑最多一次。失败要如实记录，不要反复重跑到变绿。
@@ -65,10 +66,22 @@
 
 - `workspaces.yml`：Node 20/22，`npm ci --ignore-scripts` → 安装 ripgrep → generate:check → build → test → protocol-tools → smoke:uc → smoke:electron（无 Electron 时跳过）→ verify:package → `git diff --exit-code`。CI 上没有 oracle lab，官方用例自然跳过。
 - `auth-native-lock.yml`：`fs-native-extensions` 三平台预编译与源码构建矩阵。macOS 使用标准 arm64 标签 `macos-15`（`macos-14` 已于 2026-11-02 退役）。
-- `publish.yml`：推送 `v*` tag 时发布 `packages/grokbot-control`（npm Trusted Publishing / OIDC）。文件名不要改，npm 端绑定了它。
+- 不再包含 `publish.yml`。推送任何 tag 都不会向 registry.npmjs.org 发布。
 
-## 发布（只有公开包）
+## 发布（GitHub tag，不再发到 npmjs）
 
-1. 工作区干净，`npm run build && npm test && npm run verify:package` 通过。
-2. 获得发版授权后：`npm version patch -w grokbot-control --no-git-tag-version`，审查后提交，再显式打 `vX.Y.Z` tag 并推送。
-3. 根包、`protocol`、`local-exec-daemon` 都是 private，不发布。已发布的版本不要重推同名 tag。
+控制面通过 git tag `npm-v<version>` 分发，tag 指向一个**没有 main 历史父提交**的安装树（`npm pack` 产物，已去掉 `prepack` / `build` 等生命周期脚本）。消费命令：
+
+```bash
+npx -y --package=github:younglark/grokbot-control#npm-v0.2.0 gbc --help
+npx -y --package=github:younglark/grokbot-control#npm-v0.2.0 gbc-mcp
+```
+
+仓库是私有的，安装方需要能 `git clone` 的权限：`gh auth login`（HTTPS + credential helper）或配置 GitHub SSH key。包名 `grokbot-control` 与 bin 名 `gbc` / `gbc-mcp` 不同，必须带 `--package`，否则 npx 无法选定可执行文件。
+
+发版步骤：
+
+1. 在已合并的 `main` 上，工作区干净。需要先改版本时：`npm version <patch|minor|major> -w grokbot-control --no-git-tag-version`，审查后提交。不要再打用于 npmjs 的 `v*` 发布流程。
+2. `export UC_SKIP_OFFICIAL=1` 后运行 `npm run verify:package`，再运行 `npm run release:github`（默认执行 generate:check、build、`npm test`）。脚本只在本地创建 `npm-v<version>` tag，stdout 为 JSON 结果。`--skip-tests` 可跳过测试，但默认要跑。`--allow-branch` 允许在非 main 的干净分支上本地打 tag（合并前自检用）。
+3. 确认 tag 内容后，**分开**推送源码分支 / `main` 和 tag，例如：`git push origin main` 与 `git push origin refs/tags/npm-v0.2.0`。只有显式传入 `--push` 时脚本才会推送 **tag**（永远不推 main）。已存在的同名 tag 会直接报错，不会覆盖。
+4. 根包、`protocol`、`local-exec-daemon` 仍是 private，不会被打进安装树。npmjs 上的 `grokbot-control@0.1.3` 已停止更新，本仓库不再向 npmjs 发版。

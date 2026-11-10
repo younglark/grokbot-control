@@ -2,7 +2,7 @@
 
 **人通过 Grok Bot App 驱动 → agent CLI 经 MCP / CLI 驱动同一 Bot。**
 
-可编程控制面（原生 Connect RPC），不是另建任务系统。CLI 入口 **`gbc`**，MCP stdio 入口 **`gbc-mcp`**。建议版本 **0.2.0**（本分支尚未发布；已发布的仍是 0.1.3）。
+可编程控制面（原生 Connect RPC），不是另建任务系统。CLI 入口 **`gbc`**，MCP stdio 入口 **`gbc-mcp`**。版本 **0.2.0**，通过 GitHub tag `npm-v0.2.0` 安装。npmjs 上的 0.1.3 已停止更新。
 
 > 非官方产品。协议来自 Grok Bot 桌面 App 的静态逆向，**不是**公开 API。自动化测试以 mock 为主；部分选定 RPC 曾做过隔离 live 验收，范围见 [docs/control-plane/implementation-status.md](https://github.com/younglark/grokbot-control/blob/main/docs/control-plane/implementation-status.md)，不能据此推定全部 RPC / OAuth 刷新已验证。
 
@@ -25,22 +25,22 @@ App 里能做的 Bot 生命周期、发消息、侧边栏、进度与中断，�
 
 ## Install
 
-需要 **Node.js ≥ 20**。
+需要 **Node.js ≥ 20**，以及能克隆本私有仓库的 GitHub 认证。仓库是私有的：先 `gh auth login`（HTTPS，并允许 gh 作为 git credential helper），或配置 [GitHub SSH key](https://docs.github.com/en/authentication/connecting-to-github-with-ssh)。包名是 `grokbot-control`，可执行文件是 `gbc` 和 `gbc-mcp`，两者不一致，**必须**加 `--package`，否则 npx 无法选定要跑的 bin。
 
-### npx（推荐）
+### npx（推荐，钉到 tag）
 
 ```bash
-npx --yes --package=grokbot-control@0.2.0 gbc --help
-npx --yes --package=grokbot-control@0.2.0 gbc --mock --json bot list
-npx --yes --package=grokbot-control@0.2.0 gbc-mcp
+npx -y --package=github:younglark/grokbot-control#npm-v0.2.0 gbc --help
+npx -y --package=github:younglark/grokbot-control#npm-v0.2.0 gbc --mock --json bot list
+npx -y --package=github:younglark/grokbot-control#npm-v0.2.0 gbc-mcp
 ```
 
-也可用 `@latest`；MCP 建议钉版本，避免宿主静默升级。
+请钉 `npm-v0.2.0` 这类 tag，不要用 `#main`（仓库根是 workspace，没有 `gbc` bin）。等价形式：`git+ssh://git@github.com:younglark/grokbot-control.git#npm-v0.2.0`。
 
-### 全局安装
+### 全局安装（从同一个 git tag）
 
 ```bash
-npm install --global grokbot-control@0.2.0
+npm install --global github:younglark/grokbot-control#npm-v0.2.0
 gbc --help
 gbc-mcp
 ```
@@ -63,12 +63,12 @@ node packages/grokbot-control/dist/cli/main.js --help
 结果带 `simulated: true`，不是在线成功。跨进程状态：`GBT_MOCK_STATE` 或 `~/.gbc/mock-state.json`。
 
 ```bash
-npx --yes --package=grokbot-control@0.2.0 gbc --mock --json --allow-writes \
+npx -y --package=github:younglark/grokbot-control#npm-v0.2.0 gbc --mock --json --allow-writes \
   bot create --name demo --description "test"
-npx --yes --package=grokbot-control@0.2.0 gbc --mock --json bot list
-npx --yes --package=grokbot-control@0.2.0 gbc --mock --json --allow-writes \
+npx -y --package=github:younglark/grokbot-control#npm-v0.2.0 gbc --mock --json bot list
+npx -y --package=github:younglark/grokbot-control#npm-v0.2.0 gbc --mock --json --allow-writes \
   message send --agent-id <id> --session-id <sid> --text "hello"
-npx --yes --package=grokbot-control@0.2.0 gbc --mock --json bot status --agent-id <id>
+npx -y --package=github:younglark/grokbot-control#npm-v0.2.0 gbc --mock --json bot status --agent-id <id>
 ```
 
 ### Live（真实后端）
@@ -106,7 +106,7 @@ stdio；**stdout 仅协议帧**，不要把 CLI 日志打到 stdout。
   "mcpServers": {
     "grokbot-control": {
       "command": "npx",
-      "args": ["--yes", "--package=grokbot-control@0.2.0", "gbc-mcp"],
+      "args": ["-y", "--package=github:younglark/grokbot-control#npm-v0.2.0", "gbc-mcp"],
       "env": {
         "GBT_OAUTH_CLIENT_ID": "<your-public-oauth-client-id>"
       }
@@ -122,7 +122,7 @@ stdio；**stdout 仅协议帧**，不要把 CLI 日志打到 stdout。
   "mcpServers": {
     "grokbot-control": {
       "command": "npx",
-      "args": ["--yes", "--package=grokbot-control@0.2.0", "gbc-mcp", "--allow-writes"],
+      "args": ["-y", "--package=github:younglark/grokbot-control#npm-v0.2.0", "gbc-mcp", "--allow-writes"],
       "env": {
         "GBT_OAUTH_CLIENT_ID": "<your-public-oauth-client-id>",
         "GBT_ALLOW_WRITES": "1"
@@ -149,7 +149,7 @@ CLI 输出：成功结果在 TTY 和管道下都是同一套 `schema_version` �
 更严的只读试跑（连 auth 变更工具也去掉）：
 
 ```bash
-GBT_MCP_READONLY=1 npx --yes --package=grokbot-control@0.2.0 gbc-mcp
+GBT_MCP_READONLY=1 npx -y --package=github:younglark/grokbot-control#npm-v0.2.0 gbc-mcp
 ```
 
 主要工具：`list_bots`、`get_bot`、`create_bot`、`update_bot`、`delete_bot`、`get_computer_state`、`reset_computer`、`send_message`、`get_send_status`、`list_transcript`、`list_sessions`、`get_bot_status`、`list_agent_todos`、`list_agent_tasks`、`list_agent_subagents`、`interrupt_run`、sidebar 系列、`auth_*`、可选 `sync_*`。完整契约见 [docs/protocol/protocol-map.md](https://github.com/younglark/grokbot-control/blob/main/docs/protocol/protocol-map.md)。
@@ -268,22 +268,16 @@ npm run mcp                   # 或：GBT_MOCK=1 node packages/grokbot-control/d
 
 ## Publish / Release
 
-包名 [`grokbot-control`](https://www.npmjs.com/package/grokbot-control)。**未声明 SPDX `license`**：`vendor/proto-gen` 来自逆向恢复的 schema，许可不清，见 [vendor/proto-gen/NOTICE.md](vendor/proto-gen/NOTICE.md)；请自行评估分发风险。
+包名仍是 `grokbot-control`。从 0.2.0 起**不再发布到 npmjs**；[npmjs 上的 0.1.3](https://www.npmjs.com/package/grokbot-control) 已停止更新。**未声明 SPDX `license`**：`vendor/proto-gen` 来自逆向恢复的 schema，许可不清，见 [vendor/proto-gen/NOTICE.md](vendor/proto-gen/NOTICE.md)；请自行评估分发风险。
 
-后续发版走 **GitHub Actions + npm Trusted Publishing（OIDC）**，无需仓库里的 `NPM_TOKEN`：
+发版在仓库根进行，产出本地 git tag `npm-v<version>`（父提交为空的安装树，不含 main 历史）：
 
-1. 工作区干净，本地 `npm run build && npm test` 通过。
-2. 另获发版授权后，从根使用 `npm version patch -w grokbot-control --no-git-tag-version`（或 minor/major）更新公开子包与根 lock；审查 release commit 后再显式创建 `vX.Y.Z` tag，不能对 private 根包做版本发布。
-3. `git push origin main --follow-tags`。
-4. [`.github/workflows/publish.yml`](https://github.com/younglark/grokbot-control/blob/main/.github/workflows/publish.yml) 在推送 `v*` tag 时：根 `npm ci` → 指定 control workspace build/test → 在 `packages/grokbot-control` 内 `npm publish --access public`。
+1. 在干净的 `main` 上准备好版本号。需要 bump 时：`npm version patch -w grokbot-control --no-git-tag-version`（或 minor/major），审查后提交。不要再走 `v*` + npmjs Trusted Publishing。
+2. `export UC_SKIP_OFFICIAL=1`
+3. `npm run verify:package`，再 `npm run release:github`。默认会跑 `generate:check`、`build`、`npm test`；`--skip-tests` 可跳过，但默认要跑。tag 已存在则直接失败。默认只写本地 tag，stdout 是 JSON 结果，并打印需要你确认后执行的推送命令。
+4. 确认后**分开**推送：`git push origin main` 与 `git push origin refs/tags/npm-v0.2.0`。脚本的 `--push` 只会推 tag，不会推 main。
 
-Trusted Publisher（npm 包 Settings）应对齐：
-
-- Organization or user：`younglark`
-- Repository：`grokbot-control`
-- Workflow filename：`publish.yml`
-
-GitHub Release **不会**触发发布；可在 tag 推送后再基于该 tag 建 Release，不会重复 publish。已发布版本不要重推同名 tag。
+仓库里已删除 `.github/workflows/publish.yml`，推送任何 tag 都不会再发布到 registry.npmjs.org。建议同时在 npmjs 包设置里撤销 Trusted Publisher 绑定。
 
 ## License / NOTICE
 

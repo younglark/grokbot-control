@@ -1,8 +1,8 @@
 # Changelog
 
-本文件记录公开包 `grokbot-control` 的用户可见变更。版本号遵循 SemVer。**0.2.0 尚未发布到 npm**；当前已发布的仍是 0.1.3。
+本文件记录公开包 `grokbot-control` 的用户可见变更。版本号遵循 SemVer。从 0.2.0 起通过 GitHub tag `npm-v<version>` 分发，不再发布到 npmjs。npmjs 上的 **0.1.3 已停止更新**。
 
-## 0.2.0 — 2026-11-10（建议版本，未发布）
+## 0.2.0 — 2026-11-10（通过 GitHub tag `npm-v0.2.0` 分发，不发到 npmjs）
 
 按 [CLI 评审](https://cursor.com/canvas/store-03b47b9f-5ab6-4503-9be6-9a3296edc4b3/be252665-9e58-42df-adcd-bd39bc629850) 和 [MCP 评审](https://cursor.com/canvas/store-03b47b9f-5ab6-4503-9be6-9a3296edc4b3/325ca93f-da93-4ca7-9ee6-b6d5c5a0ba59) 修复 agent 友好度问题。CLI 与 MCP 共用 `ops` 层，避免两套实现。
 
@@ -13,6 +13,7 @@
 - **列表默认上限。** `message history`、`session list`、`sidebar list`（以及已有的 `bot list`）默认 `--limit=50`（最大 1000）。截断时结果带 `truncated`、`next`（可传回的 `--offset` / `offset`）和 `hint`。以前 `session list` / `sidebar list` 会返回全部条目；`message history` 会截断但不标记。
 - **MCP 默认只读。** 写工具默认不出现在 `tools/list`。必须在宿主配置里设置 `GBT_ALLOW_WRITES=1` 或启动 `gbc-mcp --allow-writes`。只在工具参数里传 `allow_writes=true` 不再足够。`GBT_MCP_READONLY=1` 仍然隐藏 auth 变更工具，并且优先于写开关。sync 的 `sync_pull` / `sync_render` / `sync_attachments` 还需要 `GBT_SYNC_ALLOW_LOCAL_WRITES=1`。
 - **MCP input schema 改为严格校验。** 未知参数会被拒绝（`additionalProperties: false` 与运行时一致）。无参数工具同样拒绝多余键。
+- **分发改为 GitHub tag，不再发到 npmjs。** 安装使用 `npx -y --package=github:younglark/grokbot-control#npm-v0.2.0 gbc`（`gbc-mcp` 同样要加 `--package`）。npmjs 上的 0.1.3 已停止更新。
 
 ### 迁移
 
@@ -21,6 +22,7 @@
 3. 依赖 `session list` / `sidebar list` / `message history` 一次返回全部结果的调用：需要时提高 `--limit`，或用返回的 `next` 作为 `--offset` 继续取。
 4. MCP 宿主：在配置中加入 `"GBT_ALLOW_WRITES": "1"` 或 args `--allow-writes`，否则模型看不到写工具。建议只给需要写的配置打开。
 5. 若 MCP 调用曾发送额外字段，请按 `tools/list` 的 inputSchema 去掉它们。
+6. 不要再使用 `npx grokbot-control@0.2.0` 或 `npm install grokbot-control@0.2.0`：该版本不会出现在 npmjs 上。改为上面的 `github:...#npm-v0.2.0` 形式；私有仓库需先 `gh auth login` 或配置 SSH。
 
 ### 其他修复
 
