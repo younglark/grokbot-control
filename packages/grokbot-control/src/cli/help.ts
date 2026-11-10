@@ -1,7 +1,7 @@
 export const HELP = `gbc — Grok Bot control CLI (programmable App-equivalent control plane)
 
 USAGE:
-  gbc [--json] [--mock] [--allow-writes] [--dry-run] [--base-url URL] [--auth-kind cursor|xai] <noun> <verb> [flags]
+  gbc [--json|--plain] [--mock] [--allow-writes] [--dry-run] [--base-url URL] [--auth-kind cursor|xai] <noun> <verb> [flags]
 
 EXAMPLES:
   gbc --mock --json bot create --name demo --description "test"
@@ -10,8 +10,8 @@ EXAMPLES:
   gbc --mock --json --allow-writes --dry-run bot delete --agent-id <id> --confirm=<id>
   gbc --mock --json --allow-writes message send --agent-id <id> --session-id <sid> --text "hi"
   gbc --mock --json message status --agent-id <id> --session-id <sid> --message-id <mid>
-  gbc --mock --json message history --agent-id <id>
-  gbc --mock --json session list --agent-id <id>
+  gbc --mock --json message history --agent-id <id> [--limit 50] [--offset 0]
+  gbc --mock --json session list --agent-id <id> [--limit 50] [--offset 0]
   gbc --mock --json bot status --agent-id <id>
   gbc --mock --json computer state
   gbc --mock --json --allow-writes computer reset --confirm=RESET_COMPUTER
@@ -22,7 +22,11 @@ EXAMPLES:
   gbc --json auth login-begin            # prints authorization_url; open it in a browser
   gbc --json auth complete --timeout 300 # polls until signed in (exit 8 auth_pending on timeout)
   gbc --json auth login --timeout 300    # begin+complete; URL as stderr {"event":"open_browser"}
-  gbc --json auth whoami | auth poll | auth cancel | auth refresh [--force] | auth logout
+  gbc --json auth whoami
+  gbc --json auth poll
+  gbc --json auth cancel
+  gbc --json auth refresh [--force]
+  gbc --json auth logout
 
 SYNC (file-first snapshots; no SQLite):
   gbc sync pull --agent-id <id> [--session-id <sid>] --dir /absolute/private/root \\
@@ -61,9 +65,17 @@ NOTES:
   - computer reset --wait follows WatchSandBoxMigration phases (backing-up, creating, moving,
     cleaning-up, wiping, done/failed) and stops waiting at --timeout (1..3600s, default 600).
     SIGINT stops waiting only; the reset may continue. No percentage is reported.
+  - Output: success stdout is always the ResultEnvelope (schema_version, ok, data, …),
+    on both TTY and pipes. --json selects compact JSON (recommended for agents).
+    Without --json, a TTY pretty-prints the same envelope; a pipe stays compact.
+    --plain prints only the data object (the old TTY-only shape). Do not pass both
+    --json and --plain. Errors are always compact envelope JSON on stderr.
+  - Unknown flags exit 2 with a close-name hint. Sync already rejected unknown flags.
   - Value flags: "--flag value" or "--flag=value". A missing value (or a next token starting
     with "--") is a usage error (exit 2); use --text=--literal for values starting with "-".
-  - --limit must be an integer 1..1000 (default 50); invalid values exit 2.
+  - --limit must be an integer 1..1000 (default 50) on bot list, message history,
+    session list, and sidebar list. --offset is a 0-based resume from the next field.
+    Truncation is marked with truncated, next, and hint. Invalid values exit 2.
   - Write errors that cannot rule out a side effect (unavailable/internal/deadline/transport)
     exit 10 (unknown, retryable=false): reconcile before retrying.
   - Sidebar writes are read back; a semantic mismatch exits 10 with code sidebar_unverified.
@@ -88,5 +100,7 @@ EXIT CODES:
   8 retryable | 9 known_failure | 10 unknown outcome | 1 other
 
 MCP:
-  gbc-mcp   # stdio MCP server (same SDK ops)
+  gbc-mcp                 # stdio; default tool list is read-only + auth
+  gbc-mcp --allow-writes  # or GBT_ALLOW_WRITES=1: register write tools
+  GBT_MCP_READONLY=1      # stricter: hide auth mutators as well; wins over allow-writes
 `;

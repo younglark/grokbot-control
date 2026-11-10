@@ -8,6 +8,8 @@ import { loadMockState, saveMockState } from "../testing/mock-persist.js";
 
 export type CliGlobal = {
   json: boolean;
+  /** When true, success stdout is data only (no envelope). */
+  plain: boolean;
   allowWrites: boolean;
   dryRun: boolean;
   baseUrl: string;
@@ -19,6 +21,7 @@ export type CliGlobal = {
 export function parseGlobals(argv: string[]): { globals: CliGlobal; rest: string[] } {
   const globals: CliGlobal = {
     json: false,
+    plain: false,
     allowWrites: false,
     dryRun: false,
     baseUrl: process.env.GBT_BASE_URL || "https://api2.cursor.sh",
@@ -30,6 +33,7 @@ export function parseGlobals(argv: string[]): { globals: CliGlobal; rest: string
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     if (a === "--json") globals.json = true;
+    else if (a === "--plain") globals.plain = true;
     else if (a === "--allow-writes") globals.allowWrites = true;
     else if (a === "--dry-run") globals.dryRun = true;
     else if (a === "--mock") globals.mock = true;
@@ -39,6 +43,12 @@ export function parseGlobals(argv: string[]): { globals: CliGlobal; rest: string
     else if (a === "--auth-kind") globals.authKind = (argv[++i] as AuthKind) || "cursor";
     else if (a.startsWith("--auth-kind=")) globals.authKind = a.slice("--auth-kind=".length) as AuthKind;
     else rest.push(a);
+  }
+  if (globals.json && globals.plain) {
+    throw new GbcError("usage", "use either --json or --plain, not both", {
+      exitCode: 2,
+      hint: "gbc --json …  or  gbc --plain …",
+    });
   }
   return { globals, rest };
 }

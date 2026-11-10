@@ -8,9 +8,10 @@ import {
   parseGlobals,
   persistMockState,
 } from "./config.js";
-import { catchToExit, emitResult, usageExit } from "./io.js";
+import { catchToExit, emitResult, outputMode, usageExit } from "./io.js";
+import { assertCommandFlags, assertNoLeadingFlag } from "./flags.js";
 import { failResult, okResult } from "../dto/result.js";
-import { parseCliLimit } from "../ops/limits.js";
+import { parseCliLimit, parseCliOffset } from "../ops/limits.js";
 
 async function main(): Promise<number> {
   const argv = process.argv.slice(2);
@@ -18,15 +19,17 @@ async function main(): Promise<number> {
     process.stdout.write(HELP);
     return 0;
   }
-  const { globals, rest } = parseGlobals(argv);
-  const asJson = globals.json || !process.stdout.isTTY;
-
-  const [noun, verb] = rest;
-  if (!noun || !verb) usageExit("missing <noun> <verb>", "gbc --help");
-
   try {
+    const { globals, rest } = parseGlobals(argv);
+    const mode = outputMode(globals, process.stdout.isTTY);
+    assertNoLeadingFlag(rest);
+
+    const [noun, verb] = rest;
+    if (!noun || !verb) usageExit("missing <noun> <verb>", "gbc --help");
+    assertCommandFlags(noun, verb, rest);
+
     if (noun === "sync")
-      return emitResult(await syncCommand(globals, rest), asJson);
+      return emitResult(await syncCommand(globals, rest), mode);
     const plane = buildPlane(globals);
     const write = {
       dryRun: globals.dryRun,
@@ -37,11 +40,11 @@ async function main(): Promise<number> {
     if (noun === "auth") {
       const ops = plane.authOps;
       if (verb === "whoami" || verb === "status") {
-        code = emitResult(await ops.whoami(), asJson);
+        code = emitResult(await ops.whoami(), mode);
       } else if (verb === "login-begin") {
-        code = emitResult(await ops.begin(), asJson);
+        code = emitResult(await ops.begin(), mode);
       } else if (verb === "poll") {
-        code = emitResult(await ops.poll(), asJson);
+        code = emitResult(await ops.poll(), mode);
       } else if (verb === "complete" || verb === "login") {
         const timeout = flag(rest, "--timeout");
         if (timeout !== undefined && !/^\d+$/.test(timeout))
@@ -52,7 +55,7 @@ async function main(): Promise<number> {
         if (verb === "login") {
           const begin = await ops.begin();
           if (!begin.ok) {
-            code = emitResult(begin, asJson);
+            code = emitResult(begin, mode);
             persistMockState();
             return code;
           }
@@ -75,21 +78,21 @@ async function main(): Promise<number> {
               timeout === undefined ? undefined : Number(timeout),
               ac.signal,
             ),
-            asJson,
+            mode,
           );
         } finally {
           process.off("SIGINT", onSig);
           process.off("SIGTERM", onSig);
         }
       } else if (verb === "cancel") {
-        code = emitResult(await ops.cancel(), asJson);
+        code = emitResult(await ops.cancel(), mode);
       } else if (verb === "refresh") {
         code = emitResult(
           await ops.refresh({ force: hasFlag(rest, "--force") }),
-          asJson,
+          mode,
         );
       } else if (verb === "logout") {
-        code = emitResult(await ops.logout(), asJson);
+        code = emitResult(await ops.logout(), mode);
       } else {
         usageExit(
           `unknown command: auth ${verb}`,
@@ -97,7 +100,7 @@ async function main(): Promise<number> {
         );
       }
     } else if (noun === "computer" && verb === "state") {
-      code = emitResult(await plane.computer.state(), asJson);
+      code = emitResult(await plane.computer.state(), mode);
     } else if (noun === "computer" && verb === "reset") {
       const timeoutRaw = flag(rest, "--timeout");
       let timeoutSeconds: number | undefined;
@@ -132,7 +135,7 @@ async function main(): Promise<number> {
             },
             ac.signal,
           ),
-          asJson,
+          mode,
         );
       } finally {
         process.off("SIGINT", onSig);
@@ -140,13 +143,16 @@ async function main(): Promise<number> {
       }
     } else if (noun === "bot" && verb === "list") {
       code = emitResult(
-        await plane.bot.list({ limit: parseCliLimit(flag(rest, "--limit")) }),
-        asJson,
+        await plane.bot.list({
+          limit: parseCliLimit(flag(rest, "--limit")),
+          offset: parseCliOffset(flag(rest, "--offset")),
+        }),
+        mode,
       );
     } else if (noun === "bot" && verb === "get") {
       const id = flag(rest, "--agent-id");
-      if (!id) usageExit("bot get requires --agent-id");
-      code = emitResult(await plane.bot.get(id), asJson);
+      if (!id) usageExit("bot get requires --agent-id", "gbc bot get --agent-id <id>");
+      code = emitResult(await plane.bot.get(id), mode);
     } else if (noun === "bot" && verb === "create") {
       const name = flag(rest, "--name");
       if (!name) usageExit("bot create requires --name");
@@ -162,7 +168,7 @@ async function main(): Promise<number> {
           },
           write,
         ),
-        asJson,
+        mode,
       );
     } else if (noun === "bot" && verb === "update") {
       const id = flag(rest, "--agent-id");
@@ -177,7 +183,7 @@ async function main(): Promise<number> {
           },
           write,
         ),
-        asJson,
+        mode,
       );
     } else if (noun === "bot" && verb === "delete") {
       const id = flag(rest, "--agent-id");
@@ -187,24 +193,24 @@ async function main(): Promise<number> {
           ...write,
           confirm: flag(rest, "--confirm"),
         }),
-        asJson,
+        mode,
       );
     } else if (noun === "bot" && verb === "status") {
       const id = flag(rest, "--agent-id");
       if (!id) usageExit("bot status requires --agent-id");
-      code = emitResult(await plane.progress.status([id]), asJson);
+      code = emitResult(await plane.progress.status([id]), mode);
     } else if (noun === "bot" && verb === "todos") {
       const id = flag(rest, "--agent-id");
       if (!id) usageExit("--agent-id required");
-      code = emitResult(await plane.progress.todos(id), asJson);
+      code = emitResult(await plane.progress.todos(id), mode);
     } else if (noun === "bot" && verb === "tasks") {
       const id = flag(rest, "--agent-id");
       if (!id) usageExit("--agent-id required");
-      code = emitResult(await plane.progress.tasks(id), asJson);
+      code = emitResult(await plane.progress.tasks(id), mode);
     } else if (noun === "bot" && verb === "subagents") {
       const id = flag(rest, "--agent-id");
       if (!id) usageExit("--agent-id required");
-      code = emitResult(await plane.progress.subagents(id), asJson);
+      code = emitResult(await plane.progress.subagents(id), mode);
     } else if (noun === "bot" && verb === "interrupt") {
       const id = flag(rest, "--agent-id");
       if (!id) usageExit("--agent-id required");
@@ -215,7 +221,7 @@ async function main(): Promise<number> {
           reason: flag(rest, "--reason"),
           sessionId: flag(rest, "--session-id"),
         }),
-        asJson,
+        mode,
       );
     } else if (noun === "message" && verb === "send") {
       const agentId = flag(rest, "--agent-id");
@@ -250,7 +256,7 @@ async function main(): Promise<number> {
           dryRun: write.dryRun,
           allowWrite: write.allowWrite,
         }),
-        asJson,
+        mode,
       );
     } else if (noun === "message" && verb === "status") {
       const agentId = flag(rest, "--agent-id");
@@ -266,28 +272,41 @@ async function main(): Promise<number> {
           sessionId: sessionId ?? "",
           messageId,
         }),
-        asJson,
+        mode,
       );
     } else if (noun === "message" && verb === "history") {
       const agentId = flag(rest, "--agent-id");
-      if (!agentId) usageExit("--agent-id required");
+      if (!agentId) usageExit("message history requires --agent-id", "gbc message history --agent-id <id> [--limit 50] [--offset 0]");
       code = emitResult(
         await plane.message.history({
           agentId,
           limit: parseCliLimit(flag(rest, "--limit")),
+          offset: parseCliOffset(flag(rest, "--offset")),
         }),
-        asJson,
+        mode,
       );
     } else if (noun === "session" && verb === "list") {
       const agentId = flag(rest, "--agent-id");
-      if (!agentId) usageExit("--agent-id required");
-      code = emitResult(await plane.session.list(agentId), asJson);
+      if (!agentId) usageExit("session list requires --agent-id", "gbc session list --agent-id <id> [--limit 50] [--offset 0]");
+      code = emitResult(
+        await plane.session.list(agentId, {
+          limit: parseCliLimit(flag(rest, "--limit")),
+          offset: parseCliOffset(flag(rest, "--offset")),
+        }),
+        mode,
+      );
     } else if (noun === "sidebar" && verb === "list") {
-      code = emitResult(await plane.sidebar.list(), asJson);
+      code = emitResult(
+        await plane.sidebar.list({
+          limit: parseCliLimit(flag(rest, "--limit")),
+          offset: parseCliOffset(flag(rest, "--offset")),
+        }),
+        mode,
+      );
     } else if (noun === "sidebar" && verb === "create") {
       const name = flag(rest, "--name");
       if (!name) usageExit("sidebar create requires --name");
-      code = emitResult(await plane.sidebar.createSection(name, write), asJson);
+      code = emitResult(await plane.sidebar.createSection(name, write), mode);
     } else if (noun === "sidebar" && verb === "rename") {
       const id = flag(rest, "--section-id");
       const name = flag(rest, "--name");
@@ -295,7 +314,7 @@ async function main(): Promise<number> {
         usageExit("sidebar rename requires --section-id --name");
       code = emitResult(
         await plane.sidebar.renameSection(id, name, write),
-        asJson,
+        mode,
       );
     } else if (noun === "sidebar" && verb === "delete") {
       const id = flag(rest, "--section-id");
@@ -305,7 +324,7 @@ async function main(): Promise<number> {
           ...write,
           confirm: flag(rest, "--confirm"),
         }),
-        asJson,
+        mode,
       );
     } else if (noun === "sidebar" && verb === "move") {
       const agentId = flag(rest, "--agent-id");
@@ -314,7 +333,7 @@ async function main(): Promise<number> {
         usageExit("sidebar move requires --agent-id --section-id");
       code = emitResult(
         await plane.sidebar.moveBot(agentId, sectionId, write),
-        asJson,
+        mode,
       );
     } else if (noun === "room") {
       code = emitResult(
@@ -325,7 +344,7 @@ async function main(): Promise<number> {
             hint: "Use sidebar for App sidebar grouping.",
           },
         ),
-        asJson,
+        mode,
       );
     } else {
       usageExit(`unknown command: ${noun} ${verb}`, "gbc --help");
@@ -334,7 +353,7 @@ async function main(): Promise<number> {
     return code;
   } catch (e) {
     persistMockState();
-    return catchToExit(e, asJson);
+    return catchToExit(e);
   }
 }
 
