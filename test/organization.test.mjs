@@ -40,11 +40,16 @@ test('frozen archive is unchanged and both consumers record exactly the same inp
  const inputHashes=json(`${a.source}.sha256.json`);
  for(const [name,hash] of Object.entries(a.sha256))assert.equal(hash,inputHashes[name],name);
 });
-test('public lifecycle ships only runtime artifacts and publisher binding filename stays fixed',()=>{
+test('public lifecycle ships only runtime artifacts and no workflow publishes to npmjs',()=>{
  const p=json('packages/grokbot-control/package.json');assert.deepEqual(p.files,['dist','vendor/proto-gen','README.md']);
  assert.equal(p.scripts.prepare,undefined);assert.equal(p.scripts.install,undefined);assert.equal(p.scripts.prepack,'npm run build');
- const ci=readFileSync(join(root,'.github/workflows/publish.yml'),'utf8');
- assert.match(ci,/working-directory: packages\/grokbot-control/);assert.match(ci,/id-token: write/);assert.match(ci,/"v\*"/);
+ assert.equal(existsSync(join(root,'.github/workflows/publish.yml')),false);
+ const workflows=join(root,'.github/workflows');
+ for(const name of readdirSync(workflows)){
+  const text=readFileSync(join(workflows,name),'utf8');
+  assert.doesNotMatch(text,/npm\s+publish/,'workflow must not publish to npmjs: '+name);
+  assert.doesNotMatch(text,/registry\.npmjs\.org/,'workflow must not target registry.npmjs.org: '+name);
+ }
 });
 test('headless and Docker boundaries are documentation, not fake implemented products',()=>{
  for(const p of ['packages/headless-node/package.json','packages/headless-node/src/cli.ts','deploy/headless/Dockerfile','deploy/headless/docker-compose.yml'])assert.equal(existsSync(join(root,p)),false,p);
