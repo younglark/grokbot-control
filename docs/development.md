@@ -68,7 +68,7 @@
 
 - `workspaces.yml`：Node 20/22，job `timeout-minutes: 30`，`npm test` 一步 15 分钟。设置 `UC_SKIP_OFFICIAL=1`，避免误跑官方二进制。`npm ci --ignore-scripts` → 安装 ripgrep → generate:check → build → test → protocol-tools → smoke:uc → smoke:electron（无 Electron 时跳过）→ verify:package → `git diff --exit-code`。
 - `auth-native-lock.yml`：`fs-native-extensions` 三平台预编译与源码构建矩阵。macOS 使用标准 arm64 标签 `macos-15`（`macos-14` 已于 2026-11-02 退役）。
-- `release-github.yml`：job `timeout-minutes: 30`，Test 一步 15 分钟。推送 `v*` tag（不匹配 `npm-v*`）时，在 `UC_SKIP_OFFICIAL=1` 下跑 `npm ci`、`generate:check`、`build`、`npm test`，再把 `npm pack` 产物写成孤立 commit，打并推送 `npm-v<version>`。tag 已存在则失败，不 force-push。测试失败不会走到打 tag 那一步。`v0.2.0` 的一次发版因测试挂起被取消，没有生成 `npm-v0.2.0`；不要改写该源码 tag。
+- `release-github.yml`：job `timeout-minutes: 30`，Test 一步 15 分钟。推送 `v*` tag（不匹配 `npm-v*`）时，在 `UC_SKIP_OFFICIAL=1` 下跑 `npm ci`、`generate:check`、`build`、`npm test`，再把 `npm pack` 产物写成孤立 commit，打并推送 `npm-v<version>`。tag 已存在则失败，不 force-push。测试失败不会走到打 tag 那一步。`v0.2.0` 的一次发版因测试挂起被取消，没有生成 `npm-v0.2.0`；`v0.4.0` 的一次发版因 Playwright/Chromium dashboard UI 验收失败，没有生成 `npm-v0.4.0`；不要改写这些源码 tag。
 - 不再包含 `publish.yml`。推送任何 tag 都不会向 registry.npmjs.org 发布。
 
 ## 发布（GitHub tag，不再发到 npmjs）
@@ -76,8 +76,8 @@
 控制面通过 git tag `npm-v<version>` 分发，tag 指向一个**没有 main 历史父提交**的安装树（`npm pack` 产物，已去掉 `prepack` / `build` 等生命周期脚本）。消费命令：
 
 ```bash
-npx -y --package=github:younglark/grokbot-control#npm-v0.4.0 gbc --help
-npx -y --package=github:younglark/grokbot-control#npm-v0.4.0 gbc-mcp
+npx -y --package=github:younglark/grokbot-control#npm-v0.4.1 gbc --help
+npx -y --package=github:younglark/grokbot-control#npm-v0.4.1 gbc-mcp
 ```
 
 仓库是私有的，安装方需要能 `git clone` 的权限：`gh auth login`（HTTPS + credential helper）或配置 GitHub SSH key。包名 `grokbot-control` 与 bin 名 `gbc` / `gbc-mcp` 不同，必须带 `--package`，否则 npx 无法选定可执行文件。
@@ -85,10 +85,10 @@ npx -y --package=github:younglark/grokbot-control#npm-v0.4.0 gbc-mcp
 正式发版步骤：
 
 1. 在已合并的 `main` 上，工作区干净。需要先改版本时：`npm version <patch|minor|major> -w grokbot-control --no-git-tag-version`，审查后提交并推送 `main`。
-2. 在准备推送的 `main` 提交上打源码 tag：`git tag -a v0.4.0 <main-commit> -m "grokbot-control 0.4.0"`，再 `git push origin refs/tags/v0.4.0`。不要从本机推送 `npm-v*`。
-3. 等待 GitHub Actions 工作流 `release-github.yml` 跑完：它会打包、生成孤立 commit，并推送 `npm-v0.4.0`。同名 tag 已存在时任务失败，不会 force-push。测试失败不会出品 tag。
+2. 在准备推送的 `main` 提交上打源码 tag：`git tag -a v0.4.1 <main-commit> -m "grokbot-control 0.4.1"`，再 `git push origin refs/tags/v0.4.1`。不要从本机推送 `npm-v*`。
+3. 等待 GitHub Actions 工作流 `release-github.yml` 跑完：它会打包、生成孤立 commit，并推送 `npm-v0.4.1`。同名 tag 已存在时任务失败，不会 force-push。测试失败不会出品 tag。
 4. 根包、`protocol`、`local-exec-daemon` 仍是 private，不会被打进安装树。npmjs 上的 `grokbot-control@0.1.3` 已停止更新，本仓库不再向 npmjs 发版。
 
-**推 `v*` 前确认 Actions 能跑完。** `v0.3.0` 的发版已成功生成 `npm-v0.3.0`。若工作流无法跑完，先推 `v*` 不会生成 `npm-v*`，还会留下一个空的源码 tag。
+**推 `v*` 前确认 Actions 能跑完。** `v0.3.0` 的发版已成功生成 `npm-v0.3.0`。`v0.4.0` 的发版因 Playwright/Chromium 测试失败，没有生成 `npm-v0.4.0`，不要改写该源码 tag。若工作流无法跑完，先推 `v*` 不会生成 `npm-v*`，还会留下一个空的源码 tag。
 
 本地预览（可选）：`export UC_SKIP_OFFICIAL=1` 后运行 `npm run verify:package`，再运行 `npm run release:github`（默认执行 generate:check、build、`npm test`）。stdout 为 JSON，包含孤立 commit 的 hash，可用 `npx -y --package=git+file://$PWD#<commit> gbc --help` 自检。默认不打官方 `npm-v*` tag。`--write-local-tag` 只在本地写验证用 tag，同样不要推送。`--skip-tests` 可跳过测试，但默认要跑。`--allow-branch` 允许在非 main 的干净分支上做预览。

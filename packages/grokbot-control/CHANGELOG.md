@@ -4,11 +4,17 @@
 
 ## Unreleased
 
+## 0.4.1 — 2026-11-11（通过 GitHub tag `npm-v0.4.1` 分发，不发到 npmjs）
+
+源码 tag `v0.4.0` 已推送，但发版工作流在 `npm test` 处因 Playwright/Chromium dashboard UI 验收失败，**没有生成 `npm-v0.4.0`**。请不要删除或改写已推送的 `v0.4.0`。0.4.1 去掉这些重浏览器测试，是该线上应由 Actions 生成的 GitHub 安装 tag。
+
 ### 修复
 
 - **默认 `npm test` 不再跑依赖 Playwright Chromium 的 dashboard UI 验收。** `packages/grokbot-control/test/dashboard-ui.test.ts` 只保留打包树存在性与 `resolveDashboardUiRoot` 等轻量检查。Workspace regression 不再执行 `npx playwright install --with-deps chromium`，也从 devDependencies 移除 playwright。未安装浏览器时，发版工作流不应再因「Chromium required…」失败。
 
-## 0.4.0 — 2026-11-11（通过 GitHub tag `npm-v0.4.0` 分发，不发到 npmjs）
+安装：`npx -y --package=github:younglark/grokbot-control#npm-v0.4.1 gbc`（`gbc-mcp` 同样要加 `--package`）。
+
+## 0.4.0 — 2026-11-11（行为变更已进入 main；`npm-v0.4.0` 未生成）
 
 ### 新增
 
@@ -23,8 +29,6 @@
 - `usage_percent` 按已经算好的百分比展示（例如 21.781372 显示为 21.78%），不再标注该字段「单位未核实」，也不会把 0–1 小数再乘 100。breakdown 中的 ppm 是占限额的百万分比，换算为百分比展示（例如 225439 ppm 显示为 22.54%），不再写成 225439%，也不再标注该字段「占比未核实」。金额/币种仍尚未 live 核实；包含额度为 0 时不绘制满额进度条；计费链接仅在接口返回完整 URL 时展示，不会拼接。不会猜测 team id 去取企业支出或事件。
 - 会话切换尚未作为默认关键路径验收：当前实现是本地只读查看成绩单，不是官方会话切换写操作。
 - OAuth 刷新仍未 live 核实。
-
-安装：`npx -y --package=github:younglark/grokbot-control#npm-v0.4.0 gbc`（`gbc-mcp` 同样要加 `--package`）。
 
 ## 0.3.0 — 2026-11-11（通过 GitHub tag `npm-v0.3.0` 分发，不发到 npmjs）
 
