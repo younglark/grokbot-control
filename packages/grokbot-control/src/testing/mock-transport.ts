@@ -27,18 +27,36 @@ export type MockUsageFixture =
   | "enterprise_shared"
   | "failure";
 
+export type MockBreakdownFixture =
+  | "cents_by_source"
+  | "cents_by_bot"
+  | "ppm_weekly"
+  | "ppm_billing"
+  | "empty"
+  | "failure";
+
 export type MockCallCounts = {
   listGrokBotAgents: number;
   listGrokBotAgentStatuses: number;
   getSandBoxRunState: number;
   getGrokBotUserRuntimeSettings: number;
   getSandUsageStatus: number;
+  getGrokBotUsageBreakdown: number;
+  listGrokBotAgentTodos: number;
+  listGrokBotAgentTasks: number;
+  listGrokBotSubagents: number;
+  listGrokBotAgentSessions: number;
+  listGrokBotTranscriptEntries: number;
 };
 
 export type MockState = {
   bots: Array<Record<string, unknown>>;
   /** Official GetSandUsageStatus fixture for the local `gbc dashboard` monitor. */
   usageFixture?: MockUsageFixture;
+  /** Official GetGrokBotUsageBreakdown fixture. */
+  breakdownFixture?: MockBreakdownFixture;
+  /** Last GetGrokBotUsageBreakdown request (to assert no team id). */
+  lastUsageBreakdownRequest?: unknown;
   callCounts?: MockCallCounts;
   sections: SidebarSection[];
   /** Force next sidebar update to conflict. */
@@ -53,6 +71,10 @@ export type MockState = {
   subagents: unknown[];
   transcript: unknown[];
   sandbox: MockSandboxState;
+  /** Test hook: next transcript reads throw. */
+  failTranscript?: boolean;
+  /** Test hook: override the synthetic generation. */
+  transcriptGeneration?: number;
 };
 
 function defaultSandbox(): MockSandboxState {
@@ -81,6 +103,7 @@ export function createEmptyMockState(): MockState {
     subagents: [],
     transcript: [],
     usageFixture: "normal",
+    breakdownFixture: "cents_by_source",
     callCounts: emptyCallCounts(),
   };
 }
@@ -92,6 +115,12 @@ export function emptyCallCounts(): MockCallCounts {
     getSandBoxRunState: 0,
     getGrokBotUserRuntimeSettings: 0,
     getSandUsageStatus: 0,
+    getGrokBotUsageBreakdown: 0,
+    listGrokBotAgentTodos: 0,
+    listGrokBotAgentTasks: 0,
+    listGrokBotSubagents: 0,
+    listGrokBotAgentSessions: 0,
+    listGrokBotTranscriptEntries: 0,
   };
 }
 
@@ -169,6 +198,57 @@ export function usageFixtureResponse(name: MockUsageFixture): Record<string, unk
         cursorPlanName: "Pro",
         grokPlanLabel: "SuperGrok",
       };
+  }
+}
+
+
+const dayMs = 1_700_000_000_000n;
+
+/** Connect/protobuf-es oneof shape accepted by the DashboardService router transport. */
+function breakdownOneof(caseName: "billedCents" | "weeklyLimitPpm" | "billingCyclePpm", value: Record<string, unknown>): Record<string, unknown> {
+  return { breakdown: { case: caseName, value } };
+}
+
+/** Synthetic GetGrokBotUsageBreakdown responses. Numbers are fixtures, not live data. */
+export function usageBreakdownFixtureResponse(name: MockBreakdownFixture): Record<string, unknown> {
+  switch (name) {
+    case "cents_by_bot":
+      return breakdownOneof("billedCents", {
+        periodStartMs: dayMs,
+        periodEndMs: dayMs + 86_400_000n,
+        bySource: [],
+        byBot: [
+          { dayMs, botId: "agent-1", cents: 800n },
+          { dayMs, botId: "agent-2", cents: 200n },
+        ],
+      });
+    case "ppm_weekly":
+      return breakdownOneof("weeklyLimitPpm", {
+        periodStartMs: dayMs,
+        periodEndMs: dayMs + 86_400_000n,
+        bySource: [{ dayMs, source: 1, ppm: 225439 }],
+        byBot: [{ dayMs, botId: "agent-1", ppm: 225439 }],
+      });
+    case "ppm_billing":
+      return breakdownOneof("billingCyclePpm", {
+        periodStartMs: dayMs,
+        periodEndMs: dayMs + 86_400_000n,
+        bySource: [{ dayMs, source: 3, ppm: 100000 }],
+        byBot: [{ dayMs, botId: "agent-1", ppm: 80000 }],
+      });
+    case "empty":
+      return {};
+    case "cents_by_source":
+    default:
+      return breakdownOneof("billedCents", {
+        periodStartMs: dayMs,
+        periodEndMs: dayMs + 86_400_000n,
+        bySource: [
+          { dayMs, source: 1, cents: 1234n },
+          { dayMs, source: 2, cents: 50n },
+        ],
+        byBot: [{ dayMs, botId: "agent-1", cents: 900n }],
+      });
   }
 }
 
@@ -309,10 +389,21 @@ export function createMockTransport(state: MockState) {
           acceptedAtMs: found ? BigInt(Date.now()) : undefined,
         };
       },
-      async listGrokBotTranscriptEntries() {
-        return { entries: state.transcript, generation: 1 };
+      async listGrokBotTranscriptEntries(req) {
+        counts(state).listGrokBotTranscriptEntries += 1;
+        if (state.failTranscript) {
+          throw new ConnectError("simulated transcript failure", Code.Unavailable);
+        }
+        const entries = state.transcript.filter((e) => {
+          const row = e;
+          if (row.agentId && row.agentId !== req.agentId) return false;
+          if (req.sessionId && row.sessionId && row.sessionId !== req.sessionId) return false;
+          return true;
+        });
+        return { entries, generation: state.transcriptGeneration ?? 1 };
       },
       async listGrokBotAgentSessions(req) {
+        counts(state).listGrokBotAgentSessions += 1;
         return {
           sessions: state.sessions.filter((s) => s.agentId === req.agentId),
         };
@@ -324,14 +415,32 @@ export function createMockTransport(state: MockState) {
           statuses: state.statuses.filter((s) => ids.has(String(s.agentId))),
         };
       },
-      async listGrokBotAgentTodos() {
-        return { todos: state.todos };
+      async listGrokBotAgentTodos(req) {
+        counts(state).listGrokBotAgentTodos += 1;
+        return {
+          todos: state.todos.filter((t) => {
+            const row = t;
+            return !row.agentId || row.agentId === req.agentId;
+          }),
+        };
       },
-      async listGrokBotAgentTasks() {
-        return { tasks: state.tasks };
+      async listGrokBotAgentTasks(req) {
+        counts(state).listGrokBotAgentTasks += 1;
+        return {
+          tasks: state.tasks.filter((x) => {
+            const row = x;
+            return !row.agentId || row.agentId === req.agentId;
+          }),
+        };
       },
-      async listGrokBotSubagents() {
-        return { subagents: state.subagents };
+      async listGrokBotSubagents(req) {
+        counts(state).listGrokBotSubagents += 1;
+        return {
+          subagents: state.subagents.filter((s) => {
+            const row = s;
+            return !row.agentId || row.agentId === req.agentId;
+          }),
+        };
       },
       async interruptGrokBotAgentRun() {
         return { hadActiveRun: true };
@@ -410,6 +519,15 @@ export function createMockTransport(state: MockState) {
           throw new ConnectError("simulated usage failure", Code.Unavailable);
         }
         return usageFixtureResponse(fixture);
+      },
+      async getGrokBotUsageBreakdown(req) {
+        counts(state).getGrokBotUsageBreakdown += 1;
+        state.lastUsageBreakdownRequest = req ?? {};
+        const fixture = state.breakdownFixture ?? "cents_by_source";
+        if (fixture === "failure") {
+          throw new ConnectError("simulated breakdown failure", Code.Unavailable);
+        }
+        return usageBreakdownFixtureResponse(fixture);
       },
     });
   });

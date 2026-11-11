@@ -6,13 +6,15 @@
 
 ### 新增
 
-- **本地只读监视器：`gbc dashboard`（亦接受 `gbc dashboard start`）。** 在回环地址启动一个近实时 Bot 监视页（本地轮询 + SSE），打印并打开带一次性路径 `/s/<随机>/` 的 URL。这是 CLI 命令，**不是**官方 protobuf `DashboardService`。第一期只封装只读的 `GetSandUsageStatus`（空请求）；不会通过 CLI、MCP 或 HTTP 暴露官方写 RPC（`Set*`、`ExecuteSandMcpTool`、`CancelSandTrial`、`SendTeamInvite` 等）。默认绑定 `127.0.0.1`，v1 拒绝非回环 `--host`。未登录时服务器仍会启动，页面提示在终端运行 `gbc auth login` 后刷新；页面不收集凭据。`--json` 输出一次含 `url` / `bind` / `opened` 的封套后保持运行；`--plain` 只打印 URL；`--no-open` 不打开浏览器。Ctrl+C / SIGTERM 退出码 0，不会中断远端 Bot。没有 v1 MCP dashboard 工具。
+- **本地只读监视器：`gbc dashboard`（亦接受 `gbc dashboard start`）。** 在回环地址启动一个近实时 Bot 监视页（本地轮询 + SSE），打印并打开带一次性路径 `/s/<随机>/` 的 URL。这是 CLI 命令，**不是**官方 protobuf `DashboardService`。不会通过 CLI、MCP 或 HTTP 暴露官方写 RPC（`Set*`、`ExecuteSandMcpTool`、`CancelSandTrial`、`SendTeamInvite` 等）。默认绑定 `127.0.0.1`，v1 拒绝非回环 `--host`。未登录时服务器仍会启动，页面提示在终端运行 `gbc auth login` 后刷新；页面不收集凭据。`--json` 输出一次含 `url` / `bind` / `opened` 的封套后保持运行；`--plain` 只打印 URL；`--no-open` 不打开浏览器。Ctrl+C / SIGTERM 退出码 0，不会中断远端 Bot。没有 v1 MCP dashboard 工具。
+- **第二期：任务区、活动时间线与用量明细。** 打开某个 Bot 详情时，约 10 秒轮询该 Bot 的 sessions / todos / tasks / subagents（多标签共享缓存 + singleflight，不会把全局 5 秒状态轮询按 Bot 放大）。用已有 history/transcript SDK 解析消息正文，展示活动时间线：运行中或等待中约 5 秒，否则 15–30 秒，仅活动列表离开视口时暂停刷新；浏览较早内容时显示「有新活动」，不强制滚到底部。`GetGrokBotUsageBreakdown` 首次调用不传 team id；若明细里带有 `bot_id`，对应 Bot 详情也会展示。todos / tasks / subagents 使用稳定 DTO；没有可靠数据时不编造待办。会话切换是本地查看成绩单的明确能力，需单独验收，不是默认关键路径；数据不足时只提供只读会话列表与当前会话，失败可见。
 
 ### 说明
 
-- 「近实时」是本地 5 秒轮询 + SSE，不是 `WatchGrokBotTranscripts`（该 RPC 不在已用表面，也未接线）。
+- 「近实时」是本地轮询 + SSE，不是 `WatchGrokBotTranscripts`（该 RPC 不在已用表面，也未接线）。
 - `computer.state` 未经实时核验；未知或过期状态不会显示为绿色「运行中」，也不等同于离线。
-- `usage_percent` 的单位尚未 live 核实；包含额度为 0 时不绘制满额进度条；计费链接仅在接口返回完整 URL 时展示，不会拼接。
+- `usage_percent` 按已经算好的百分比展示（例如 21.781372 显示为 21.78%），不再标注该字段「单位未核实」，也不会把 0–1 小数再乘 100。breakdown 中的 ppm 是占限额的百万分比，换算为百分比展示（例如 225439 ppm 显示为 22.54%），不再写成 225439%，也不再标注该字段「占比未核实」。金额/币种仍尚未 live 核实；包含额度为 0 时不绘制满额进度条；计费链接仅在接口返回完整 URL 时展示，不会拼接。不会猜测 team id 去取企业支出或事件。
+- 会话切换尚未作为默认关键路径验收：当前实现是本地只读查看成绩单，不是官方会话切换写操作。
 - OAuth 刷新仍未 live 核实。
 
 ## 0.3.0 — 2026-11-11（通过 GitHub tag `npm-v0.3.0` 分发，不发到 npmjs）

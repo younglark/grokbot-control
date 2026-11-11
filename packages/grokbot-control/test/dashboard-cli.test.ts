@@ -9,7 +9,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseHost, parsePort, isLoopbackHost } from "../src/localdash/bind.js";
-import { canDrawUsageBar, presentComputer, stateLabel } from "../src/localdash/view.js";
+import { canDrawUsageBar, formatUsagePercent, formatUsagePpm, presentComputer, stateLabel } from "../src/localdash/view.js";
 import { mapUsageStatus } from "../src/ops/usage.js";
 import { usageFixtureResponse } from "../src/testing/mock-transport.js";
 import { GbcError } from "../src/errors.js";
@@ -188,8 +188,15 @@ describe("usage and computer presentation", () => {
     assert.equal(canDrawUsageBar(unlimited), false);
     const near = mapUsageStatus(usageFixtureResponse("near_exhausted"));
     assert.equal(near.usage_percent, 92);
-    assert.equal(near.usage_percent_unit, "unverified");
-    assert.ok(near.notes.some((n) => /未.*核实/.test(n)));
+    assert.equal(near.usage_percent_unit, "percent");
+    assert.equal(formatUsagePercent(near.usage_percent!), "92%");
+    assert.equal(formatUsagePercent(21.781372), "21.78%");
+    assert.equal(formatUsagePercent(21.7), "21.7%");
+    assert.equal(formatUsagePercent(0.21781372), "0.22%"); // already a percentage; do not * 100
+    assert.equal(formatUsagePpm(225439), "22.54%");
+    assert.equal(formatUsagePpm(100000), "10%");
+    assert.notEqual(formatUsagePpm(225439), "225439%");
+    assert.doesNotMatch(near.notes.join("\n"), /usage_percent.*单位尚未/);
     assert.equal(canDrawUsageBar(near), true);
     const enterprise = mapUsageStatus(usageFixtureResponse("enterprise_shared"));
     assert.equal(enterprise.uses_pooled_enterprise_allowance, true);

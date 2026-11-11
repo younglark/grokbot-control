@@ -1,7 +1,8 @@
 import type { GrokBotClient } from "../connect/client.js";
 import { mapConnectError } from "../connect/client.js";
 import { failResult, newRequestId, okResult, type ResultEnvelope } from "../dto/result.js";
-import type { SendDelivery, SendStatusView, TranscriptEntryView } from "../dto/types.js";
+import type { SendDelivery, SendStatusView, TimelineEntryView, TranscriptEntryView } from "../dto/types.js";
+import { mapTimelineEntries } from "./transcript-map.js";
 import { GbcError } from "../errors.js";
 import { paginate, validateLimit, validateOffset } from "./limits.js";
 
@@ -158,7 +159,46 @@ export class MessageOps {
     }
   }
 
-  private fromErr(e: unknown, request_id: string, write = false): ResultEnvelope<never> {
+  /**
+   * Dashboard/timeline helper: list transcript entries for one session and parse
+   * message bodies with the existing history/transcript decoder. Ciphertext is
+   * not decrypted. Does not send an unverified server-side limit.
+   */
+  async transcript(input: {
+    agentId: string;
+    sessionId: string;
+  }): Promise<
+    ResultEnvelope<{
+      entries: TimelineEntryView[];
+      generation?: number;
+      truncated: boolean;
+      note: string;
+    }>
+  > {
+    const request_id = newRequestId();
+    try {
+      const res = await this.client.listGrokBotTranscriptEntries({
+        agentId: input.agentId,
+        sessionId: input.sessionId,
+      });
+      const page = mapTimelineEntries(res.entries ?? []);
+      return this.sim(
+        okResult(
+          {
+            entries: page.entries,
+            generation: res.generation,
+            truncated: page.truncated,
+            note: "Ciphertext/omitted entries are not decrypted. Bodies marked untrusted.",
+          },
+          { request_id },
+        ),
+      );
+    } catch (e) {
+      return this.fromErr(e, request_id);
+    }
+  }
+
+    private fromErr(e: unknown, request_id: string, write = false): ResultEnvelope<never> {
     const err = e instanceof GbcError ? e : mapConnectError(e, request_id, { write });
     return this.sim(
       failResult(err.code, err.message, {

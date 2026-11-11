@@ -14,4 +14,4 @@
 
 单包命令：`npm test -w grokbot-control`、`npm run dev:gbc -- --mock --json bot list`、`npm run dev:gbc -- dashboard --mock`。
 
-`gbc dashboard` 是本地回环上的只读 Bot 监视器（轮询 + SSE），与官方 protobuf `DashboardService` 不是同一件事。第一期只封装只读的 `GetSandUsageStatus`，不提供 MCP 工具，也不暴露官方写 RPC。
+`gbc dashboard` 是本地回环上的只读 Bot 监视器（轮询 + SSE），与官方 protobuf `DashboardService` 不是同一件事。它封装只读的 `GetSandUsageStatus` 与不传 team id 的 `GetGrokBotUsageBreakdown`，并在打开的详情中轮询 sessions / todos / tasks / subagents 与成绩单正文。`usage_percent` 按已经算好的百分比展示；breakdown 中的 ppm 按占限额的百万分比换算为百分比。不提供 MCP dashboard 工具，也不暴露官方写 RPC。会话切换是本地查看成绩单的明确能力，需单独验收。

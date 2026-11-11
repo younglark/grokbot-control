@@ -93,7 +93,7 @@ describe("packed dashboard UI (Playwright)", () => {
       await dash.close();
       dash = undefined;
 
-      // Logged-in usage chip with labeled unverified units.
+      // Logged-in usage chip shows a formatted percentage, not an unverified-unit label.
       const loggedIn = createEmptyMockState();
       loggedIn.usageFixture = "near_exhausted";
       loggedIn.bots.push({
@@ -119,14 +119,12 @@ describe("packed dashboard UI (Playwright)", () => {
       const usage = page2.getByTestId("usage-chip");
       await usage.waitFor({ timeout: 8_000 });
       const usageText = await usage.innerText();
-      assert.match(usageText, /单位未核实/);
-      assert.match(usageText, /92/);
+      assert.match(usageText, /92%/);
+      assert.doesNotMatch(usageText, /单位未核实|21\.781/);
       await page2.getByText("Demo Bot").click();
       const detail = page2.getByTestId("bot-detail");
       await detail.waitFor();
       assert.match(await detail.innerText(), /等待确认/);
-      assert.doesNotMatch(await detail.innerText(), /todos|tasks|timeline/i);
-      assert.equal(await page2.locator("[data-testid=bot-todos]").count(), 0);
     } finally {
       if (dash) await dash.close();
       await browser.close();
@@ -185,7 +183,10 @@ describe("packed dashboard UI (Playwright)", () => {
       await page.setViewportSize({width:1440,height:1000});
       await page.getByTestId("usage-chip").click();
       await page.getByRole("heading",{name:"使用额度",exact:true}).waitFor();
-      assert.match(await page.getByRole("dialog").innerText(),/单位未核实/);
+      const percent = page.getByTestId("usage-percent");
+      await percent.waitFor();
+      assert.match(await percent.innerText(), /92%/);
+      assert.doesNotMatch(await percent.innerText(), /单位未核实/);
       if(shots) await page.screenshot({path:`${shots}/dark-1440-usage.png`,fullPage:true});
       await page.keyboard.press("Escape");
       await page.getByRole("dialog").waitFor({state:"hidden"});
@@ -261,6 +262,133 @@ describe("packed dashboard UI (Playwright)", () => {
       }
     } finally {await dash.close();await browser.close();}
   });
+
+  it("shows task and activity sections, session list, usage breakdown, and 有新活动 without forcing a scroll", async () => {
+    assert.ok(hasUi(), "build packed UI first");
+    const browser = await maybeChromium();
+    assert.ok(browser, "Chromium required for phase 2 UI acceptance");
+    const state = createEmptyMockState();
+    state.breakdownFixture = "cents_by_source";
+    state.bots.push({id:"1",agentId:"agent-1",name:"demo",title:"Demo Bot",viewerSessionId:"sess-1"});
+    state.statuses.push({agentId:"agent-1",isRunning:true,live:{agentId:"agent-1",isRunning:true,sessionId:"sess-1"}});
+    state.sessions.push({agentId:"agent-1",sessionId:"sess-1",kind:1},{agentId:"agent-1",sessionId:"sess-2",kind:5});
+    state.todos.push({id:"todo-1",content:"整理资料",status:1,agentId:"agent-1"});
+    state.tasks.push({id:"task-1",name:"调研任务",status:"open",agentId:"agent-1"});
+    const body = (obj: Record<string, unknown>) => Buffer.from(JSON.stringify(obj));
+    for (let i = 0; i < 12; i++) {
+      state.transcript.push({
+        entryId: `m${i}`,
+        seq: BigInt(i),
+        entryKind: "message",
+        bodyOmitted: false,
+        body: body({ id: `m${i}`, kind: "message", role: i % 2 ? "assistant" : "user", content: `历史消息 ${i} `.repeat(8), timestampMs: 1_700_000_000_000 + i }),
+        sessionId: "sess-1",
+        agentId: "agent-1",
+      });
+    }
+    const dash = await startDashboardServer({
+      plane: plane(state, true),
+      host: "127.0.0.1",
+      port: 0,
+      uiRoot,
+      poller: { detailIntervalMs: 80, timelineActiveIntervalMs: 70, timelineIdleIntervalMs: 80 },
+    });
+    try {
+      const page = await browser.newPage();
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.goto(dash.url, { waitUntil: "load" });
+      await page.getByTestId("bot-list").getByText("Demo Bot", { exact: true }).click();
+      const detail = page.getByTestId("bot-detail");
+      await detail.waitFor();
+      await page.getByTestId("bot-todos").getByText("整理资料").waitFor({ timeout: 8_000 });
+      assert.match(await page.getByTestId("bot-todos").innerText(), /整理资料/);
+      assert.match(await page.getByTestId("bot-tasks").innerText(), /调研任务/);
+      assert.match(await page.getByTestId("bot-sessions").innerText(), /sess-1/);
+      await page.getByTestId("bot-timeline").waitFor();
+      await page.getByTestId("bot-timeline").scrollIntoViewIfNeeded();
+      const scroller = page.getByTestId("timeline-scroller");
+      await scroller.waitFor({ timeout: 8_000 });
+      await scroller.getByText("历史消息 11", { exact: false }).waitFor();
+      await page.getByTestId("timeline-bottom").scrollIntoViewIfNeeded();
+      await page.waitForTimeout(300);
+      if (await page.getByTestId("timeline-new-activity").count()) {
+        await page.getByTestId("timeline-new-activity").click();
+        await page.getByTestId("timeline-new-activity").waitFor({ state: "hidden" });
+      }
+      await scroller.evaluate((el: HTMLElement) => {
+        el.scrollTop = 0;
+        el.dispatchEvent(new Event("scroll"));
+      });
+      await page.waitForTimeout(200);
+      assert.equal(await page.getByTestId("timeline-new-activity").count(), 0, "chip must be absent before new activity arrives");
+      const topBefore = await scroller.evaluate((el) => el.scrollTop);
+      state.transcript.push({
+        entryId: "m-new",
+        seq: 99n,
+        entryKind: "message",
+        bodyOmitted: false,
+        body: body({ id: "m-new", kind: "message", role: "assistant", content: "这是一条新活动", timestampMs: 1_700_000_010_000 }),
+        sessionId: "sess-1",
+        agentId: "agent-1",
+      });
+      await page.getByTestId("timeline-new-activity").waitFor({ timeout: 8_000 });
+      assert.match(await page.getByTestId("timeline-new-activity").innerText(), /有新活动/);
+      const topAfter = await scroller.evaluate((el) => el.scrollTop);
+      assert.ok(topAfter <= topBefore + 40, `should not force-scroll, before=${topBefore} after=${topAfter}`);
+      await page.getByTestId("timeline-new-activity").click();
+      await page.getByTestId("timeline-new-activity").waitFor({ state: "hidden" });
+      await page.getByText("这是一条新活动").waitFor();
+      await page.getByTestId("usage-chip").click();
+      await page.getByTestId("usage-breakdown").waitFor();
+      assert.match(await page.getByTestId("usage-breakdown").innerText(), /单位未核实/);
+    } finally {
+      await dash.close();
+      await browser.close();
+    }
+  });
+
+  it("formats breakdown ppm as a percentage of the limit in the usage panel and bot detail", async () => {
+    assert.ok(hasUi(), "build packed UI first");
+    const browser = await maybeChromium();
+    assert.ok(browser, "Chromium required for ppm percentage acceptance");
+    const state = createEmptyMockState();
+    state.breakdownFixture = "ppm_weekly";
+    state.bots.push({id:"1",agentId:"agent-1",name:"demo",title:"Demo Bot"});
+    state.statuses.push({agentId:"agent-1",isRunning:false,live:{agentId:"agent-1",isRunning:false}});
+    const dash = await startDashboardServer({
+      plane: plane(state, true),
+      host: "127.0.0.1",
+      port: 0,
+      uiRoot,
+    });
+    try {
+      const page = await browser.newPage();
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.goto(dash.url, { waitUntil: "load" });
+      await page.getByTestId("usage-chip").click();
+      const panel = page.getByTestId("usage-breakdown");
+      await panel.waitFor();
+      const panelValues = await panel.locator(".tabular-nums").allInnerTexts();
+      assert.deepEqual(panelValues, ["22.54%"]);
+      const panelText = await panel.innerText();
+      assert.doesNotMatch(panelText, /占比未核实/);
+      assert.doesNotMatch(panelValues.join("\n"), /225439/);
+      await page.keyboard.press("Escape");
+      await page.getByRole("dialog").waitFor({ state: "hidden" });
+      await page.getByTestId("bot-list").getByText("Demo Bot", { exact: true }).click();
+      const botShare = page.getByTestId("bot-usage-breakdown");
+      await botShare.waitFor();
+      const botValues = await botShare.locator(".tabular-nums").allInnerTexts();
+      assert.deepEqual(botValues, ["22.54%"]);
+      const botText = await botShare.innerText();
+      assert.doesNotMatch(botText, /占比未核实|单位未核实|225439/);
+    } finally {
+      await dash.close();
+      await browser.close();
+    }
+  });
+
+  // Execution graph acceptance now lives in dashboard-window.test.ts: real independent route.
 
   it("resolveDashboardUiRoot finds the packed tree after build", () => {
     if (!hasUi()) return;

@@ -41,9 +41,8 @@ export const READ_ONLY_UNARY_METHODS = new Set([
   "ResolveGrokBotAttachmentReads",
   "PresignSandBoxStoreReads",
   "GetSandUsageStatus",
-  // Registered for 401 refresh+retry only. Phase 1 of the local `gbc dashboard`
-  // command does not call this official DashboardService RPC (it needs a verified
-  // team_id and is reserved for a later phase).
+  // Local `gbc dashboard` calls this official read RPC without enterprise_team_id.
+  // Eligible for one 401 refresh+retry. Never invent a team id.
   "GetGrokBotUsageBreakdown",
 ]);
 

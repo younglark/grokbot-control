@@ -32,7 +32,7 @@ export class ControlPlane {
   readonly auth?: AuthProvider;
   readonly authOps: AuthOps;
   readonly computer: ComputerOps;
-  /** Read-only GetSandUsageStatus wrapper; not a general official DashboardService facade. */
+  /** Read-only GetSandUsageStatus / GetGrokBotUsageBreakdown wrapper; not a general official DashboardService facade. */
   readonly usage: UsageOps;
   readonly simulated: boolean;
 

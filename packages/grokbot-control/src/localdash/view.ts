@@ -73,13 +73,8 @@ export function stateLabel(state: string): string {
 }
 
 export function waitingReason(status?: ProgressStatus): string | undefined {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const awaiting = status?.live?.awaiting as any;
-  if (awaiting && typeof awaiting === "object") {
-    const reason = awaiting.reason ?? awaiting.Reason;
-    if (typeof reason === "string" && reason.trim()) return reason.trim();
-  }
-  if (typeof awaiting === "string" && awaiting.trim()) return awaiting.trim();
+  const awaiting = status?.live?.awaiting;
+  if (awaiting?.observed) return awaiting.reason ?? "等待／原因未知";
   if (status?.live?.is_retrying) return "正在重试";
   return undefined;
 }
@@ -87,7 +82,7 @@ export function waitingReason(status?: ProgressStatus): string | undefined {
 export function botCategory(status?: ProgressStatus): BotRunCategory {
   if (!status) return "unknown";
   if (status.is_running) return "running";
-  if (waitingReason(status) || status.live?.awaiting) return "waiting";
+  if (waitingReason(status) || status.live?.awaiting?.observed) return "waiting";
   return "idle";
 }
 
@@ -143,4 +138,18 @@ export function canDrawUsageBar(usage: {
     typeof usage.usage_percent === "number" &&
     Number.isFinite(usage.usage_percent)
   );
+}
+
+/** Format a usage_percent value that is already a percentage (21.781372 → "21.78%"). Never multiply by 100. */
+export function formatUsagePercent(value: number): string | undefined {
+  if (!Number.isFinite(value)) return undefined;
+  const rounded = Math.round(value * 100) / 100;
+  const text = rounded.toFixed(2).replace(/\.0+$/, "").replace(/(\.\d)0$/, "$1");
+  return `${text}%`;
+}
+
+/** Convert a limit-share in ppm (parts per million) to the same percentage format as usage_percent. 225439 → "22.54%". */
+export function formatUsagePpm(ppm: number): string | undefined {
+  if (!Number.isFinite(ppm)) return undefined;
+  return formatUsagePercent(ppm / 10_000);
 }

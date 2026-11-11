@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
 import type { ControlPlane } from "../ops/plane.js";
-import type { DashboardFrame } from "../dto/types.js";
+import type { DashboardFocus } from "../dto/types.js";
 import { GbcError } from "../errors.js";
 import {
   DEFAULT_HOST,
@@ -15,7 +15,7 @@ import {
   publicUrl,
   type BindTarget,
 } from "./bind.js";
-import { DashboardPoller } from "./poller.js";
+import { DashboardPoller, type DashboardPollerOptions } from "./poller.js";
 import { payloadLooksSecret } from "./sanitize.js";
 
 export type DashboardServerOptions = {
@@ -26,6 +26,8 @@ export type DashboardServerOptions = {
   uiRoot?: string;
   /** Override session token (tests). */
   sessionToken?: string;
+  /** Test-only poll interval overrides. */
+  poller?: DashboardPollerOptions;
 };
 
 export type StartedDashboard = {
@@ -68,11 +70,14 @@ export async function startDashboardServer(opts: DashboardServerOptions): Promis
   const uiRoot = resolvedUi;
   const sessionToken = opts.sessionToken ?? randomBytes(18).toString("base64url");
   const sessionPath = `/s/${sessionToken}/`;
-  const poller = new DashboardPoller(opts.plane);
+  const poller = new DashboardPoller(opts.plane, opts.poller);
   await poller.start();
 
   const sseClients = new Set<http.ServerResponse>();
-  const unsubscribe = poller.subscribe((frame) => broadcast(sseClients, frame));
+  const unsubscribe = poller.subscribe((frame) => broadcast(sseClients, "update", frame));
+  const unsubscribeDetail = poller.subscribeDetail((detail) => broadcast(sseClients, "detail", detail));
+  const unsubscribeTimeline = poller.subscribeTimeline((timeline) => broadcast(sseClients, "timeline", timeline));
+  const unsubscribeEvidence = poller.subscribeEvidence((evidence) => broadcast(sseClients, "evidence", evidence));
 
   const server = http.createServer((req, res) => {
     void handle(req, res);
@@ -83,6 +88,9 @@ export async function startDashboardServer(opts: DashboardServerOptions): Promis
     bind = await listenOn(server, host, port);
   } catch (e) {
     unsubscribe();
+    unsubscribeDetail();
+    unsubscribeTimeline();
+    unsubscribeEvidence();
     poller.close();
     throw e;
   }
@@ -116,15 +124,62 @@ export async function startDashboardServer(opts: DashboardServerOptions): Promis
     }
     if (req.method === "POST" && (rest === "api/usage/refresh" || rest === "api/usage/refresh/")) {
       await poller.refreshUsage();
-      const frame = poller.current;
-      if (payloadLooksSecret(frame)) {
-        res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
-        res.end("refusing to emit a frame that looks like it contains a secret");
+      return writeJson(res, { ok: true }, poller.current);
+    }
+    if (req.method === "POST" && (rest === "api/focus" || rest === "api/focus/")) {
+      let body: unknown;
+      try {
+        body = await readJson(req);
+      } catch {
+        res.writeHead(400, { "content-type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ ok: false, error: "invalid focus" }));
         return;
       }
-      res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
-      res.end(JSON.stringify({ ok: true }));
-      return;
+      const focus = parseFocus(body, url.searchParams.get("client"));
+      if (!focus) {
+        res.writeHead(400, { "content-type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ ok: false, error: "invalid focus" }));
+        return;
+      }
+      poller.setFocus(focus);
+      const detail = focus.agent_id ? poller.getDetail(focus.agent_id, focus.client_id) : undefined;
+      const timeline = focus.agent_id
+        ? poller.getTimeline(focus.agent_id, focus.view_session_id ?? detail?.session_view.viewed_session_id)
+        : undefined;
+      const evidence = focus.agent_id
+        ? poller.getEvidence(focus.agent_id, focus.view_session_id ?? detail?.session_view.viewed_session_id)
+        : undefined;
+      return writeJson(res, { ok: true, detail, timeline, evidence }, { detail, timeline, evidence });
+    }
+    const detailMatch = /^api\/bots\/([^/]+)\/detail\/?$/.exec(rest);
+    if (req.method === "GET" && detailMatch) {
+      const agentId = decodeURIComponent(detailMatch[1]!);
+      const detail = poller.getDetail(agentId);
+      if (!detail) {
+        res.writeHead(404, { "content-type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ ok: false, error: "detail not focused or not yet loaded" }));
+        return;
+      }
+      return writeJson(res, detail, detail);
+    }
+    const timelineMatch = /^api\/bots\/([^/]+)\/timeline\/?$/.exec(rest);
+    if (req.method === "GET" && timelineMatch) {
+      const agentId = decodeURIComponent(timelineMatch[1]!);
+      const sessionId = url.searchParams.get("session_id") ?? undefined;
+      const timeline = poller.getTimeline(agentId, sessionId);
+      if (!timeline) {
+        res.writeHead(404, { "content-type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ ok: false, error: "timeline not focused or not yet loaded" }));
+        return;
+      }
+      return writeJson(res, timeline, timeline);
+    }
+    const evidenceMatch = /^api\/bots\/([^/]+)\/evidence\/?$/.exec(rest);
+    if (req.method === "GET" && evidenceMatch) {
+      const agentId = decodeURIComponent(evidenceMatch[1]!);
+      const sessionId = url.searchParams.get("session_id") ?? undefined;
+      const evidence = poller.getEvidence(agentId, sessionId);
+      return writeJson(res, evidence, evidence);
     }
     if (req.method !== "GET" && req.method !== "HEAD") {
       res.writeHead(405, { allow: "GET, HEAD, POST" });
@@ -135,6 +190,8 @@ export async function startDashboardServer(opts: DashboardServerOptions): Promis
   }
 
   function attachSse(req: http.IncomingMessage, res: http.ServerResponse): void {
+    const clientId = urlClientId(req) ?? randomBytes(12).toString("base64url");
+    const connectionEpoch = randomBytes(8).toString("hex");
     res.writeHead(200, {
       "content-type": "text/event-stream; charset=utf-8",
       "cache-control": "no-cache, no-transform",
@@ -142,7 +199,8 @@ export async function startDashboardServer(opts: DashboardServerOptions): Promis
       "x-accel-buffering": "no",
     });
     sseClients.add(res);
-    poller.browserConnected();
+    poller.browserConnected(clientId, connectionEpoch);
+    writeSse(res, "hello", { client_id: clientId, connection_epoch: connectionEpoch });
     writeSse(res, "snapshot", poller.current);
     const ping = setInterval(() => {
       try {
@@ -151,10 +209,13 @@ export async function startDashboardServer(opts: DashboardServerOptions): Promis
         /* closed */
       }
     }, 15_000);
+    let closed = false;
     const done = () => {
+      if (closed) return;
+      closed = true;
       clearInterval(ping);
       sseClients.delete(res);
-      poller.browserDisconnected();
+      poller.browserDisconnected(clientId, connectionEpoch);
     };
     req.on("close", done);
     res.on("close", done);
@@ -163,6 +224,9 @@ export async function startDashboardServer(opts: DashboardServerOptions): Promis
   const close = () =>
     new Promise<void>((resolve) => {
       unsubscribe();
+      unsubscribeDetail();
+      unsubscribeTimeline();
+      unsubscribeEvidence();
       poller.close();
       for (const client of sseClients) {
         try {
@@ -187,18 +251,71 @@ export async function startDashboardServer(opts: DashboardServerOptions): Promis
   };
 }
 
-function broadcast(clients: Set<http.ServerResponse>, frame: DashboardFrame): void {
-  if (payloadLooksSecret(frame)) return;
-  for (const res of clients) writeSse(res, "update", frame);
+function broadcast(clients: Set<http.ServerResponse>, event: string, payload: unknown): void {
+  if (payloadLooksSecret(payload)) return;
+  for (const res of clients) writeSse(res, event, payload);
 }
 
-function writeSse(res: http.ServerResponse, event: string, frame: DashboardFrame): void {
-  if (payloadLooksSecret(frame)) return;
+function writeSse(res: http.ServerResponse, event: string, payload: unknown): void {
+  if (payloadLooksSecret(payload)) return;
   try {
-    res.write(`event: ${event}\ndata: ${JSON.stringify(frame)}\n\n`);
+    res.write(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`);
   } catch {
     /* closed */
   }
+}
+
+function writeJson(res: http.ServerResponse, body: unknown, check: unknown = body): void {
+  if (payloadLooksSecret(check) || payloadLooksSecret(body)) {
+    res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
+    res.end("refusing to emit a frame that looks like it contains a secret");
+    return;
+  }
+  res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+  res.end(JSON.stringify(body));
+}
+
+function urlClientId(req: http.IncomingMessage): string | undefined {
+  try {
+    const u = new URL(req.url ?? "/", "http://127.0.0.1");
+    return u.searchParams.get("client") ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function readJson(req: http.IncomingMessage): Promise<unknown> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > 64 * 1024) throw new GbcError("error", "focus payload too large", { exitCode: 1 });
+    chunks.push(Buffer.from(chunk));
+  }
+  if (!chunks.length) return {};
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  } catch {
+    return undefined;
+  }
+}
+
+function parseFocus(body: unknown, fallbackClient?: string | null): DashboardFocus | undefined {
+  if (!body || typeof body !== "object") return undefined;
+  const raw = body as Record<string, unknown>;
+  const client = String(raw.client_id ?? raw.clientId ?? fallbackClient ?? "").trim();
+  if (!client) return undefined;
+  const agent = raw.agent_id ?? raw.agentId;
+  const session = raw.view_session_id ?? raw.viewSessionId;
+  const epoch = raw.connection_epoch ?? raw.connectionEpoch;
+  return {
+    client_id: client,
+    ...(typeof epoch === "string" && epoch.trim() ? { connection_epoch: epoch.trim() } : {}),
+    ...(typeof agent === "string" && agent.trim() ? { agent_id: agent.trim() } : {}),
+    ...(typeof session === "string" && session.trim() ? { view_session_id: session.trim() } : {}),
+    timeline_visible: Boolean(raw.timeline_visible ?? raw.timelineVisible),
+    graph_visible: Boolean(raw.graph_visible ?? raw.graphVisible),
+  };
 }
 
 async function serveStatic(

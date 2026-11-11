@@ -12,9 +12,10 @@ import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/comp
 import { Sidebar, SidebarContent, SidebarHeader, SidebarFooter, SidebarProvider, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarGroup, SidebarGroupLabel, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { connectEvents, refreshUsage } from "@/lib/api";
-import { cn, CATEGORY_LABEL, formatTime, whoamiSummary } from "@/lib/utils";
-import type { DashboardFrame, DashboardBotRow, FilterKey } from "@/types";
+import { connectEvents, dashboardEpoch, refreshUsage, setFocus } from "@/lib/api";
+import { BotDetail } from "@/components/bot-detail";
+import { cn, CATEGORY_LABEL, formatBreakdownShare, formatTime, formatUsagePercent, whoamiSummary } from "@/lib/utils";
+import type { DashboardBotDetail, DashboardBotRow, DashboardFrame, DashboardTimeline, FilterKey, UsageBreakdownView } from "@/types";
 
 const filters: { key: FilterKey; label: string; subtitle: string }[] = [
  {key:"all",label:"全部 Bot",subtitle:"账号内可见的 Bot"},
@@ -30,9 +31,35 @@ export default function App(){
  const openPalette=()=>{paletteReturn.current=document.activeElement as HTMLElement;setPalette(true)};
  const [navOpen,setNavOpen]=useState(width>=1280);
  useEffect(()=>setNavOpen(width>=1280),[width]);
- const [sse,setSse]=useState(false),[filter,setFilter]=useState<FilterKey>("all"),[search,setSearch]=useState(""),[selected,setSelected]=useState<string>(),[palette,setPalette]=useState(false),[usageOpen,setUsageOpen]=useState(false),[dark,setDark]=useState(document.documentElement.classList.contains("dark"));
+ const [sse,setSse]=useState(false),[filter,setFilter]=useState<FilterKey>("all"),[search,setSearch]=useState(""),[selected,setSelected]=useState<string>(),[viewSession,setViewSession]=useState<string>(),[timelineVisible,setTimelineVisible]=useState(false),[epoch,setEpoch]=useState(dashboardEpoch()),[palette,setPalette]=useState(false),[usageOpen,setUsageOpen]=useState(false),[dark,setDark]=useState(document.documentElement.classList.contains("dark"));
  const {data:frame}=useQuery({queryKey:["dashboard-frame"],queryFn:async()=>qc.getQueryData<DashboardFrame>(["dashboard-frame"])??null,staleTime:Infinity});
- useEffect(()=>connectEvents(f=>qc.setQueryData(["dashboard-frame"],f),setSse),[qc]);
+ const {data:detail}=useQuery({queryKey:["bot-detail",selected],queryFn:async()=>selected?qc.getQueryData<DashboardBotDetail>(["bot-detail",selected])??null:null,staleTime:Infinity,enabled:!!selected});
+ const resolvedSession=viewSession??detail?.session_view.current_session_id;
+ const timelineKey=["bot-timeline",selected,resolvedSession] as const;
+ const {data:timeline}=useQuery({queryKey:timelineKey,queryFn:async()=>selected?qc.getQueryData<DashboardTimeline>(timelineKey)??null:null,staleTime:Infinity,enabled:!!selected});
+ useEffect(()=>connectEvents({
+  onFrame:f=>qc.setQueryData(["dashboard-frame"],f),
+  onDetail:d=>{
+    // Shared Bot detail; this client applies its own session selection.
+    qc.setQueryData(["bot-detail",d.agent_id],d);
+  },
+  onTimeline:tl=>{
+    if(!tl.session_id) return;
+    const key=["bot-timeline",tl.agent_id,tl.session_id];
+    const currentSelected=qc.getQueryData<string>(["ui-selected-bot"]);
+    const currentSession=qc.getQueryData<string>(["ui-view-session"]);
+    if(currentSelected && tl.agent_id!==currentSelected) return;
+    if(currentSession && tl.session_id!==currentSession) return;
+    const existing=qc.getQueryData<DashboardTimeline>(key);
+    if(existing?.generation_known && tl.generation_known && existing.generation!==tl.generation && tl.result!=="ok") return;
+    qc.setQueryData(key,tl);
+  },
+  onHello:h=>setEpoch(h.connection_epoch),
+  onStatus:setSse,
+ }),[qc]);
+ useEffect(()=>{setViewSession(undefined);setTimelineVisible(false)},[selected]);
+ useEffect(()=>{qc.setQueryData(["ui-selected-bot"],selected);qc.setQueryData(["ui-view-session"],viewSession)},[qc,selected,viewSession]);
+ useEffect(()=>{void setFocus({agent_id:selected,view_session_id:viewSession,timeline_visible:Boolean(selected&&timelineVisible),connection_epoch:epoch})},[selected,viewSession,timelineVisible,epoch]);
  useEffect(()=>{const fn=(e:KeyboardEvent)=>{if(width>=600&&(e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==="k"){e.preventDefault();palette?setPalette(false):openPalette()}};window.addEventListener("keydown",fn);return()=>window.removeEventListener("keydown",fn)},[width,palette]);
  const toggle=()=>{const value=!dark;setDark(value);document.documentElement.classList.toggle("dark",value);localStorage.setItem("gbc-dashboard-theme",value?"dark":"light")};
  const refresh=useMutation({mutationFn:refreshUsage});
@@ -63,7 +90,7 @@ export default function App(){
     </section>
     <div className="grid gap-4 sm:grid-cols-2">
      <Card className="gap-0 py-0 shadow-none"><CardContent className="flex items-center gap-3 p-4" data-testid="computer-chip" data-tone={computer?.live_verified?computer.tone:"unknown"}><div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"><Monitor className="size-5"/></div><div className="min-w-0 flex-1"><p className="text-sm font-medium">共享电脑</p><p className="mt-1 text-xs text-muted-foreground"><span className="mr-1.5 inline-block size-1.5 rounded-full bg-muted-foreground" data-testid="computer-dot"/>{computer?.label??"未知"}</p></div><Help text="电脑为账号级共享。computer.state 尚未实时核验；未知或过期不等同于离线。"/></CardContent></Card>
-     <Card className="gap-0 py-0 shadow-none"><button onClick={()=>setUsageOpen(true)} className="flex w-full items-center gap-3 rounded-xl p-4 text-left hover:bg-accent/40 focus-visible:outline-2 focus-visible:outline-primary" data-testid="usage-chip"><div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><Gauge className="size-5"/></div><div className="min-w-0 flex-1"><p className="text-sm font-medium">使用额度</p><p className="mt-1 text-xs text-muted-foreground">{frame?.usage?.cursor_plan_name??"额度摘要"}{frame?.usage?.usage_percent!==undefined?` · ${frame.usage.usage_percent}（单位未核实）`:" · 查看详情"}</p></div><ChevronRight className="size-4 text-muted-foreground"/></button></Card>
+     <Card className="gap-0 py-0 shadow-none"><button onClick={()=>setUsageOpen(true)} className="flex w-full items-center gap-3 rounded-xl p-4 text-left hover:bg-accent/40 focus-visible:outline-2 focus-visible:outline-primary" data-testid="usage-chip"><div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><Gauge className="size-5"/></div><div className="min-w-0 flex-1"><p className="text-sm font-medium">使用额度</p><p className="mt-1 text-xs text-muted-foreground">{frame?.usage?.cursor_plan_name??"额度摘要"}{frame?.usage?.usage_percent!==undefined?` · ${formatUsagePercent(frame.usage.usage_percent)}`:" · 查看详情"}</p></div><ChevronRight className="size-4 text-muted-foreground"/></button></Card>
     </div>
     </div><div className={cn("grid items-start gap-5",width>=1280&&row&&"grid-cols-[minmax(0,1fr)_340px]")}>
      <Card className={cn("gap-0 overflow-hidden py-0 shadow-none",full&&"hidden")}>
@@ -74,17 +101,23 @@ export default function App(){
        {rows.map(r=><button key={r.bot.agent_id} onClick={()=>choose(r.bot.agent_id)} className={cn("flex min-h-[84px] w-full items-center gap-3 border-b px-4 py-4 text-left last:border-0 hover:bg-muted/50 focus-visible:relative focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary sm:px-5",selected===r.bot.agent_id&&"bg-accent")}><div className="flex size-10 shrink-0 items-center justify-center rounded-xl border bg-muted/50 text-sm font-semibold text-muted-foreground">{(r.bot.title||r.bot.name||"B").slice(0,1).toUpperCase()}</div><div className="min-w-0 flex-1"><div className="truncate text-sm font-medium">{r.bot.title||r.bot.name||r.bot.agent_id}</div><div className="mt-1 truncate text-xs text-muted-foreground">{r.waiting_reason??r.bot.description??r.bot.agent_id}</div></div><Status row={r}/><ChevronRight className="hidden size-4 shrink-0 text-muted-foreground sm:block"/></button>)}
       </div>
      </Card>
-     {row&&width>=1280&&<Detail row={row}/>}
-     {row&&small&&<div><Button variant="ghost" className="mb-3 h-11" onClick={()=>setSelected(undefined)}><ArrowLeft/>返回列表</Button><Detail row={row}/></div>}
+     {row&&width>=1280&&<BotDetail row={row} detail={detail??undefined} timeline={timeline??undefined} viewSession={resolvedSession} mobile={small} onViewSession={setViewSession} onTimelineVisible={setTimelineVisible}/>}
+     {row&&small&&<div><Button type="button" variant="ghost" className="mb-3 h-11" data-testid="back-to-list" onClick={()=>setSelected(undefined)}><ArrowLeft/>返回列表</Button><BotDetail row={row} detail={detail??undefined} timeline={timeline??undefined} viewSession={resolvedSession} mobile={small} onViewSession={setViewSession} onTimelineVisible={setTimelineVisible}/></div>}
     </div>
     <p className="flex items-center gap-1.5 pb-2 text-xs text-muted-foreground"><ShieldCheck className="size-3.5"/>本地只读连接 · 不会中断远端 Bot</p>
    </main>
   </SidebarInset>
-  <Sheet open={!!row&&width>=900&&width<1280} onOpenChange={v=>{if(!v)setSelected(undefined)}}><SheetContent className="overflow-y-auto sm:max-w-md"><SheetHeader><SheetTitle>Bot 详情</SheetTitle><SheetDescription>身份与当前状态</SheetDescription></SheetHeader>{row&&<div className="p-4"><Detail row={row}/></div>}</SheetContent></Sheet>
-  <Sheet open={usageOpen} onOpenChange={setUsageOpen}><SheetContent className="overflow-y-auto"><SheetHeader><SheetTitle>使用额度</SheetTitle><SheetDescription>来自账号的只读额度摘要</SheetDescription></SheetHeader><div className="space-y-6 p-6"><div><p className="text-xs text-muted-foreground">当前计划</p><p className="mt-2 text-xl font-semibold">{frame?.usage?.cursor_plan_name??"暂不可用"}</p></div>{frame?.usage?.usage_percent!==undefined&&<div><p className="text-3xl font-semibold tabular-nums">{frame.usage.usage_percent}</p><p className="mt-2 text-xs text-muted-foreground">usage_percent · 单位未核实</p></div>}<p className="text-sm text-muted-foreground">{frame?.usage?.uses_pooled_enterprise_allowance?"企业共享额度":"个人账号额度"}</p>{frame?.usage?.included_limit_zero&&<p className="text-sm text-muted-foreground">没有非零包含额度上限，不绘制进度条。</p>}<Separator/><p className="text-xs leading-6 text-muted-foreground">额度原始单位尚未 live 核实，因此不绘制比例条；不推算余额、币种或金额。{frame?.usage_error?" 额度读取失败，保留上次结果。":""}</p>{frame?.usage?.next_reset_at&&<p className="text-sm">下次重置：{new Date(frame.usage.next_reset_at).toLocaleString("zh-CN",{timeZone:"Asia/Shanghai"})}（上海时间）</p>}{frame?.usage?.unified_billing_url&&<Button asChild variant="outline"><a href={frame.usage.unified_billing_url} target="_blank" rel="noreferrer">查看账单<ArrowUpRight/></a></Button>}<Button variant="outline" className="h-11" onClick={()=>refresh.mutate()} disabled={refresh.isPending}><RefreshCw className={cn("size-4",refresh.isPending&&"animate-spin")}/>刷新额度</Button></div></SheetContent></Sheet>
+  <Sheet open={!!row&&width>=900&&width<1280} onOpenChange={v=>{if(!v)setSelected(undefined)}}><SheetContent className="overflow-y-auto sm:max-w-md"><SheetHeader><SheetTitle>Bot 详情</SheetTitle><SheetDescription>身份、任务与活动时间线</SheetDescription></SheetHeader>{row&&<div className="p-4"><BotDetail row={row} detail={detail??undefined} timeline={timeline??undefined} viewSession={resolvedSession} mobile={small} onViewSession={setViewSession} onTimelineVisible={setTimelineVisible}/></div>}</SheetContent></Sheet>
+  <Sheet open={usageOpen} onOpenChange={setUsageOpen}><SheetContent className="overflow-y-auto"><SheetHeader><SheetTitle>使用额度</SheetTitle><SheetDescription>来自账号的只读额度摘要</SheetDescription></SheetHeader><div className="space-y-6 p-6"><div><p className="text-xs text-muted-foreground">当前计划</p><p className="mt-2 text-xl font-semibold">{frame?.usage?.cursor_plan_name??"暂不可用"}</p></div>{frame?.usage?.usage_percent!==undefined&&<div data-testid="usage-percent"><p className="text-3xl font-semibold tabular-nums">{formatUsagePercent(frame.usage.usage_percent)}</p><p className="mt-2 text-xs text-muted-foreground">已用百分比</p></div>}<p className="text-sm text-muted-foreground">{frame?.usage?.uses_pooled_enterprise_allowance?"企业共享额度":"个人账号额度"}</p>{frame?.usage?.included_limit_zero&&<p className="text-sm text-muted-foreground">没有非零包含额度上限，不绘制进度条。</p>}<Separator/><p className="text-xs leading-6 text-muted-foreground">不推算余额、币种或金额。包含额度为 0 时不绘制满额进度条。{frame?.usage_error?" 额度读取失败，保留上次结果。":""}</p>{frame?.usage?.next_reset_at&&<p className="text-sm">下次重置：{new Date(frame.usage.next_reset_at).toLocaleString("zh-CN",{timeZone:"Asia/Shanghai"})}（上海时间）</p>}{frame?.usage?.unified_billing_url&&<Button asChild variant="outline"><a href={frame.usage.unified_billing_url} target="_blank" rel="noreferrer">查看账单<ArrowUpRight/></a></Button>}<UsageBreakdownPanel breakdown={frame?.usage_breakdown} error={frame?.usage_breakdown_error}/><Button variant="outline" className="h-11" onClick={()=>refresh.mutate()} disabled={refresh.isPending}><RefreshCw className={cn("size-4",refresh.isPending&&"animate-spin")}/>刷新额度</Button></div></SheetContent></Sheet>
   <CommandDialog onCloseAutoFocus={e=>{e.preventDefault();paletteReturn.current?.focus()}} open={palette} onOpenChange={setPalette} title="搜索 Bot 或命令" description="输入名称搜索，使用方向键选择并按 Enter 确认。"><CommandInput placeholder="搜索 Bot 或命令…"/><CommandList data-testid="command-palette"><CommandEmpty>没有匹配项</CommandEmpty><CommandGroup heading="工作空间">{filters.map(f=><CommandItem key={f.key} onSelect={()=>{setFilter(f.key);setPalette(false)}}><LayoutDashboard/>{f.label}</CommandItem>)}</CommandGroup><CommandGroup heading="操作"><CommandItem onSelect={()=>{toggle();setPalette(false)}}><Moon/>切换主题</CommandItem><CommandItem onSelect={()=>{setUsageOpen(true);setPalette(false)}}><Gauge/>查看额度</CommandItem></CommandGroup><CommandGroup heading="Bot">{frame?.bots.map(r=><CommandItem key={r.bot.agent_id} value={`${r.bot.name} ${r.bot.title} ${r.bot.agent_id}`} onSelect={()=>choose(r.bot.agent_id)}><Bot/>{r.bot.title||r.bot.name}</CommandItem>)}</CommandGroup></CommandList></CommandDialog>
  </SidebarProvider></TooltipProvider>
 }
 function Help({text}:{text:string}){return <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="size-11 shrink-0 text-muted-foreground" aria-label="状态说明"><CircleHelp className="size-4"/></Button></TooltipTrigger><TooltipContent className="max-w-72 text-xs leading-5">{text}</TooltipContent></Tooltip>}
 function Notice({children,testid}:{children:React.ReactNode;testid?:string}){return <div data-testid={testid} role="status" className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm leading-6">{children}</div>}
-function Detail({row}:{row:DashboardBotRow}){return <Card className="gap-5 shadow-none" data-testid="bot-detail"><CardHeader><div className="mb-4 flex size-12 items-center justify-center rounded-xl border bg-muted text-xl font-medium">{(row.bot.title||row.bot.name||"B").slice(0,1)}</div><CardTitle className="break-words text-xl leading-7">{row.bot.title||row.bot.name}</CardTitle><CardDescription className="break-words">{row.bot.description||"Bot 身份与状态"}</CardDescription></CardHeader><CardContent className="space-y-5"><Status row={row}/><Separator/><dl className="space-y-5 text-sm"><div><dt className="mb-2 text-xs text-muted-foreground">AGENT ID</dt><dd className="break-all font-mono text-xs leading-5">{row.bot.agent_id}</dd></div><div><dt className="mb-2 text-xs text-muted-foreground">当前状态</dt><dd>{CATEGORY_LABEL[row.category]}</dd></div>{row.waiting_reason&&<div><dt className="mb-2 text-xs text-muted-foreground">等待原因</dt><dd className="break-words leading-6">{row.waiting_reason}</dd></div>}</dl></CardContent></Card>}
+function UsageBreakdownPanel({breakdown,error}:{breakdown?:UsageBreakdownView;error?:string}){
+ if(!breakdown&&!error) return null;
+ const kind=breakdown?.kind??"empty";
+ const label=kind==="billed_cents"?"按来源拆分（金额/币种未核实）":kind==="weekly_limit_ppm"?"按来源拆分（占周限额百分比）":kind==="billing_cycle_ppm"?"按来源拆分（占账期限额百分比）":kind==="empty"?"没有返回明细":"按来源拆分";
+ return <div className="space-y-3" data-testid="usage-breakdown"><Separator/><p className="text-sm font-medium">用量明细</p><p className="text-xs text-muted-foreground">{label}</p>{error&&<p className="text-sm text-muted-foreground">明细读取失败，保留上次结果（如有）。{error}</p>}{breakdown?.by_source?.length? <ul className="space-y-1.5 text-sm">{breakdown.by_source.map((r,i)=><li key={i} className="flex justify-between gap-3"><span className="text-muted-foreground">{r.source??"来源"}</span><span className="tabular-nums">{formatBreakdownShare(r,kind)}</span></li>)}</ul> : kind==="empty"?<p className="text-sm text-muted-foreground">接口未返回 billed_cents / ppm 明细。</p>:null}{breakdown?.notes?.map((n,i)=><p key={i} className="text-xs leading-5 text-muted-foreground">{n}</p>)}</div>
+}
+

@@ -18,6 +18,26 @@ export function canDrawUsageBar(usage: {
   );
 }
 
+/** Format a usage_percent value that is already a percentage (21.781372 → "21.78%"). Never multiply by 100. */
+export function formatUsagePercent(value: number): string | undefined {
+  if (!Number.isFinite(value)) return undefined;
+  const rounded = Math.round(value * 100) / 100;
+  const text = rounded.toFixed(2).replace(/\.0+$/, "").replace(/(\.\d)0$/, "$1");
+  return `${text}%`;
+}
+
+/** Convert a limit-share in ppm (parts per million) to the same percentage format as usage_percent. 225439 → "22.54%". */
+export function formatUsagePpm(ppm: number): string | undefined {
+  if (!Number.isFinite(ppm)) return undefined;
+  return formatUsagePercent(ppm / 10_000);
+}
+
+export function formatBreakdownShare(row: { cents?: string; ppm?: number }, kind?: string): string {
+  if (kind === "billed_cents" || row.cents != null) return `${row.cents ?? "—"}（单位未核实）`;
+  if (row.ppm != null) return formatUsagePpm(row.ppm) ?? "—";
+  return "—";
+}
+
 export function whoamiSummary(w?: { kind?: string; logged_in?: boolean; login_kind?: string; static_token?: boolean; account_label?: string }): string {
   if (!w?.logged_in) return "未登录";
   const kind = w.kind === "xai" ? "xAI" : "Cursor";
