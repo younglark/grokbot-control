@@ -1,0 +1,507 @@
+// @ts-nocheck
+/**
+ * Explicit simulated backend using Connect createRouterTransport.
+ * Never claims live success — ControlPlane must set simulated: true.
+ */
+import { createRouterTransport } from "@connectrpc/connect";
+import { Code, ConnectError } from "@connectrpc/connect";
+import { GrokBotService } from "#proto-gen/GrokBotService";
+import { DashboardService } from "#proto-gen/DashboardService";
+function defaultSandbox() {
+    return {
+        state: 1,
+        recreateStarted: true,
+        operationId: "op-mock",
+        migrationPhases: [
+            { phase: 1, detail: "backing up" },
+            { phase: 2, detail: "creating" },
+            { phase: 6, detail: "done" },
+        ],
+    };
+}
+export function createEmptyMockState() {
+    return {
+        sandbox: defaultSandbox(),
+        bots: [],
+        sections: [],
+        messages: [],
+        statuses: [],
+        sessions: [],
+        todos: [],
+        tasks: [],
+        subagents: [],
+        transcript: [],
+        usageFixture: "normal",
+        breakdownFixture: "cents_by_source",
+        callCounts: emptyCallCounts(),
+        writeCalls: [],
+    };
+}
+export function emptyCallCounts() {
+    return {
+        listGrokBotAgents: 0,
+        listGrokBotAgentStatuses: 0,
+        getSandBoxRunState: 0,
+        getGrokBotUserRuntimeSettings: 0,
+        getSandUsageStatus: 0,
+        getGrokBotUsageBreakdown: 0,
+        listGrokBotAgentTodos: 0,
+        listGrokBotAgentTasks: 0,
+        listGrokBotSubagents: 0,
+        listGrokBotAgentSessions: 0,
+        listGrokBotTranscriptEntries: 0,
+    };
+}
+function counts(state) {
+    return (state.callCounts ??= emptyCallCounts());
+}
+function recordWrite(state, method, req) {
+    (state.writeCalls ??= []).push({ method, req });
+}
+function ts(offsetSec = 0) {
+    return { seconds: BigInt(Math.floor(Date.now() / 1000) + offsetSec), nanos: 0 };
+}
+/** Synthetic GetSandUsageStatus responses. Numbers are fixtures, not live data. */
+export function usageFixtureResponse(name) {
+    const base = {
+        currentPeriodStart: ts(-20 * 24 * 3600),
+        nextResetTimestampUtc: ts(10 * 24 * 3600),
+        availableBankedResetCount: 0n,
+        usesPooledEnterpriseAllowance: false,
+        sandTrialCancelable: false,
+        isTeamSeat: false,
+        isUnified: false,
+        billingBrand: 1,
+        accountMergePausingBots: false,
+    };
+    switch (name) {
+        case "near_exhausted":
+            return {
+                ...base,
+                usagePercent: 92,
+                includedLimitZero: false,
+                hasAvailableUsage: true,
+                hasNonZeroIncludedLimit: true,
+                cursorPlanName: "Pro",
+                grokPlanLabel: "SuperGrok",
+                availableBankedResetCount: 1n,
+            };
+        case "exhausted":
+            return {
+                ...base,
+                usagePercent: 100,
+                includedLimitZero: false,
+                hasAvailableUsage: false,
+                hasNonZeroIncludedLimit: true,
+                cursorPlanName: "Pro",
+                grokPlanLabel: "SuperGrok",
+            };
+        case "unlimited":
+            return {
+                ...base,
+                includedLimitZero: true,
+                hasAvailableUsage: true,
+                hasNonZeroIncludedLimit: false,
+                cursorPlanName: "Ultra",
+                // usagePercent omitted — do not invent a number when there is no included limit
+            };
+        case "enterprise_shared":
+            return {
+                ...base,
+                usagePercent: 41,
+                includedLimitZero: false,
+                hasAvailableUsage: true,
+                hasNonZeroIncludedLimit: true,
+                usesPooledEnterpriseAllowance: true,
+                isTeamSeat: true,
+                cursorPlanName: "Enterprise",
+            };
+        case "normal":
+        default:
+            return {
+                ...base,
+                usagePercent: 37,
+                includedLimitZero: false,
+                hasAvailableUsage: true,
+                hasNonZeroIncludedLimit: true,
+                cursorPlanName: "Pro",
+                grokPlanLabel: "SuperGrok",
+            };
+    }
+}
+const dayMs = 1700000000000n;
+/** Connect/protobuf-es oneof shape accepted by the DashboardService router transport. */
+function breakdownOneof(caseName, value) {
+    return { breakdown: { case: caseName, value } };
+}
+/** Synthetic GetGrokBotUsageBreakdown responses. Numbers are fixtures, not live data. */
+export function usageBreakdownFixtureResponse(name) {
+    switch (name) {
+        case "cents_by_bot":
+            return breakdownOneof("billedCents", {
+                periodStartMs: dayMs,
+                periodEndMs: dayMs + 86400000n,
+                bySource: [],
+                byBot: [
+                    { dayMs, botId: "agent-1", cents: 800n },
+                    { dayMs, botId: "agent-2", cents: 200n },
+                ],
+            });
+        case "ppm_weekly":
+            return breakdownOneof("weeklyLimitPpm", {
+                periodStartMs: dayMs,
+                periodEndMs: dayMs + 86400000n,
+                bySource: [{ dayMs, source: 1, ppm: 225439 }],
+                byBot: [{ dayMs, botId: "agent-1", ppm: 225439 }],
+            });
+        case "ppm_billing":
+            return breakdownOneof("billingCyclePpm", {
+                periodStartMs: dayMs,
+                periodEndMs: dayMs + 86400000n,
+                bySource: [{ dayMs, source: 3, ppm: 100000 }],
+                byBot: [{ dayMs, botId: "agent-1", ppm: 80000 }],
+            });
+        case "empty":
+            return {};
+        case "cents_by_source":
+        default:
+            return breakdownOneof("billedCents", {
+                periodStartMs: dayMs,
+                periodEndMs: dayMs + 86400000n,
+                bySource: [
+                    { dayMs, source: 1, cents: 1234n },
+                    { dayMs, source: 2, cents: 50n },
+                ],
+                byBot: [{ dayMs, botId: "agent-1", cents: 900n }],
+            });
+    }
+}
+export function createMockTransport(state) {
+    return createRouterTransport(({ service }) => {
+        const sandbox = () => (state.sandbox ??= defaultSandbox());
+        const startReset = () => {
+            const s = sandbox();
+            if (s.recreateStarted === false) {
+                return {
+                    started: false,
+                    reason: s.recreateReason ?? "simulated reset refusal",
+                    operationId: "",
+                };
+            }
+            s.state = 4;
+            return {
+                started: true,
+                reason: "",
+                operationId: s.operationId ?? "op-mock",
+            };
+        };
+        service(GrokBotService, {
+            async getSandBoxRunState() {
+                counts(state).getSandBoxRunState += 1;
+                if (state.failSandbox) {
+                    throw new ConnectError("simulated sandbox failure", Code.Unavailable);
+                }
+                const s = sandbox();
+                return {
+                    state: s.state,
+                    imageUpdateAvailable: s.imageUpdateAvailable,
+                    image: s.image,
+                };
+            },
+            async recreateSandBox(req) {
+                recordWrite(state, "RecreateSandBox", req ?? {});
+                return startReset();
+            },
+            async forceRecreateSandBox(req) {
+                recordWrite(state, "ForceRecreateSandBox", req ?? {});
+                return startReset();
+            },
+            async *watchSandBoxMigration(req) {
+                const s = sandbox();
+                const phases = s.migrationPhases ?? [];
+                const from = String(req.fromOffsetKey ?? "");
+                const start = /^off-\d+$/.test(from) ? Number(from.slice(4)) + 1 : 0;
+                for (let i = Math.max(0, start); i < phases.length; i++) {
+                    const phase = phases[i];
+                    yield {
+                        phase: phase.phase,
+                        detail: phase.detail ?? "",
+                        atMs: BigInt(Date.now()),
+                        offsetKey: `off-${i}`,
+                        operationId: s.operationId ?? "op-mock",
+                    };
+                }
+            },
+            async listGrokBotAgents() {
+                counts(state).listGrokBotAgents += 1;
+                if (state.failListAgents) {
+                    throw new ConnectError("simulated list failure", Code.Unavailable);
+                }
+                const agents = [...state.bots];
+                if ((state.writeCalls ?? []).some((c) => c.method === "DeleteGrokBotAgent") && state.afterDeleteInjectBots) {
+                    agents.push(...state.afterDeleteInjectBots);
+                }
+                return {
+                    agents,
+                    truncated: Boolean(state.listTruncated),
+                    slackConnections: state.slackConnections ?? [],
+                    teamsConnections: state.teamsConnections ?? [],
+                };
+            },
+            async createGrokBotTemporalAgent(req) {
+                if (state.dropNextWrite) {
+                    state.dropNextWrite = false;
+                    throw new ConnectError("simulated drop", Code.DeadlineExceeded);
+                }
+                const agent = {
+                    id: req.agentId,
+                    agentId: req.agentId,
+                    name: req.name,
+                    description: req.description,
+                    title: req.title,
+                    harness: "TEMPORAL",
+                    role: "agent",
+                    kind: 1,
+                    viewerSessionId: `sess-${req.agentId}`,
+                    createdAtMs: BigInt(Date.now()),
+                    updatedAtMs: BigInt(Date.now()),
+                    avatarShape: req.avatarShape,
+                    avatarColor: req.avatarColor,
+                    legacyAgentId: "",
+                    memberAgentIds: [],
+                    teamDefaultForViewer: false,
+                    suggestions: [],
+                    viewerAllowedActions: [],
+                    people: [],
+                };
+                state.bots.push(agent);
+                state.sessions.push({
+                    agentId: req.agentId,
+                    sessionId: `sess-${req.agentId}`,
+                    kind: 1,
+                    createdAtMs: BigInt(Date.now()),
+                    updatedAtMs: BigInt(Date.now()),
+                });
+                state.statuses.push({
+                    agentId: req.agentId,
+                    isRunning: false,
+                    live: { agentId: req.agentId, isRunning: false, sessionId: `sess-${req.agentId}` },
+                });
+                return { agent, harness: 2 };
+            },
+            async createGrokBotAgent(req) {
+                return this.createGrokBotTemporalAgent(req);
+            },
+            async updateGrokBotAgent(req) {
+                const b = state.bots.find((x) => x.agentId === req.id || x.id === req.id);
+                if (!b)
+                    throw new ConnectError("not found", Code.NotFound);
+                if (req.name != null)
+                    b.name = req.name;
+                if (req.description != null)
+                    b.description = req.description;
+                if (req.title != null)
+                    b.title = req.title;
+                return { agent: b };
+            },
+            async deleteGrokBotAgent(req) {
+                recordWrite(state, "DeleteGrokBotAgent", req ?? {});
+                if (state.dropNextWrite) {
+                    state.dropNextWrite = false;
+                    throw new ConnectError("simulated drop", Code.DeadlineExceeded);
+                }
+                const id = String(req.id ?? "");
+                const fail = state.deleteErrorById?.[id];
+                if (fail === "permission") {
+                    throw new ConnectError("simulated permission denied", Code.PermissionDenied);
+                }
+                if (fail === "unknown") {
+                    throw new ConnectError("simulated drop", Code.DeadlineExceeded);
+                }
+                const retain = new Set(state.retainAfterDeleteIds ?? []);
+                const match = (b) => String(b.agentId ?? "") !== id && String(b.id ?? "") !== id;
+                const before = state.bots.length;
+                if (retain.has(id)) {
+                    const exists = state.bots.some((b) => !match(b));
+                    if (!exists)
+                        throw new ConnectError("not found", Code.NotFound);
+                    return {};
+                }
+                state.bots = state.bots.filter((b) => match(b));
+                if (state.bots.length === before)
+                    throw new ConnectError("not found", Code.NotFound);
+                return {};
+            },
+            async sendGrokBotUserMessage(req) {
+                if (state.dropNextWrite) {
+                    state.dropNextWrite = false;
+                    throw new ConnectError("simulated drop", Code.DeadlineExceeded);
+                }
+                state.messages.push({ ...req });
+                state.transcript.push({
+                    id: `tr-${req.messageId}`,
+                    kind: "user",
+                    plaintext: req.text,
+                });
+                return { dispatched: true, delivery: 1 };
+            },
+            async getGrokBotSendStatus(req) {
+                const found = state.messages.find((m) => m.messageId === req.messageId);
+                return {
+                    status: found ? 2 : 0,
+                    acceptedAtMs: found ? BigInt(Date.now()) : undefined,
+                };
+            },
+            async listGrokBotTranscriptEntries(req) {
+                counts(state).listGrokBotTranscriptEntries += 1;
+                if (state.failTranscript) {
+                    throw new ConnectError("simulated transcript failure", Code.Unavailable);
+                }
+                const entries = state.transcript.filter((e) => {
+                    const row = e;
+                    if (row.agentId && row.agentId !== req.agentId)
+                        return false;
+                    if (req.sessionId && row.sessionId && row.sessionId !== req.sessionId)
+                        return false;
+                    return true;
+                });
+                return { entries, generation: state.transcriptGeneration ?? 1 };
+            },
+            async listGrokBotAgentSessions(req) {
+                counts(state).listGrokBotAgentSessions += 1;
+                if (state.failSessions) {
+                    throw new ConnectError("simulated sessions failure", Code.Unavailable);
+                }
+                return {
+                    sessions: state.sessions.filter((s) => s.agentId === req.agentId),
+                };
+            },
+            async listGrokBotAgentStatuses(req) {
+                counts(state).listGrokBotAgentStatuses += 1;
+                if (state.failStatuses) {
+                    throw new ConnectError("simulated status failure", Code.Unavailable);
+                }
+                const ids = new Set(req.agentIds);
+                return {
+                    statuses: state.statuses.filter((s) => ids.has(String(s.agentId))),
+                };
+            },
+            async listGrokBotAgentTodos(req) {
+                counts(state).listGrokBotAgentTodos += 1;
+                if (state.failTodos) {
+                    throw new ConnectError("simulated todos failure", Code.Unavailable);
+                }
+                return {
+                    todos: state.todos.filter((t) => {
+                        const row = t;
+                        return !row.agentId || row.agentId === req.agentId;
+                    }),
+                };
+            },
+            async listGrokBotAgentTasks(req) {
+                counts(state).listGrokBotAgentTasks += 1;
+                if (state.failTasks) {
+                    throw new ConnectError("simulated tasks failure", Code.Unavailable);
+                }
+                return {
+                    tasks: state.tasks.filter((x) => {
+                        const row = x;
+                        return !row.agentId || row.agentId === req.agentId;
+                    }),
+                };
+            },
+            async listGrokBotSubagents(req) {
+                counts(state).listGrokBotSubagents += 1;
+                return {
+                    subagents: state.subagents.filter((s) => {
+                        const row = s;
+                        return !row.agentId || row.agentId === req.agentId;
+                    }),
+                };
+            },
+            async interruptGrokBotAgentRun() {
+                return { hadActiveRun: true };
+            },
+            async getGrokBotUserRuntimeSettings() {
+                counts(state).getGrokBotUserRuntimeSettings += 1;
+                return {
+                    settings: {
+                        sidebarSections: {
+                            sections: state.sections.map((s) => ({
+                                id: s.id,
+                                name: s.name,
+                                agentIds: s.agent_ids,
+                            })),
+                        },
+                        updatedAtMs: BigInt(Date.now()),
+                        emailProvider: 0,
+                        xToolAccess: 0,
+                    },
+                };
+            },
+            async updateGrokBotUserRuntimeSettings(req) {
+                if (state.forceSidebarConflict) {
+                    state.forceSidebarConflict = false;
+                    throw new ConnectError("SidebarSectionsSaveConflictError", Code.FailedPrecondition);
+                }
+                if (state.dropNextWrite) {
+                    state.dropNextWrite = false;
+                    throw new ConnectError("simulated drop", Code.DeadlineExceeded);
+                }
+                // Best-effort base check
+                if (req.sidebarSectionsBase) {
+                    const base = JSON.stringify((req.sidebarSectionsBase.sections ?? []).map((s) => ({
+                        id: s.id,
+                        name: s.name,
+                        agent_ids: s.agentIds,
+                    })));
+                    const cur = JSON.stringify(state.sections);
+                    if (base !== cur) {
+                        throw new ConnectError("SidebarSectionsSaveConflictError", Code.FailedPrecondition);
+                    }
+                }
+                if (req.sidebarSections) {
+                    state.sections = (req.sidebarSections.sections ?? []).map((s) => ({
+                        id: s.id,
+                        name: s.name,
+                        agent_ids: [...(s.agentIds ?? [])],
+                    }));
+                }
+                return {
+                    settings: {
+                        sidebarSections: {
+                            sections: state.sections.map((s) => ({
+                                id: s.id,
+                                name: s.name,
+                                agentIds: s.agent_ids,
+                            })),
+                        },
+                        updatedAtMs: BigInt(Date.now()),
+                        emailProvider: 0,
+                        xToolAccess: 0,
+                    },
+                };
+            },
+        });
+        // Official DashboardService read fixture only. No write RPCs are implemented.
+        service(DashboardService, {
+            async getSandUsageStatus() {
+                counts(state).getSandUsageStatus += 1;
+                const fixture = state.usageFixture ?? "normal";
+                if (fixture === "failure") {
+                    throw new ConnectError("simulated usage failure", Code.Unavailable);
+                }
+                return usageFixtureResponse(fixture);
+            },
+            async getGrokBotUsageBreakdown(req) {
+                counts(state).getGrokBotUsageBreakdown += 1;
+                state.lastUsageBreakdownRequest = req ?? {};
+                const fixture = state.breakdownFixture ?? "cents_by_source";
+                if (fixture === "failure") {
+                    throw new ConnectError("simulated breakdown failure", Code.Unavailable);
+                }
+                return usageBreakdownFixtureResponse(fixture);
+            },
+        });
+    });
+}

@@ -1,0 +1,13 @@
+export { ControlPlane } from "./ops/plane.js";
+export { ComputerOps, RESET_CONFIRM } from "./ops/computer.js";
+export { createGrokBotClient, mapConnectError } from "./connect/client.js";
+export { createAuthProvider, staticTokenProvider, generateLoginChallenge, buildLoginUrl, resolveLoginParams, parseLoginMode, parseRedirectTarget, LOGIN_MODE_PRESETS, } from "./auth/provider.js";
+export { FileCredentialStore, redactCredential } from "./auth/store.js";
+export { LOGIN_MODES } from "./auth/types.js";
+export { createMockTransport, createEmptyMockState } from "./testing/mock-transport.js";
+export { SCHEMA_VERSION, okResult, failResult } from "./dto/result.js";
+export { GbcError, EXIT } from "./errors.js";
+export { buildTools } from "./mcp/tools.js";
+export { SyncOps } from "./sync/core.js";
+export { ATTACHMENT_DOWNLOADER } from "./sync/attachments.js";
+export { decodeBody, DECODER } from "./sync/decode.js";
