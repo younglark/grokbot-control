@@ -4,19 +4,23 @@
 
 ## Unreleased
 
+## 0.4.2 — 2026-11-11（通过 GitHub tag `npm-v0.4.2` 分发，不发到 npmjs）
+
+源码 tag `v0.4.1` 已推送，但打 `npm-v` 时因 `npm pack --json` 的 stdout 被 vite 日志污染，**没有生成 `npm-v0.4.1`**。请不要删除或改写已推送的 `v0.4.1`。0.4.2 修复发版脚本解析，是该线上应由 Actions 生成的 GitHub 安装 tag。
+
 ### 修复
 
 - **发版脚本能解析 `npm pack --json` 前的 vite/tsc 日志。** `prepack` 可能把带 ANSI 颜色的构建输出写到 stdout，导致 `scripts/release-github.mjs` 对整段 stdout 做 `JSON.parse` 失败。现与 `scripts/verify-package.mjs` 共用末尾 JSON 数组解析，不再因日志前缀铸不出 `npm-v*` tag。
 
-## 0.4.1 — 2026-11-11（通过 GitHub tag `npm-v0.4.1` 分发，不发到 npmjs）
+安装：`npx -y --package=github:younglark/grokbot-control#npm-v0.4.2 gbc`（`gbc-mcp` 同样要加 `--package`）。
+
+## 0.4.1 — 2026-11-11（行为变更已进入 main；`npm-v0.4.1` 未生成）
 
 源码 tag `v0.4.0` 已推送，但发版工作流在 `npm test` 处因 Playwright/Chromium dashboard UI 验收失败，**没有生成 `npm-v0.4.0`**。请不要删除或改写已推送的 `v0.4.0`。0.4.1 去掉这些重浏览器测试，是该线上应由 Actions 生成的 GitHub 安装 tag。
 
 ### 修复
 
 - **默认 `npm test` 不再跑依赖 Playwright Chromium 的 dashboard UI 验收。** `packages/grokbot-control/test/dashboard-ui.test.ts` 只保留打包树存在性与 `resolveDashboardUiRoot` 等轻量检查。Workspace regression 不再执行 `npx playwright install --with-deps chromium`，也从 devDependencies 移除 playwright。未安装浏览器时，发版工作流不应再因「Chromium required…」失败。
-
-安装：`npx -y --package=github:younglark/grokbot-control#npm-v0.4.1 gbc`（`gbc-mcp` 同样要加 `--package`）。
 
 ## 0.4.0 — 2026-11-11（行为变更已进入 main；`npm-v0.4.0` 未生成）
 

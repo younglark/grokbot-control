@@ -1,6 +1,6 @@
 {
   "name": "grokbot-control",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Programmable control plane for Grok Bot (shared SDK + CLI gbc + MCP). Not an official product.",
   "type": "module",
   "bin": {

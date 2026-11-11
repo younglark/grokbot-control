@@ -6,7 +6,7 @@
 
 | # | 目标 | 代码 | 状态 |
 |---|---|---|---|
-| 1 | **控制面**：SDK + CLI `gbc` + MCP `gbc-mcp`，让 agent 用原生 Connect RPC 驱动 Bot | [packages/grokbot-control](packages/grokbot-control/README.md) | 通过 GitHub tag `npm-v0.4.1` 安装（`npx -y --package=github:younglark/grokbot-control#npm-v0.4.1 gbc`）；npmjs 上的 `grokbot-control@0.1.3` 已停止更新。部分只读 RPC 做过 live 验证 |
+| 1 | **控制面**：SDK + CLI `gbc` + MCP `gbc-mcp`，让 agent 用原生 Connect RPC 驱动 Bot | [packages/grokbot-control](packages/grokbot-control/README.md) | 通过 GitHub tag `npm-v0.4.2` 安装（`npx -y --package=github:younglark/grokbot-control#npm-v0.4.2 gbc`）；npmjs 上的 `grokbot-control@0.1.3` 已停止更新。部分只读 RPC 做过 live 验证 |
 | 2 | **`local-exec-daemon` 兼容替代**：与 App 0.79.3 托管的官方 daemon 行为一致（包名/bin 就叫 `local-exec-daemon`，不加 `-compat`） | [packages/local-exec-daemon](packages/local-exec-daemon/README.md) | private；Linux 可达路径已按原版移植并通过合成验收；**不是**无条件 drop-in |
 | 3 | **无头注册**本地电脑 / Docker | [docs/headless](docs/headless/README.md) | 仅设计，未实现（下一阶段） |
 
@@ -26,7 +26,7 @@ npm run test:protocol-tools      # tools/protocol 的 Python 单测
 ```
 
 试用 CLI（mock，离线）：`npm run dev:gbc -- --mock --json bot list`。
-安装已发布的控制面（私有仓库需先完成 GitHub 认证）：`npx -y --package=github:younglark/grokbot-control#npm-v0.4.1 gbc --help`。
+安装已发布的控制面（私有仓库需先完成 GitHub 认证）：`npx -y --package=github:younglark/grokbot-control#npm-v0.4.2 gbc --help`。
 测试分层、门控验收、Electron、打包与 GitHub 发版见 [docs/development.md](docs/development.md)。
 
 ## 目录地图
