@@ -9710,6 +9710,7 @@ export const CompleteMcpOAuthRequest = /*@__PURE__*/ proto3.makeMessageType(
   () => [
     { no: 1, name: "state_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 2, name: "authorization_code", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "oauth_error", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
   ],
 );
 
@@ -9724,6 +9725,7 @@ export const CompleteMcpOAuthResponse = /*@__PURE__*/ proto3.makeMessageType(
     { no: 3, name: "tailnet_pending_reason", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 4, name: "tailnet_pending_detail", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 5, name: "connector_suite_result", kind: "message", T: ConnectorSuiteMemberResult, repeated: true },
+    { no: 6, name: "continue_authorization_url", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
   ],
 );
 

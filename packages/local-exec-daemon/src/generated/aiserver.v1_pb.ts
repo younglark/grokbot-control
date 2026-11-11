@@ -35416,6 +35416,11 @@ export class CompleteMcpOAuthRequest extends Message<CompleteMcpOAuthRequest> {
    */
   authorizationCode = "";
 
+  /**
+   * @generated from field: optional string oauth_error = 3;
+   */
+  oauthError?: string;
+
   constructor(data?: PartialMessage<CompleteMcpOAuthRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -35426,6 +35431,7 @@ export class CompleteMcpOAuthRequest extends Message<CompleteMcpOAuthRequest> {
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "state_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 2, name: "authorization_code", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "oauth_error", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): CompleteMcpOAuthRequest {
@@ -35474,6 +35480,11 @@ export class CompleteMcpOAuthResponse extends Message<CompleteMcpOAuthResponse> 
    */
   connectorSuiteResult: ConnectorSuiteMemberResult[] = [];
 
+  /**
+   * @generated from field: optional string continue_authorization_url = 6;
+   */
+  continueAuthorizationUrl?: string;
+
   constructor(data?: PartialMessage<CompleteMcpOAuthResponse>) {
     super();
     proto3.util.initPartial(data, this);
@@ -35487,6 +35498,7 @@ export class CompleteMcpOAuthResponse extends Message<CompleteMcpOAuthResponse> 
     { no: 3, name: "tailnet_pending_reason", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 4, name: "tailnet_pending_detail", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 5, name: "connector_suite_result", kind: "message", T: ConnectorSuiteMemberResult, repeated: true },
+    { no: 6, name: "continue_authorization_url", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): CompleteMcpOAuthResponse {

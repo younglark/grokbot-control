@@ -6,8 +6,8 @@ const os = require('node:os');
 const cp = require('node:child_process');
 const crypto = require('node:crypto');
 const repo = path.resolve(__dirname, '../../..');
-const source = path.join(repo, 'packages/protocol/baselines/schema-0.79.3-daemon-exec');
-const frozen = JSON.parse(fs.readFileSync(path.join(source,'../schema-0.79.3-daemon-exec.sha256.json'),'utf8'));
+const source = path.join(repo, 'packages/protocol/baselines/schema-0.79.4-daemon-exec');
+const frozen = JSON.parse(fs.readFileSync(path.join(source,'../schema-0.79.4-daemon-exec.sha256.json'),'utf8'));
 for (const [name,hash] of Object.entries(frozen)) {
   if (crypto.createHash('sha256').update(fs.readFileSync(path.join(source,name))).digest('hex') !== hash) throw new Error(`Frozen baseline changed: ${name}; create a NEW version directory instead`);
 }
@@ -47,7 +47,7 @@ try {
     hashes[name] = crypto.createHash('sha256').update(bytes).digest('hex');
   }
   fs.writeFileSync(path.join(input,'buf.yaml'),'version: v2\nmodules:\n  - path: .\n');
-  const manifest = JSON.stringify({source:'packages/protocol/baselines/schema-0.79.3-daemon-exec',buf:'1.50.0',protobufEs:'1.10.1',connectEs:'1.6.1',sha256:hashes},null,2)+'\n';
+  const manifest = JSON.stringify({source:'packages/protocol/baselines/schema-0.79.4-daemon-exec',buf:'1.50.0',protobufEs:'1.10.1',connectEs:'1.6.1',sha256:hashes},null,2)+'\n';
   const targets = [
     {name:'control',target:'js',dest:path.join(repo,'packages/grokbot-control/vendor/proto-gen')},
     {name:'daemon',target:'ts',dest:path.join(repo,'packages/local-exec-daemon/src/generated')},
