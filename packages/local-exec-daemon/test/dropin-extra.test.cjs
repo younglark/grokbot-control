@@ -149,10 +149,10 @@ test('discoverAiTool (UC + Box) output vs hand-derived original VJe result; putF
 // ---------- 5. mb headers in non-dev envs (UC Watch + connection exchange + hello variant) ----------
 const ENVS = [
   // name, env, version (VPe), namespace (ese), hello variant HPe(ns) (D:79045 tse / 78973 ese / 78996 VPe / 78990 HPe)
-  ['packaged', { SAND_PACKAGED: '1' }, '0.79.3', 'prod', 'sand'],
-  ['lab', { SAND_PACKAGED: '1', SAND_LAB: '1' }, '0.79.3-lab', 'lab', 'sand-lab'],
-  ['owner-dev', { SAND_PACKAGED: '1', SAND_BOX_OWNER_NAMESPACE: ' dev ' }, '0.79.3-dev', 'dev', 'sand-dev'],
-  ['isolated', { SAND_ISOLATED_DEPLOYMENT: '1', SAND_CURSOR_WEBSITE_URL: 'http://127.0.0.1:9' }, '0.79.3-dev', 'prod', 'sand'],
+  ['packaged', { SAND_PACKAGED: '1' }, '0.79.4', 'prod', 'sand'],
+  ['lab', { SAND_PACKAGED: '1', SAND_LAB: '1' }, '0.79.4-lab', 'lab', 'sand-lab'],
+  ['owner-dev', { SAND_PACKAGED: '1', SAND_BOX_OWNER_NAMESPACE: ' dev ' }, '0.79.4-dev', 'dev', 'sand-dev'],
+  ['isolated', { SAND_ISOLATED_DEPLOYMENT: '1', SAND_CURSOR_WEBSITE_URL: 'http://127.0.0.1:9' }, '0.79.4-dev', 'prod', 'sand'],
   ['version-suffix', { SAND_PACKAGED: '1', SAND_CLIENT_APP_VERSION: ' 1.2.3-rc.1 ' }, '1.2.3', 'prod', 'sand'],
 ];
 for (const [name, extra, v, ns, variant] of ENVS) {

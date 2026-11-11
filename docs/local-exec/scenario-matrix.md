@@ -4,6 +4,8 @@
 
 证据等级：**实测** = 未修改的官方 `dist/local-exec-daemon/main.cjs`（asar 内 sha256 `5c1424ed…be`，与分析快照一致）在 bwrap 隔离 + 假 box SSE peer 下运行的帧；**静态** = 源码行号；**推断**；**未验证**。只覆盖已检查的 0.79.3 Linux 快照，不外推 macOS/Windows/其他版本。
 
+App 0.79.4（2026-11-11）：没有重跑官方 oracle。静态比对显示 0.79.4 daemon 与 0.79.3 只差 Sentry id 和 LAt 内置版本（D:78971，影响 mb 头版本兜底），本矩阵涉及的 shell/后台/ls 代码字节相同；见 [evidence/app-0.79.4.md](evidence/app-0.79.4.md)。
+
 ## 1. App → daemon 启动（静态，`dist/electron-main/main-core.cjs`，从 app.asar 按 header 偏移读出）
 | 项 | 证据 |
 |---|---|

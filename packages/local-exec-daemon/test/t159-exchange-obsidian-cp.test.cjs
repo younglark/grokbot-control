@@ -16,12 +16,12 @@ async function server(t,handler){const seen=[];const s=http.createServer((req,re
 const client=X.backendClientFromEnv({},'linux');
 
 test('mb headers from eke(env,"desktop") (D:79034, jAt/VPe/ese/BAt/FAt)',()=>{
- assert.deepEqual(X.clientHeaders(client),{'user-agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Sand/0.79.3-dev Safari/537.36',
-  'x-cursor-client-type':'sand','x-cursor-client-version':'0.79.3-dev','x-sand-box-namespace':'dev','x-cursor-client-os':'linux','x-cursor-client-source':'sand-desktop'});
+ assert.deepEqual(X.clientHeaders(client),{'user-agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Sand/0.79.4-dev Safari/537.36',
+  'x-cursor-client-type':'sand','x-cursor-client-version':'0.79.4-dev','x-sand-box-namespace':'dev','x-cursor-client-os':'linux','x-cursor-client-source':'sand-desktop'});
  const prod=X.backendClientFromEnv({SAND_PACKAGED:'1',SAND_CLIENT_APP_VERSION:'1.2.3-beta.4'},'darwin');
  assert.equal(prod.clientVersion,'1.2.3');assert.equal(prod.boxNamespace,'prod');assert.equal(X.variantForNamespace(prod.boxNamespace),'sand');
  const lab=X.backendClientFromEnv({SAND_PACKAGED:'1',SAND_LAB:'1',SAND_ISOLATED_DEPLOYMENT:'1',SAND_BACKEND_URL:'https://api.synthetic.invalid',SAND_CURSOR_WEBSITE_URL:'https://www.synthetic.invalid'},'linux');
- assert.equal(lab.clientVersion,'0.79.3-lab');assert.equal(lab.boxNamespace,'prod');
+ assert.equal(lab.clientVersion,'0.79.4-lab');assert.equal(lab.boxNamespace,'prod');
  assert.equal(X.backendClientFromEnv({SAND_BOX_OWNER_NAMESPACE:' lab '},'linux').boxNamespace,'lab');
 });
 

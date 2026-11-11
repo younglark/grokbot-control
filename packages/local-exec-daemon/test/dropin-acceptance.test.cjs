@@ -47,7 +47,7 @@ test('drop-in acceptance: one realistic lifecycle of dist/index.js against synth
   const logFile = path.join(base, 'daemon.log'); const logFd = fs.openSync(logFile, 'a');
   // R$e env; ELECTRON_RUN_AS_NODE removed; HOME and every data path synthetic.
   const env = { PATH: process.env.PATH, HOME: home, TMPDIR: os.tmpdir(), SAND_DATA_ROOT: data, SAND_USER_DATA_DIR: data,
-    SAND_LOCAL_EXEC_ROOT: root, SAND_BACKEND_URL: backend.url, SAND_CLIENT_APP_VERSION: '0.79.3',
+    SAND_LOCAL_EXEC_ROOT: root, SAND_BACKEND_URL: backend.url, SAND_CLIENT_APP_VERSION: '0.79.4',
     SAND_LOCAL_EXEC_GENERATION: '7', NODE_USE_SYSTEM_CA: '1' };
   const child = cp.spawn(process.execPath, [path.join(__dirname, '..', 'dist', 'index.js')], { env, cwd: base, detached: true, stdio: ['ignore', logFd, logFd, 'ipc'] });
   let exit = null; const exited = new Promise(r => child.on('exit', (code, signal) => { exit = { code, signal }; r(); }));
@@ -124,10 +124,10 @@ test('drop-in acceptance: one realistic lifecycle of dist/index.js against synth
   note('uc-exec-id', ucIds(backend.submitted('uc-exec-1')).every(i => i === 1), { ids: ucIds(backend.submitted('uc-exec-1')) });
 
   // t166 mb headers (D:mb 79034–79044 via eke(process.env,"desktop") 79157 → jAt 79135; synthetic env: SAND_PACKAGED/SAND_LAB
-  // unset → tse "sand-dev" (79045); ese(undefined,"sand-dev",false) = "dev" (78973); VPe("0.79.3","dev") = "0.79.3-dev"
+  // unset → tse "sand-dev" (79045); ese(undefined,"sand-dev",false) = "dev" (78973); VPe("0.79.4","dev") = "0.79.4-dev"
   // (78996, LAt 78970); BAt("desktop") = "sand-desktop" (79007); FAt/$At linux (79021–79033).
-  const MB = [['user-agent', 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Sand/0.79.3-dev Safari/537.36'],
-    ['x-cursor-client-type', 'sand'], ['x-cursor-client-version', '0.79.3-dev'], ['x-sand-box-namespace', 'dev'],
+  const MB = [['user-agent', 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Sand/0.79.4-dev Safari/537.36'],
+    ['x-cursor-client-type', 'sand'], ['x-cursor-client-version', '0.79.4-dev'], ['x-sand-box-namespace', 'dev'],
     ['x-cursor-client-os', 'linux'], ['x-cursor-client-source', 'sand-desktop']];
   const mbNames = new Set(MB.map(([k]) => k));
   const pick = (raw, names) => raw.filter(([k]) => names.has(k));
