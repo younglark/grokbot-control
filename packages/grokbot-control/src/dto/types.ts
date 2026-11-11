@@ -26,12 +26,49 @@ export type SessionSummary = {
   kind: string;
   created_at_ms?: string;
   updated_at_ms?: string;
+  last_activity_at_ms?: string;
 };
 
 export type SanitizedAwaiting = {
   observed: true;
   reason?: string;
   reason_unknown?: true;
+};
+
+export type WaitingKind = "approval" | "input" | "box_handoff" | "retrying" | "other";
+
+export type WaitingSignalView = {
+  kind: WaitingKind;
+  label: string;
+  reason?: string;
+  /** Collapsed one-line preview; never the full original instruction. */
+  instruction_preview?: string;
+  instruction_hidden?: boolean;
+};
+
+export type LiveActivityView = {
+  kind?: string;
+  tool?: string;
+};
+
+export type TurnSettlementView = {
+  outcome?: string;
+  settled_at_ms?: string;
+  /** Set only when the outcome token is a known normal/abnormal value. */
+  settled_normally?: boolean;
+};
+
+export type BoxHandoffView = {
+  present: true;
+  has_instruction: boolean;
+  instruction_preview?: string;
+  instruction_hidden?: boolean;
+};
+
+export type ClientActivityView = {
+  last_activity_at_ms?: string;
+  unread_count?: number;
+  unread_thread_count?: number;
 };
 
 export type ProgressStatus = {
@@ -44,7 +81,46 @@ export type ProgressStatus = {
     /** Whitelisted waiting record only; never the raw awaiting object. */
     awaiting?: SanitizedAwaiting;
     working_task_ids?: string[];
+    activity?: LiveActivityView;
+    last_turn_settlement?: TurnSettlementView;
+    box_handoff?: BoxHandoffView;
+    updated_at_ms?: string;
+    stale_after_ms?: string;
   };
+  client?: ClientActivityView;
+};
+
+export type ChannelKind = "slack" | "teams";
+
+export type ChannelConnectionState =
+  | "connected"
+  | "not_connected"
+  | "pending"
+  | "removed"
+  | "unavailable"
+  | "unknown"
+  | "other";
+
+/** Sanitized channel row from ListGrokBotAgents. Never includes install/reinstall URLs. */
+export type ChannelConnectionView = {
+  agent_id: string;
+  channel: ChannelKind;
+  /** True only for confirmed connected/installed states. Unknown is never true. */
+  connected: boolean;
+  state: ChannelConnectionState;
+  label: string;
+  workspace_or_tenant?: string;
+};
+
+export type SourceFreshnessView = {
+  id: string;
+  label: string;
+  result: "ok" | "error" | "idle";
+  /** Set only after a successful read of an empty list. Never used for a failed read. */
+  empty?: boolean;
+  stale?: boolean;
+  last_successful_at_ms?: number;
+  error?: string;
 };
 
 export type SendDelivery = {
@@ -126,6 +202,8 @@ export type DashboardBotRow = {
   status?: ProgressStatus;
   category: BotRunCategory;
   waiting_reason?: string;
+  waiting_signals?: WaitingSignalView[];
+  channels?: ChannelConnectionView[];
 };
 
 export type ComputerView = {
@@ -153,6 +231,9 @@ export type DashboardConnectionView = {
   last_successful_upstream_at_ms?: number;
   upstream: "ok" | "error" | "idle" | "unauthenticated" | "auth_refresh_failed";
   error?: string;
+  retrying?: boolean;
+  retry_backoff_ms?: number;
+  sources?: SourceFreshnessView[];
 };
 
 /** Frame pushed over SSE / used as the shared poller cache. No secrets. */
@@ -171,6 +252,8 @@ export type DashboardFrame = {
   usage_error?: string;
   usage_breakdown?: UsageBreakdownView;
   usage_breakdown_error?: string;
+  /** Sanitized Slack/Teams connection rows from ListGrokBotAgents; no install URLs. */
+  channels?: ChannelConnectionView[];
   simulated?: boolean;
 };
 
@@ -288,6 +371,8 @@ export type SessionViewState = {
 export type DashboardBotDetail = {
   agent_id: string;
   at_ms: number;
+  /** Last time at least one detail source succeeded. Omitted until then. */
+  last_successful_at_ms?: number;
   sessions: SessionSummary[];
   sessions_error?: string;
   session_view: SessionViewState;
@@ -302,6 +387,7 @@ export type DashboardBotDetail = {
   usage_breakdown?: UsageBreakdownRow[];
   usage_breakdown_kind?: UsageBreakdownKind;
   usage_breakdown_error?: string;
+  sources?: SourceFreshnessView[];
   notes: string[];
 };
 

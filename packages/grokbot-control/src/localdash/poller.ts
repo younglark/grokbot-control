@@ -2,6 +2,7 @@ import { LIMIT_MAX } from "../ops/limits.js";
 import type { ControlPlane } from "../ops/plane.js";
 import type { ComputerState } from "../ops/computer.js";
 import type {
+  ChannelConnectionView,
   DashboardBotDetail,
   DashboardFocus,
   DashboardFrame,
@@ -9,6 +10,7 @@ import type {
   ProgressStatus,
   SanitizedWhoami,
   SidebarSection,
+  SourceFreshnessView,
   UsageBreakdownView,
   UsageStatusView,
 } from "../dto/types.js";
@@ -16,6 +18,7 @@ import type { ResultEnvelope } from "../dto/result.js";
 import { breakdownRowsForBot } from "../ops/usage.js";
 import { sanitizeWhoami } from "./sanitize.js";
 import { presentSessionView, SESSION_SWITCH_NOTE } from "./sessions.js";
+import { sourceFreshness } from "./signals.js";
 import { buildBotRows, countRows, presentComputer } from "./view.js";
 import { accountScope, botScopeKey, EvidenceStore, type DashboardEvidence } from "./evidence.js";
 import { aggregateDemands, shouldDropDemand, type ClientDemand } from "./demand.js";
@@ -67,6 +70,8 @@ export class DashboardPoller {
   private lastUsage: UsageStatusView | undefined;
   private lastBreakdown: UsageBreakdownView | undefined;
   private breakdownError: string | undefined;
+  private lastChannels: ChannelConnectionView[] = [];
+  private sourceTimes = new Map<string, number>();
   private frame: DashboardFrame;
   private closed = false;
   private focuses = new Map<string, FocusRecord>();
@@ -352,12 +357,17 @@ export class DashboardPoller {
       return;
     }
 
-    const botsOk = botsRes.ok && botsRes.data;
+    const botsOk = Boolean(botsRes.ok && botsRes.data);
     const bots = botsOk ? botsRes.data!.bots : this.frame.bots.map((r) => r.bot);
     const truncated = Boolean(botsOk && (botsRes.data!.truncated || botsRes.data!.hint));
     const listHint = botsOk ? botsRes.data!.hint : this.frame.list_hint;
+    if (botsOk) this.lastChannels = botsRes.data!.channels ?? [];
+    const channels = this.lastChannels;
 
     let statuses: ProgressStatus[] = this.frame.bots.map((r) => r.status).filter(Boolean) as ProgressStatus[];
+    let statusesAttempted = false;
+    let statusesOk = false;
+    let statusesError: string | undefined;
     if (botsOk) {
       const ids = bots.map((b) => b.agent_id).filter(Boolean);
       const st = await this.plane.progress.status(ids);
@@ -365,35 +375,91 @@ export class DashboardPoller {
         this.onRefreshFailure(firstError(st));
         return;
       }
-      if (st.ok && st.data) statuses = st.data.statuses;
+      statusesAttempted = true;
+      if (st.ok && st.data) {
+        statuses = st.data.statuses;
+        statusesOk = true;
+      } else {
+        statusesError = firstError(st) ?? "status failed";
+      }
     }
 
-    const rows = buildBotRows(bots, statuses);
+    const rows = buildBotRows(bots, statuses, channels);
     let computerFailed = !computerRes.ok;
     if (computerRes.ok && computerRes.data) this.lastComputer = computerRes.data;
     const sidebar: SidebarSection[] =
       sidebarRes.ok && sidebarRes.data ? sidebarRes.data.sections : this.frame.sidebar;
 
-    const upstreamError = !botsOk || !sidebarRes.ok || computerFailed;
+    const now = Date.now();
+    if (botsOk) this.sourceTimes.set("bots", now);
+    if (statusesOk) this.sourceTimes.set("statuses", now);
+    if (!computerFailed) this.sourceTimes.set("computer", now);
+    if (sidebarRes.ok) this.sourceTimes.set("sidebar", now);
+
+    const upstreamError = !botsOk || !sidebarRes.ok || computerFailed || (statusesAttempted && !statusesOk);
     if (upstreamError) {
       this.backoffMs = Math.min(this.backoffMs * 2, BACKOFF_CAP_MS);
     } else {
       this.backoffMs = UPSTREAM_INTERVAL_MS;
     }
 
-    const now = Date.now();
+    const coreSources: SourceFreshnessView[] = [
+      sourceFreshness({
+        id: "bots",
+        label: "Bot 列表",
+        attempted: true,
+        ok: botsOk,
+        empty: botsOk && bots.length === 0,
+        error: botsOk ? undefined : (firstError(botsRes) ?? "bot list failed"),
+        stale: !botsOk && this.frame.bots.length > 0,
+        last_successful_at_ms: this.sourceTimes.get("bots"),
+      }),
+      sourceFreshness({
+        id: "statuses",
+        label: "Bot 状态",
+        attempted: statusesAttempted,
+        ok: statusesOk,
+        empty: statusesOk && statuses.length === 0,
+        error: statusesError,
+        stale: !statusesOk && statuses.length > 0,
+        last_successful_at_ms: this.sourceTimes.get("statuses"),
+      }),
+      sourceFreshness({
+        id: "computer",
+        label: "共享电脑 / 沙箱",
+        attempted: true,
+        ok: !computerFailed,
+        error: computerFailed ? (firstError(computerRes) ?? "computer state failed") : undefined,
+        stale: computerFailed && Boolean(this.lastComputer),
+        last_successful_at_ms: this.sourceTimes.get("computer"),
+      }),
+      sourceFreshness({
+        id: "sidebar",
+        label: "侧栏",
+        attempted: true,
+        ok: sidebarRes.ok,
+        empty: Boolean(sidebarRes.ok && sidebarRes.data && sidebarRes.data.sections.length === 0),
+        error: sidebarRes.ok ? undefined : (firstError(sidebarRes) ?? "sidebar failed"),
+        stale: !sidebarRes.ok && this.frame.sidebar.length > 0,
+        last_successful_at_ms: this.sourceTimes.get("sidebar"),
+      }),
+    ];
+
     this.publish({
       schema_version: FRAME_SCHEMA,
       at_ms: now,
       connection: {
         sse: this.browsers > 0 ? "connected" : "idle",
-        last_successful_upstream_at_ms: botsOk && sidebarRes.ok && !computerFailed
+        last_successful_upstream_at_ms: !upstreamError
           ? now
           : this.frame.connection.last_successful_upstream_at_ms,
         upstream: upstreamError ? "error" : "ok",
         ...(upstreamError
-          ? { error: firstError(botsRes, computerRes, sidebarRes) }
+          ? { error: firstError(botsRes, computerRes, sidebarRes) ?? statusesError }
           : {}),
+        retrying: upstreamError,
+        ...(upstreamError ? { retry_backoff_ms: this.backoffMs } : {}),
+        sources: mergeSources(this.frame.connection.sources, coreSources),
       },
       auth: {
         logged_in: true,
@@ -408,6 +474,7 @@ export class DashboardPoller {
       list_truncated: truncated,
       ...(listHint ? { list_hint: listHint } : {}),
       sidebar,
+      ...(channels.length ? { channels } : {}),
       ...(this.lastUsage ? { usage: this.lastUsage } : {}),
       ...(this.frame.usage_error ? { usage_error: this.frame.usage_error } : {}),
       ...(this.lastBreakdown ? { usage_breakdown: this.lastBreakdown } : {}),
@@ -443,6 +510,35 @@ export class DashboardPoller {
       next.usage_breakdown_error = this.breakdownError;
       if (this.lastBreakdown) next.usage_breakdown = this.lastBreakdown;
     }
+    const usageNow = Date.now();
+    if (res.ok && res.data) this.sourceTimes.set("usage", usageNow);
+    if (breakdownRes.ok && breakdownRes.data) this.sourceTimes.set("usage_breakdown", usageNow);
+    const usageEmpty =
+      Boolean(breakdownRes.ok && breakdownRes.data && breakdownRes.data.kind === "empty");
+    next.connection = {
+      ...next.connection,
+      sources: mergeSources(next.connection.sources, [
+        sourceFreshness({
+          id: "usage",
+          label: "使用额度",
+          attempted: true,
+          ok: Boolean(res.ok && res.data),
+          error: res.ok ? undefined : (res.error?.message ?? "usage status failed"),
+          stale: !res.ok && Boolean(this.lastUsage),
+          last_successful_at_ms: this.sourceTimes.get("usage"),
+        }),
+        sourceFreshness({
+          id: "usage_breakdown",
+          label: "用量明细",
+          attempted: true,
+          ok: Boolean(breakdownRes.ok && breakdownRes.data),
+          empty: usageEmpty,
+          error: breakdownRes.ok ? undefined : (breakdownRes.error?.message ?? "usage breakdown failed"),
+          stale: !breakdownRes.ok && Boolean(this.lastBreakdown),
+          last_successful_at_ms: this.sourceTimes.get("usage_breakdown"),
+        }),
+      ]),
+    };
     this.publish(next);
     // Per-bot slices may have changed; refresh open details without waiting for the 10s tick.
     for (const agentId of this.focusedAgentIds()) {
@@ -519,27 +615,90 @@ export class DashboardPoller {
       this.onRefreshFailure(firstError(sessionsRes, todosRes, tasksRes, subagentsRes));
       return;
     }
-    const row = this.frame.bots.find((b) => b.bot.agent_id === agentId);
-    const sessions = sessionsRes.ok && sessionsRes.data ? sessionsRes.data.sessions : [];
+    const previous = this.details.get(agentId);
+    const sessions = sessionsRes.ok && sessionsRes.data ? sessionsRes.data.sessions : (previous?.sessions ?? []);
     const session_view = this.sharedSessionView(agentId, sessions);
     const notes = [SESSION_SWITCH_NOTE];
     const observedAt = Date.now();
+    const anyOk = Boolean(
+      (sessionsRes.ok && sessionsRes.data) ||
+        (todosRes.ok && todosRes.data) ||
+        (tasksRes.ok && tasksRes.data) ||
+        (subagentsRes.ok && subagentsRes.data),
+    );
     const detail: DashboardBotDetail = {
       agent_id: agentId,
       at_ms: observedAt,
       sessions,
       session_view,
       notes,
+      ...(anyOk
+        ? { last_successful_at_ms: observedAt }
+        : previous?.last_successful_at_ms !== undefined
+          ? { last_successful_at_ms: previous.last_successful_at_ms }
+          : {}),
     };
     if (!sessionsRes.ok) {
       detail.sessions_error = sessionsRes.error?.message ?? sessionsRes.code ?? "sessions failed";
     }
     if (todosRes.ok && todosRes.data) detail.todos = todosRes.data.todos;
-    else detail.todos_error = todosRes.error?.message ?? todosRes.code ?? "todos failed";
+    else {
+      detail.todos_error = todosRes.error?.message ?? todosRes.code ?? "todos failed";
+      if (previous?.todos) detail.todos = previous.todos;
+    }
     if (tasksRes.ok && tasksRes.data) detail.tasks = tasksRes.data.tasks;
-    else detail.tasks_error = tasksRes.error?.message ?? tasksRes.code ?? "tasks failed";
+    else {
+      detail.tasks_error = tasksRes.error?.message ?? tasksRes.code ?? "tasks failed";
+      if (previous?.tasks) detail.tasks = previous.tasks;
+    }
     if (subagentsRes.ok && subagentsRes.data) detail.subagents = subagentsRes.data.subagents;
-    else detail.subagents_error = subagentsRes.error?.message ?? subagentsRes.code ?? "subagents failed";
+    else {
+      detail.subagents_error = subagentsRes.error?.message ?? subagentsRes.code ?? "subagents failed";
+      if (previous?.subagents) detail.subagents = previous.subagents;
+    }
+    const prevSource = (id: string) => previous?.sources?.find((s) => s.id === id);
+    detail.sources = [
+      sourceFreshness({
+        id: "sessions",
+        label: "会话",
+        attempted: true,
+        ok: Boolean(sessionsRes.ok && sessionsRes.data),
+        empty: Boolean(sessionsRes.ok && sessionsRes.data && sessionsRes.data.sessions.length === 0),
+        error: sessionsRes.ok ? undefined : (sessionsRes.error?.message ?? sessionsRes.code),
+        stale: !sessionsRes.ok && (previous?.sessions?.length ?? 0) > 0,
+        last_successful_at_ms: sessionsRes.ok ? observedAt : prevSource("sessions")?.last_successful_at_ms,
+      }),
+      sourceFreshness({
+        id: "todos",
+        label: "待办",
+        attempted: true,
+        ok: Boolean(todosRes.ok && todosRes.data),
+        empty: Boolean(todosRes.ok && todosRes.data && todosRes.data.todos.length === 0),
+        error: todosRes.ok ? undefined : (todosRes.error?.message ?? todosRes.code),
+        stale: !todosRes.ok && (previous?.todos?.length ?? 0) > 0,
+        last_successful_at_ms: todosRes.ok ? observedAt : prevSource("todos")?.last_successful_at_ms,
+      }),
+      sourceFreshness({
+        id: "tasks",
+        label: "任务项",
+        attempted: true,
+        ok: Boolean(tasksRes.ok && tasksRes.data),
+        empty: Boolean(tasksRes.ok && tasksRes.data && tasksRes.data.tasks.length === 0),
+        error: tasksRes.ok ? undefined : (tasksRes.error?.message ?? tasksRes.code),
+        stale: !tasksRes.ok && (previous?.tasks?.length ?? 0) > 0,
+        last_successful_at_ms: tasksRes.ok ? observedAt : prevSource("tasks")?.last_successful_at_ms,
+      }),
+      sourceFreshness({
+        id: "subagents",
+        label: "子代理",
+        attempted: true,
+        ok: Boolean(subagentsRes.ok && subagentsRes.data),
+        empty: Boolean(subagentsRes.ok && subagentsRes.data && subagentsRes.data.subagents.length === 0),
+        error: subagentsRes.ok ? undefined : (subagentsRes.error?.message ?? subagentsRes.code),
+        stale: !subagentsRes.ok && (previous?.subagents?.length ?? 0) > 0,
+        last_successful_at_ms: subagentsRes.ok ? observedAt : prevSource("subagents")?.last_successful_at_ms,
+      }),
+    ];
     const account = accountScope();
     this.evidence.ingestTodos({
       account,
@@ -943,3 +1102,18 @@ function splitTimelineKey(key: string): [string, string] {
   const i = key.indexOf("\0");
   return [key.slice(0, i), key.slice(i + 1)];
 }
+
+function mergeSources(
+  previous: SourceFreshnessView[] | undefined,
+  updates: SourceFreshnessView[],
+): SourceFreshnessView[] {
+  const byId = new Map((previous ?? []).map((s) => [s.id, s]));
+  for (const row of updates) byId.set(row.id, row);
+  const order = ["bots", "statuses", "computer", "sidebar", "usage", "usage_breakdown"];
+  const rest = [...byId.keys()].filter((id) => !order.includes(id)).sort();
+  return [...order, ...rest].flatMap((id) => {
+    const row = byId.get(id);
+    return row ? [row] : [];
+  });
+}
+

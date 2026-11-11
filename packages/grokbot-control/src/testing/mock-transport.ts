@@ -71,8 +71,17 @@ export type MockState = {
   subagents: unknown[];
   transcript: unknown[];
   sandbox: MockSandboxState;
+  slackConnections?: Array<Record<string, unknown>>;
+  teamsConnections?: Array<Record<string, unknown>>;
   /** Test hook: next transcript reads throw. */
   failTranscript?: boolean;
+  /** Test hooks: force the named read RPC to fail. */
+  failListAgents?: boolean;
+  failStatuses?: boolean;
+  failSandbox?: boolean;
+  failTodos?: boolean;
+  failTasks?: boolean;
+  failSessions?: boolean;
   /** Test hook: override the synthetic generation. */
   transcriptGeneration?: number;
 };
@@ -274,6 +283,9 @@ export function createMockTransport(state: MockState) {
     service(GrokBotService, {
       async getSandBoxRunState() {
         counts(state).getSandBoxRunState += 1;
+        if (state.failSandbox) {
+          throw new ConnectError("simulated sandbox failure", Code.Unavailable);
+        }
         const s = sandbox();
         return {
           state: s.state,
@@ -305,7 +317,15 @@ export function createMockTransport(state: MockState) {
       },
       async listGrokBotAgents() {
         counts(state).listGrokBotAgents += 1;
-        return { agents: state.bots, truncated: false, slackConnections: [], teamsConnections: [] };
+        if (state.failListAgents) {
+          throw new ConnectError("simulated list failure", Code.Unavailable);
+        }
+        return {
+          agents: state.bots,
+          truncated: false,
+          slackConnections: state.slackConnections ?? [],
+          teamsConnections: state.teamsConnections ?? [],
+        };
       },
       async createGrokBotTemporalAgent(req) {
         if (state.dropNextWrite) {
@@ -404,12 +424,18 @@ export function createMockTransport(state: MockState) {
       },
       async listGrokBotAgentSessions(req) {
         counts(state).listGrokBotAgentSessions += 1;
+        if (state.failSessions) {
+          throw new ConnectError("simulated sessions failure", Code.Unavailable);
+        }
         return {
           sessions: state.sessions.filter((s) => s.agentId === req.agentId),
         };
       },
       async listGrokBotAgentStatuses(req) {
         counts(state).listGrokBotAgentStatuses += 1;
+        if (state.failStatuses) {
+          throw new ConnectError("simulated status failure", Code.Unavailable);
+        }
         const ids = new Set(req.agentIds);
         return {
           statuses: state.statuses.filter((s) => ids.has(String(s.agentId))),
@@ -417,6 +443,9 @@ export function createMockTransport(state: MockState) {
       },
       async listGrokBotAgentTodos(req) {
         counts(state).listGrokBotAgentTodos += 1;
+        if (state.failTodos) {
+          throw new ConnectError("simulated todos failure", Code.Unavailable);
+        }
         return {
           todos: state.todos.filter((t) => {
             const row = t;
@@ -426,6 +455,9 @@ export function createMockTransport(state: MockState) {
       },
       async listGrokBotAgentTasks(req) {
         counts(state).listGrokBotAgentTasks += 1;
+        if (state.failTasks) {
+          throw new ConnectError("simulated tasks failure", Code.Unavailable);
+        }
         return {
           tasks: state.tasks.filter((x) => {
             const row = x;

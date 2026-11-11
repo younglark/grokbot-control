@@ -7,9 +7,9 @@ import {
   okResult,
   type ResultEnvelope,
 } from "../dto/result.js";
-import type { BotSummary } from "../dto/types.js";
+import type { BotSummary, ChannelConnectionView } from "../dto/types.js";
 import { GbcError } from "../errors.js";
-import { mapBot } from "./map.js";
+import { mapBot, mapChannelConnections } from "./map.js";
 import { paginate, validateLimit, validateOffset } from "./limits.js";
 
 export type WriteOpts = {
@@ -70,6 +70,7 @@ export class BotOps {
       truncated: boolean;
       next?: string;
       hint?: string;
+      channels: ChannelConnectionView[];
     }>
   > {
     const request_id = newRequestId();
@@ -85,6 +86,7 @@ export class BotOps {
         ?? (serverTruncated
           ? "Server reported a truncated agent list; this page may be incomplete."
           : undefined);
+      const channels: ChannelConnectionView[] = mapChannelConnections(res);
       return this.wrapSim(
         okResult(
           {
@@ -92,6 +94,7 @@ export class BotOps {
             truncated,
             next: page.next,
             hint,
+            channels,
           },
           { request_id },
         ),

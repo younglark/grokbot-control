@@ -5,9 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn, CATEGORY_LABEL, formatBreakdownShare } from "@/lib/utils";
+import { cn, CATEGORY_LABEL, formatBreakdownShare, formatShanghaiDateTime, formatTime, formatUnspecifiedEpoch } from "@/lib/utils";
 import { useState } from "react";
-import type { AgentTaskView, DashboardBotDetail, DashboardBotRow, DashboardTimeline, TodoItemView, UsageBreakdownKind, UsageBreakdownRow } from "@/types";
+import type { AgentTaskView, ChannelConnectionView, DashboardBotDetail, DashboardBotRow, DashboardTimeline, SourceFreshnessView, TodoItemView, TurnSettlementView, UsageBreakdownKind, UsageBreakdownRow } from "@/types";
 
 const TODO_LABEL: Record<TodoItemView["status"], string> = {
   pending: "待办",
@@ -47,6 +47,13 @@ function TaskList({ todos, error }: { todos?: TodoItemView[]; error?: string }) 
             <p className="text-sm leading-6">{t.content || t.id}</p>
             <Badge variant="outline" className="font-normal">{TODO_LABEL[t.status]}</Badge>
           </div>
+          {(t.created_at || t.updated_at) && (
+            <p className="mt-1 text-[11px] leading-5 text-muted-foreground" data-testid="todo-times">
+              {t.created_at && <span>创建 {formatUnspecifiedEpoch(t.created_at)}</span>}
+              {t.created_at && t.updated_at && <span> · </span>}
+              {t.updated_at && <span>更新 {formatUnspecifiedEpoch(t.updated_at)}</span>}
+            </p>
+          )}
         </li>
       ))}
     </ul>
@@ -136,6 +143,12 @@ export function BotDetail({
           )}
         </dl>
 
+        <WaitingSection row={row} />
+        <ActionSection row={row} />
+        <ActivityMetaSection row={row} />
+        <BotChannelsSection channels={row.channels} />
+        <DetailFreshness detail={detail} />
+
         <Separator />
         <section data-testid="bot-sessions" className="space-y-3">
           <h3 className="text-sm font-medium">会话</h3>
@@ -172,6 +185,11 @@ export function BotDetail({
                       <span className="min-w-0">
                         <span className="block font-mono text-xs break-all">{s.session_id}</span>
                         {s.kind && <span className="text-[11px] text-muted-foreground">{s.kind}</span>}
+                        {s.last_activity_at_ms && (
+                          <span className="block text-[11px] text-muted-foreground">
+                            最后活动 {formatShanghaiDateTime(s.last_activity_at_ms) ?? s.last_activity_at_ms}
+                          </span>
+                        )}
                       </span>
                       <span className="flex shrink-0 gap-1">
                         {current && <Badge variant="outline" className="font-normal">当前</Badge>}
@@ -237,3 +255,137 @@ export function BotDetail({
     </Card>
   );
 }
+
+function WaitingSection({ row }: { row: DashboardBotRow }) {
+  const signals = row.waiting_signals;
+  if (!signals?.length) return null;
+  return (
+    <section className="space-y-2" data-testid="waiting-signals">
+      <h3 className="text-sm font-medium">等待处理</h3>
+      <ul className="space-y-2">
+        {signals.map((s, i) => (
+          <li key={`${s.kind}-${i}`} className="rounded-lg border px-3 py-2 text-sm" data-kind={s.kind}>
+            <p>{s.label}{s.reason ? `：${s.reason}` : ""}</p>
+            {s.kind === "box_handoff" && (
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                {s.instruction_preview
+                  ? `指令摘要：${s.instruction_preview}`
+                  : s.instruction_hidden
+                    ? "有桌面交接指令（原文已隐藏）"
+                    : "有桌面交接请求"}
+              </p>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function settlementLine(s: TurnSettlementView): string {
+  if (s.settled_normally === true) return `正常结束${s.outcome ? `（${s.outcome}）` : ""}`;
+  if (s.settled_normally === false) return `未正常结束${s.outcome ? `（${s.outcome}）` : ""}`;
+  if (s.outcome) return `已结算（结果词汇未映射，原文：${s.outcome}）`;
+  return "已结算（无结果字段）";
+}
+
+function ActionSection({ row }: { row: DashboardBotRow }) {
+  const live = row.status?.live;
+  const activity = live?.activity;
+  const settlement = live?.last_turn_settlement;
+  const composing = live?.is_composing_message;
+  if (!row.status) return null;
+  return (
+    <section className="space-y-2" data-testid="current-action">
+      <h3 className="text-sm font-medium">当前动作</h3>
+      {composing && <p className="text-sm text-muted-foreground">正在撰写回复</p>}
+      {activity ? (
+        <p className="text-sm">
+          正在调用{activity.tool ? `工具 ${activity.tool}` : "步骤"}
+          {activity.kind ? `（${activity.kind}）` : ""}
+        </p>
+      ) : (
+        <p className="text-sm text-muted-foreground">没有正在调用的工具或步骤。</p>
+      )}
+      {settlement ? (
+        <p className="text-xs leading-5 text-muted-foreground" data-testid="last-turn-settlement">
+          最近回合：{settlementLine(settlement)}
+          {settlement.settled_at_ms
+            ? ` · ${formatShanghaiDateTime(settlement.settled_at_ms) ?? settlement.settled_at_ms}`
+            : ""}
+        </p>
+      ) : (
+        <p className="text-xs text-muted-foreground">最近回合结算尚未提供。</p>
+      )}
+    </section>
+  );
+}
+
+function ActivityMetaSection({ row }: { row: DashboardBotRow }) {
+  const client = row.status?.client;
+  if (!client) return null;
+  const unread = client.unread_count;
+  const threads = client.unread_thread_count;
+  return (
+    <section className="space-y-2" data-testid="recent-activity">
+      <h3 className="text-sm font-medium">最近动态</h3>
+      {client.last_activity_at_ms ? (
+        <p className="text-sm">最后活动 {formatShanghaiDateTime(client.last_activity_at_ms) ?? client.last_activity_at_ms}</p>
+      ) : (
+        <p className="text-sm text-muted-foreground">没有提供最后活动时间。</p>
+      )}
+      <p className="text-sm text-muted-foreground">
+        {unread == null ? "未读数量未提供。" : unread > 0 ? `未读 ${unread}` : "没有未读"}
+        {threads != null ? ` · 未读线程 ${threads}` : ""}
+      </p>
+    </section>
+  );
+}
+
+function BotChannelsSection({ channels }: { channels?: ChannelConnectionView[] }) {
+  if (!channels?.length) return null;
+  return (
+    <section className="space-y-2" data-testid="bot-channels">
+      <h3 className="text-sm font-medium">连接情况</h3>
+      <ul className="space-y-1.5 text-sm">
+        {channels.map((c, i) => (
+          <li key={`${c.channel}-${i}`} data-connected={c.connected ? "true" : "false"} data-state={c.state}>
+            {c.channel === "slack" ? "Slack" : "Teams"}：{c.label}
+            {c.workspace_or_tenant ? ` · ${c.workspace_or_tenant}` : ""}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function DetailFreshness({ detail }: { detail?: DashboardBotDetail }) {
+  if (!detail?.sources?.length && !detail?.last_successful_at_ms) return null;
+  return (
+    <section className="space-y-2" data-testid="detail-freshness">
+      <h3 className="text-sm font-medium">此 Bot 的数据新鲜度</h3>
+      {detail.last_successful_at_ms && (
+        <p className="text-xs text-muted-foreground">上次成功刷新：{formatTime(detail.last_successful_at_ms)}</p>
+      )}
+      <ul className="space-y-1 text-xs leading-5 text-muted-foreground">
+        {(detail.sources ?? []).map((s: SourceFreshnessView) => (
+          <li key={s.id} data-result={s.result} data-empty={s.empty ? "true" : undefined}>
+            {s.label}：
+            {s.result === "ok"
+              ? s.empty
+                ? "读取成功，列表为空"
+                : "读取成功"
+              : s.result === "error"
+                ? s.stale
+                  ? "读取失败，已保留上次结果"
+                  : "读取失败"
+                : "尚未读取"}
+            {s.last_successful_at_ms ? ` · ${formatTime(s.last_successful_at_ms)}` : ""}
+            {s.result === "error" && s.error ? ` · ${s.error}` : ""}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+

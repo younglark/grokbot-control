@@ -19,7 +19,7 @@ App 里能做的 Bot 生命周期、发消息、侧边栏、进度与中断，�
 - **进度**：status、原生 todos / tasks / subagents、interrupt
 - **鉴权**：独立 Cursor 浏览器登录（默认 `cli`）；可选 `bot` 登录模式使用与官方 App 相同的 URL 形态；凭据存 `~/.gbc`（0600）；不读取 App 的 `sand-secrets.json`
 - **文件同步**：`sync pull|status|render|attachments`（无 SQLite；细节见 [docs/control-plane/sync-format.md](https://github.com/younglark/grokbot-control/blob/main/docs/control-plane/sync-format.md)）
-- **本地监视器**：`gbc dashboard` 在本机回环打开只读近实时监视页（轮询 + SSE）。这是本地 CLI 命令，不是官方 `DashboardService`，也不模仿官方 App UI。第二期在详情中展示稳定的 todos/tasks/subagents、活动时间线，以及不传 team id 的 `GetGrokBotUsageBreakdown` 明细。`usage_percent` 按已经算好的百分比展示；breakdown 中的 ppm 是占限额的百万分比，换算为百分比（例如 225439 ppm 显示为 22.54%），金额/币种仍未核实
+- **本地监视器**：`gbc dashboard` 在本机回环打开只读近实时监视页（轮询 + SSE）。这是本地 CLI 命令，不是官方 `DashboardService`，也不模仿官方 App UI。第二期在详情中展示稳定的 todos/tasks/subagents、活动时间线，以及不传 team id 的 `GetGrokBotUsageBreakdown` 明细。另只读展示等待处理、当前动作、数据新鲜度、最近动态、共享电脑/沙箱状态与 Slack/Teams 连接态（不含安装链接）。`usage_percent` 按已经算好的百分比展示；breakdown 中的 ppm 是占限额的百万分比，换算为百分比（例如 225439 ppm 显示为 22.54%），金额/币种仍未核实
 - **写安全**：远端写需 `--allow-writes`；危险操作需 `--confirm=<id>`；`--dry-run` 纯本地计划。MCP 默认只注册只读工具与 auth，写工具需 `GBT_ALLOW_WRITES=1` 或 `--allow-writes`
 - **Agent 输出**：CLI 成功 stdout 在终端和管道下都是同一套 ResultEnvelope；`--plain` 只输出 data。未知 flag 以退出码 2 拒绝。列表默认 `--limit=50`，截断时带 `truncated` / `next` / `hint`
 
@@ -202,7 +202,7 @@ gbc dashboard [--port 8787] [--host 127.0.0.1] [--no-open]
 | `message` | `send` / `status` / `history` |
 | `session` | `list` |
 | `sidebar` | `list` / `create` / `rename` / `delete` / `move` |
-| `dashboard` | （可省略 `start`）本地只读监视器；`--port` / `--host` / `--no-open`。不是官方 DashboardService。详情含任务区、活动时间线与用量明细 |
+| `dashboard` | （可省略 `start`）本地只读监视器；`--port` / `--host` / `--no-open`。不是官方 DashboardService。详情含任务区、活动时间线、用量明细，以及等待处理 / 当前动作 / 新鲜度 / 最近动态 / 沙箱状态 / 渠道连接 |
 | `sync` | `pull` / `status` / `render` / `attachments` |
 
 危险写操作（`bot delete`、`sidebar delete`、`interrupt` 等）需要 `--confirm=<resource-id>` 精确匹配。`computer reset` 使用固定 token `--confirm=RESET_COMPUTER`，会重建共享电脑且启动后不可取消；`--hard` 走 `ForceRecreateSandBox`。远端写需要 `--allow-writes` 或 `GBT_ALLOW_WRITES=1`；`sync` 的本地归档写由命令本身授权，不要求远端 `--allow-writes`。

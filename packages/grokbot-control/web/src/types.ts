@@ -45,6 +45,40 @@ export type BotSummary = {
   viewer_session_id: string;
 };
 
+export type WaitingKind = "approval" | "input" | "box_handoff" | "retrying" | "other";
+
+export type WaitingSignalView = {
+  kind: WaitingKind;
+  label: string;
+  reason?: string;
+  instruction_preview?: string;
+  instruction_hidden?: boolean;
+};
+
+export type LiveActivityView = {
+  kind?: string;
+  tool?: string;
+};
+
+export type TurnSettlementView = {
+  outcome?: string;
+  settled_at_ms?: string;
+  settled_normally?: boolean;
+};
+
+export type BoxHandoffView = {
+  present: true;
+  has_instruction: boolean;
+  instruction_preview?: string;
+  instruction_hidden?: boolean;
+};
+
+export type ClientActivityView = {
+  last_activity_at_ms?: string;
+  unread_count?: number;
+  unread_thread_count?: number;
+};
+
 export type ProgressStatus = {
   agent_id: string;
   is_running: boolean;
@@ -53,7 +87,44 @@ export type ProgressStatus = {
     is_composing_message?: boolean;
     is_retrying?: boolean;
     awaiting?: { observed: true; reason?: string; reason_unknown?: true };
+    working_task_ids?: string[];
+    activity?: LiveActivityView;
+    last_turn_settlement?: TurnSettlementView;
+    box_handoff?: BoxHandoffView;
+    updated_at_ms?: string;
+    stale_after_ms?: string;
   };
+  client?: ClientActivityView;
+};
+
+export type ChannelKind = "slack" | "teams";
+
+export type ChannelConnectionState =
+  | "connected"
+  | "not_connected"
+  | "pending"
+  | "removed"
+  | "unavailable"
+  | "unknown"
+  | "other";
+
+export type ChannelConnectionView = {
+  agent_id: string;
+  channel: ChannelKind;
+  connected: boolean;
+  state: ChannelConnectionState;
+  label: string;
+  workspace_or_tenant?: string;
+};
+
+export type SourceFreshnessView = {
+  id: string;
+  label: string;
+  result: "ok" | "error" | "idle";
+  empty?: boolean;
+  stale?: boolean;
+  last_successful_at_ms?: number;
+  error?: string;
 };
 
 export type DashboardBotRow = {
@@ -61,6 +132,8 @@ export type DashboardBotRow = {
   status?: ProgressStatus;
   category: BotRunCategory;
   waiting_reason?: string;
+  waiting_signals?: WaitingSignalView[];
+  channels?: ChannelConnectionView[];
 };
 
 export type ComputerView = {
@@ -81,6 +154,9 @@ export type DashboardFrame = {
     last_successful_upstream_at_ms?: number;
     upstream: "ok" | "error" | "idle" | "unauthenticated" | "auth_refresh_failed";
     error?: string;
+    retrying?: boolean;
+    retry_backoff_ms?: number;
+    sources?: SourceFreshnessView[];
   };
   auth: {
     logged_in: boolean;
@@ -97,6 +173,7 @@ export type DashboardFrame = {
   usage_error?: string;
   usage_breakdown?: UsageBreakdownView;
   usage_breakdown_error?: string;
+  channels?: ChannelConnectionView[];
   simulated?: boolean;
 };
 
@@ -178,6 +255,7 @@ export type SessionSummary = {
   kind: string;
   created_at_ms?: string;
   updated_at_ms?: string;
+  last_activity_at_ms?: string;
 };
 
 export type SessionViewState = {
@@ -192,6 +270,7 @@ export type SessionViewState = {
 export type DashboardBotDetail = {
   agent_id: string;
   at_ms: number;
+  last_successful_at_ms?: number;
   sessions: SessionSummary[];
   sessions_error?: string;
   session_view: SessionViewState;
@@ -204,6 +283,7 @@ export type DashboardBotDetail = {
   usage_breakdown?: UsageBreakdownRow[];
   usage_breakdown_kind?: UsageBreakdownKind;
   usage_breakdown_error?: string;
+  sources?: SourceFreshnessView[];
   notes: string[];
 };
 

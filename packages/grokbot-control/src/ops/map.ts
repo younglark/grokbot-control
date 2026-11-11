@@ -1,5 +1,6 @@
-import type { AgentTaskView, BotSummary, ProgressStatus, SessionSummary, SidebarSection, SubagentView, TodoItemView, TodoStatusView } from "../dto/types.js";
+import type { AgentTaskView, BotSummary, ChannelConnectionView, ClientActivityView, ProgressStatus, SessionSummary, SidebarSection, SubagentView, TodoItemView, TodoStatusView } from "../dto/types.js";
 import { sanitizeAwaiting } from "../localdash/awaiting.js";
+import { mapTurnSettlement, sanitizeActivity, sanitizeBoxHandoff, sanitizeShortText } from "../localdash/signals.js";
 
 /** int64 from protobuf JSON/TS may be bigint | string | number — normalize to string. */
 export function int64ToString(v: unknown): string | undefined {
@@ -41,12 +42,19 @@ export function mapSession(s: any): SessionSummary {
     kind: String(s.kind ?? ""),
     created_at_ms: int64ToString(s.createdAtMs ?? s.created_at_ms),
     updated_at_ms: int64ToString(s.updatedAtMs ?? s.updated_at_ms),
+    last_activity_at_ms: int64ToString(s.lastActivityAtMs ?? s.last_activity_at_ms),
   };
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function mapStatus(s: any): ProgressStatus {
   const live = s.live;
+  const activity = live ? sanitizeActivity(live.activity ?? live.Activity) : undefined;
+  const settlement = live ? mapTurnSettlement(live.lastTurnSettlement ?? live.last_turn_settlement) : undefined;
+  const handoff = live ? sanitizeBoxHandoff(live) : undefined;
+  const updated = live ? int64ToString(live.updatedAtMs ?? live.updated_at_ms) : undefined;
+  const staleAfter = live ? int64ToString(live.staleAfterMs ?? live.stale_after_ms) : undefined;
+  const client = mapClientActivity(s.client ?? s.Client);
   return {
     agent_id: s.agentId || s.agent_id || "",
     is_running: Boolean(s.isRunning ?? s.is_running ?? live?.isRunning),
@@ -57,9 +65,168 @@ export function mapStatus(s: any): ProgressStatus {
           is_retrying: live.isRetrying ?? live.is_retrying,
           awaiting: sanitizeAwaiting(live.awaiting ?? live.Awaiting),
           working_task_ids: live.workingTaskIds || live.working_task_ids,
+          ...(activity ? { activity } : {}),
+          ...(settlement ? { last_turn_settlement: settlement } : {}),
+          ...(handoff ? { box_handoff: handoff } : {}),
+          ...(updated ? { updated_at_ms: updated } : {}),
+          ...(staleAfter ? { stale_after_ms: staleAfter } : {}),
         }
       : undefined,
+    ...(client ? { client } : {}),
   };
+}
+
+export function mapClientActivity(raw: unknown): ClientActivityView | undefined {
+  if (raw == null || typeof raw !== "object") return undefined;
+  const rec = raw as Record<string, unknown>;
+  const last = int64ToString(rec.lastActivityAtMs ?? rec.last_activity_at_ms);
+  const unreadRaw = rec.unreadCount ?? rec.unread_count;
+  const threadsRaw = rec.unreadThreadCount ?? rec.unread_thread_count;
+  const unread = unreadRaw == null || unreadRaw === "" ? undefined : Number(unreadRaw);
+  const threads = threadsRaw == null || threadsRaw === "" ? undefined : Number(threadsRaw);
+  const view: ClientActivityView = {};
+  if (last) view.last_activity_at_ms = last;
+  if (unread != null && Number.isFinite(unread)) view.unread_count = unread;
+  if (threads != null && Number.isFinite(threads)) view.unread_thread_count = threads;
+  return Object.keys(view).length ? view : undefined;
+}
+
+const TEAMS_STATE_BY_CODE = [
+  "unspecified",
+  "not_connected",
+  "connected",
+  "app_created",
+  "pending_admin_approval",
+  "installed",
+  "update_pending",
+  "removed_in_teams",
+  "removed",
+  "unsupported_harness",
+  "not_published",
+  "unavailable",
+  "provisioning",
+] as const;
+
+function normalizeTeamsInstallState(raw: unknown): string {
+  if (typeof raw === "number" && Number.isFinite(raw)) {
+    return TEAMS_STATE_BY_CODE[raw] ?? "unknown";
+  }
+  const text = String(raw ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/^grok_bot_teams_install_state_/, "");
+  if (!text) return "unspecified";
+  if ((TEAMS_STATE_BY_CODE as readonly string[]).includes(text) || text === "unknown") return text;
+  return "unknown";
+}
+
+function teamsConnectionView(stateKey: string): Pick<ChannelConnectionView, "connected" | "state" | "label"> {
+  switch (stateKey) {
+    case "connected":
+      return { connected: true, state: "connected", label: "已连接" };
+    case "installed":
+      return { connected: true, state: "connected", label: "已安装" };
+    case "update_pending":
+      return { connected: true, state: "connected", label: "已连接（待更新）" };
+    case "not_connected":
+      return { connected: false, state: "not_connected", label: "未连接" };
+    case "pending_admin_approval":
+      return { connected: false, state: "pending", label: "待管理员审批" };
+    case "provisioning":
+      return { connected: false, state: "pending", label: "开通中" };
+    case "app_created":
+      return { connected: false, state: "other", label: "应用已创建" };
+    case "removed_in_teams":
+      return { connected: false, state: "removed", label: "已在 Teams 移除" };
+    case "removed":
+      return { connected: false, state: "removed", label: "已移除" };
+    case "unavailable":
+    case "unsupported_harness":
+    case "not_published":
+      return { connected: false, state: "unavailable", label: "不可用" };
+    case "unspecified":
+    case "unknown":
+      return { connected: false, state: "unknown", label: "未知" };
+    default:
+      return { connected: false, state: "unknown", label: "未知" };
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function mapSlackConnection(raw: any): ChannelConnectionView | undefined {
+  const agent_id = String(raw?.agentId ?? raw?.agent_id ?? "").trim();
+  if (!agent_id) return undefined;
+  const connected = Boolean(raw.connected);
+  const pending = raw.pendingAdminApproval ?? raw.pending_admin_approval;
+  const denied = raw.approvalDenied ?? raw.approval_denied;
+  const removed = raw.removedInSlack ?? raw.removed_in_slack;
+  const unreachable = raw.appUnreachable ?? raw.app_unreachable;
+  let state: ChannelConnectionView["state"] = connected ? "connected" : "not_connected";
+  let label = connected ? "已连接" : "未连接";
+  if (removed) {
+    state = "removed";
+    label = "已在 Slack 移除";
+  } else if (denied) {
+    state = "unavailable";
+    label = "审批已拒绝";
+  } else if (pending) {
+    state = "pending";
+    label = "待管理员审批";
+  } else if (unreachable) {
+    state = "unavailable";
+    label = "应用不可达";
+  } else if (!connected && (raw.unavailableReason || raw.unavailable_reason)) {
+    state = "unavailable";
+    label = "不可用";
+  }
+  // Unknown is never painted as connected; a bare missing connected flag stays not_connected.
+  const workspace = sanitizeShortText(raw.workspaceName ?? raw.workspace_name, 80);
+  return {
+    agent_id,
+    channel: "slack",
+    connected: connected && state === "connected",
+    state,
+    label,
+    ...(workspace ? { workspace_or_tenant: workspace } : {}),
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function mapTeamsConnection(raw: any): ChannelConnectionView | undefined {
+  const agent_id = String(raw?.agentId ?? raw?.agent_id ?? "").trim();
+  if (!agent_id) return undefined;
+  const mapped = teamsConnectionView(normalizeTeamsInstallState(raw.installState ?? raw.install_state));
+  const tenant = sanitizeShortText(raw.tenantDisplayName ?? raw.tenant_display_name, 80);
+  return {
+    agent_id,
+    channel: "teams",
+    ...mapped,
+    ...(tenant ? { workspace_or_tenant: tenant } : {}),
+  };
+}
+
+export function mapChannelConnections(res: {
+  slackConnections?: unknown;
+  slack_connections?: unknown;
+  teamsConnections?: unknown;
+  teams_connections?: unknown;
+}): ChannelConnectionView[] {
+  const slack = res.slackConnections ?? res.slack_connections ?? [];
+  const teams = res.teamsConnections ?? res.teams_connections ?? [];
+  const rows: ChannelConnectionView[] = [];
+  if (Array.isArray(slack)) {
+    for (const item of slack) {
+      const row = mapSlackConnection(item);
+      if (row) rows.push(row);
+    }
+  }
+  if (Array.isArray(teams)) {
+    for (const item of teams) {
+      const row = mapTeamsConnection(item);
+      if (row) rows.push(row);
+    }
+  }
+  return rows;
 }
 
 

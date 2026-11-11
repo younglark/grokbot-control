@@ -7,6 +7,7 @@
 ### 新增
 
 - **本地只读监视器：`gbc dashboard`（亦接受 `gbc dashboard start`）。** 在回环地址启动一个近实时 Bot 监视页（本地轮询 + SSE），打印并打开带一次性路径 `/s/<随机>/` 的 URL。这是 CLI 命令，**不是**官方 protobuf `DashboardService`。不会通过 CLI、MCP 或 HTTP 暴露官方写 RPC（`Set*`、`ExecuteSandMcpTool`、`CancelSandTrial`、`SendTeamInvite` 等）。默认绑定 `127.0.0.1`，v1 拒绝非回环 `--host`。未登录时服务器仍会启动，页面提示在终端运行 `gbc auth login` 后刷新；页面不收集凭据。`--json` 输出一次含 `url` / `bind` / `opened` 的封套后保持运行；`--plain` 只打印 URL；`--no-open` 不打开浏览器。Ctrl+C / SIGTERM 退出码 0，不会中断远端 Bot。没有 v1 MCP dashboard 工具。
+- **本地监视器补充协议里已有的 Bot 信号。** 详情与总览只读展示：等待处理（审批、等待输入、桌面交接、正在重试）、当前动作（正在调用的工具/步骤与 `last_turn_settlement`）、数据新鲜度（上次成功刷新、分源失败/重试；空列表与读失败可区分）、最近动态（最后活动时间、未读、todo 创建/更新时间）、运行环境（共享电脑/沙箱是否在跑；未知或过期不会显示为绿色「运行中」）、渠道连接（Slack/Teams 是否已接上）。桌面交接指令只给收敛摘要；渠道展示不含 install/reinstall URL。不引入 Watch，也不展示资料类的创建时间、可见性或语音字段。
 - **第二期：任务区、活动时间线与用量明细。** 打开某个 Bot 详情时，约 10 秒轮询该 Bot 的 sessions / todos / tasks / subagents（多标签共享缓存 + singleflight，不会把全局 5 秒状态轮询按 Bot 放大）。用已有 history/transcript SDK 解析消息正文，展示活动时间线：运行中或等待中约 5 秒，否则 15–30 秒，仅活动列表离开视口时暂停刷新；浏览较早内容时显示「有新活动」，不强制滚到底部。`GetGrokBotUsageBreakdown` 首次调用不传 team id；若明细里带有 `bot_id`，对应 Bot 详情也会展示。todos / tasks / subagents 使用稳定 DTO；没有可靠数据时不编造待办。会话切换是本地查看成绩单的明确能力，需单独验收，不是默认关键路径；数据不足时只提供只读会话列表与当前会话，失败可见。
 
 ### 说明

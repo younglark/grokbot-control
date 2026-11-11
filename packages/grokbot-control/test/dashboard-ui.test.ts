@@ -388,7 +388,73 @@ describe("packed dashboard UI (Playwright)", () => {
     }
   });
 
-  // Execution graph acceptance now lives in dashboard-window.test.ts: real independent route.
+  it("shows waiting, current action, freshness, recent activity, computer tone, and channel state without leaking install URLs", async () => {
+    if (!hasUi()) {
+      return;
+    }
+    const browser = await maybeChromium();
+    if (!browser) return;
+    const state = createEmptyMockState();
+    state.bots.push({id:"1",agentId:"agent-1",name:"demo",title:"信号助手",viewerSessionId:"sess-1"});
+    state.statuses.push({
+      agentId:"agent-1",
+      isRunning:false,
+      live:{
+        agentId:"agent-1",
+        isRunning:false,
+        isRetrying:true,
+        sessionId:"sess-1",
+        awaiting:{reason:"needs_approval"},
+        activity:{kind:"tool",tool:"Read"},
+        lastTurnSettlement:{outcome:"success",settledAtMs:1_700_000_000_000n},
+        boxHandoffRequestId:"handoff-1",
+        boxHandoffInstruction:"请继续处理这份很长的桌面交接说明，后面还有大量不应整段展开的内容。" + "x".repeat(40),
+      },
+      client:{lastActivityAtMs:1_700_000_000_500n,unreadCount:2},
+    });
+    state.sessions.push({agentId:"agent-1",sessionId:"sess-1",kind:1,lastActivityAtMs:1_700_000_000_400n});
+    state.todos.push({id:"todo-1",content:"整理资料",status:1,agentId:"agent-1",createdAt:1_700_000_000_000n,updatedAt:10n});
+    state.slackConnections=[{agentId:"agent-1",connected:true,workspaceName:"Acme",installUrl:"https://slack.com/apps/install/secret-token"}];
+    const dash = await startDashboardServer({ plane: plane(state, true), host: "127.0.0.1", port: 0, uiRoot });
+    try {
+      const page = await browser.newPage();
+      await page.setViewportSize({ width: 1440, height: 1100 });
+      await page.goto(dash.url, { waitUntil: "load" });
+      await page.getByTestId("freshness-panel").waitFor({ timeout: 8_000 });
+      assert.match(await page.getByTestId("last-successful-refresh").innerText(), /上海时间|尚无成功读取/);
+      assert.equal(await page.getByTestId("computer-chip").getAttribute("data-tone"), "unknown");
+      assert.match(await page.getByTestId("computer-chip").innerText(), /共享电脑 \/ 沙箱|未知|未实时核验/);
+      const channels = page.getByTestId("channels-panel");
+      await channels.getByTestId("channels-list").waitFor();
+      assert.match(await channels.innerText(), /已连接/);
+      assert.doesNotMatch(await channels.innerText(), /slack.com\/apps\/install/);
+      await page.getByTestId("unread-badge").waitFor();
+      await page.getByTestId("bot-list").getByText("信号助手", { exact: true }).click();
+      const detail = page.getByTestId("bot-detail");
+      await detail.waitFor();
+      const waiting = page.getByTestId("waiting-signals");
+      await waiting.waitFor();
+      assert.match(await waiting.innerText(), /审批/);
+      assert.match(await waiting.innerText(), /桌面交接/);
+      assert.match(await waiting.innerText(), /正在重试/);
+      assert.match(await waiting.innerText(), /指令摘要/);
+      assert.doesNotMatch(await waiting.innerText(), /x{40}/);
+      const action = page.getByTestId("current-action");
+      assert.match(await action.innerText(), /Read/);
+      assert.match(await page.getByTestId("last-turn-settlement").innerText(), /正常结束/);
+      assert.match(await page.getByTestId("recent-activity").innerText(), /未读 2/);
+      await page.getByTestId("bot-todos").getByText("整理资料").waitFor({ timeout: 8_000 });
+      const todoTimes = await page.getByTestId("todo-times").innerText();
+      assert.match(todoTimes, /按毫秒时间戳解读/);
+      assert.match(todoTimes, /单位未标明/);
+      assert.match(await page.getByTestId("bot-channels").innerText(), /Slack/);
+      const html = await page.content();
+      assert.doesNotMatch(html, /slack.com\/apps\/install\/secret-token/);
+    } finally {
+      await dash.close();
+      await browser.close();
+    }
+  });
 
   it("resolveDashboardUiRoot finds the packed tree after build", () => {
     if (!hasUi()) return;

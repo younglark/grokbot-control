@@ -2,11 +2,14 @@ import type { ComputerState } from "../ops/computer.js";
 import type {
   BotRunCategory,
   BotSummary,
+  ChannelConnectionView,
   ComputerView,
   DashboardBotRow,
   ProgressStatus,
   SanitizedWhoami,
+  WaitingSignalView,
 } from "../dto/types.js";
+import { waitingSignals } from "./signals.js";
 
 /** computer.state is not live-verified. Unknown/stale must not use the running tone. */
 export function presentComputer(
@@ -73,33 +76,44 @@ export function stateLabel(state: string): string {
 }
 
 export function waitingReason(status?: ProgressStatus): string | undefined {
-  const awaiting = status?.live?.awaiting;
-  if (awaiting?.observed) return awaiting.reason ?? "等待／原因未知";
-  if (status?.live?.is_retrying) return "正在重试";
-  return undefined;
+  const signals = waitingSignals(status);
+  if (!signals.length) return undefined;
+  return signals
+    .map((s) => {
+      if (s.kind === "box_handoff") return s.label;
+      return s.reason && s.kind !== "retrying" ? `${s.label}：${s.reason}` : s.label;
+    })
+    .join(" · ");
 }
 
 export function botCategory(status?: ProgressStatus): BotRunCategory {
   if (!status) return "unknown";
   if (status.is_running) return "running";
-  if (waitingReason(status) || status.live?.awaiting?.observed) return "waiting";
+  if (waitingSignals(status).length || status.live?.awaiting?.observed) return "waiting";
   return "idle";
 }
 
 export function buildBotRows(
   bots: BotSummary[],
   statuses: ProgressStatus[],
+  channels: ChannelConnectionView[] = [],
 ): DashboardBotRow[] {
   const byId = new Map(statuses.map((s) => [s.agent_id, s]));
   return bots.map((bot) => {
     const status = byId.get(bot.agent_id) ?? byId.get(bot.id);
     const category = botCategory(status);
     const reason = waitingReason(status);
+    const signals: WaitingSignalView[] = waitingSignals(status);
+    const botChannels = channels.filter(
+      (c) => c.agent_id === bot.agent_id || c.agent_id === bot.id,
+    );
     return {
       bot,
       ...(status ? { status } : {}),
       category,
       ...(reason ? { waiting_reason: reason } : {}),
+      ...(signals.length ? { waiting_signals: signals } : {}),
+      ...(botChannels.length ? { channels: botChannels } : {}),
     };
   });
 }

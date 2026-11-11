@@ -11,7 +11,7 @@
 | 鉴权 | 独立 Cursor 浏览器登录（默认 `cli`）；可选 `bot` 登录模式只改变 `loginDeepControl` URL（`sand` + `supportsSelectedTeamLogin=true`），凭据仍在 `~/.gbc`，不读 App 凭据、不猜 team id、不伪造官方头；凭据带 provenance / revision / session 绑定；`client_id` 只来自 `GBT_OAUTH_CLIENT_ID` 或登录时持久化，不内置不猜；临期 < 300 s 刷新；进程内 singleflight + 原生跨进程锁（[auth-lock.md](auth-lock.md)）；RPC 401 只对只读白名单刷新重试一次 |
 | 同步 `sync pull/status/render/attachments` | 文件归档（无 SQLite）、head 刷新与 backfill 分离、预算与轮转、附件按需下载（仅已证实的 store alias）、可选 `--hydrate missing` 正文补读；格式与限制见 [sync-format.md](sync-format.md) |
 | MCP | 与 CLI 共用 SDK；默认只注册只读业务工具和 auth；写工具需 `GBT_ALLOW_WRITES=1` 或 `--allow-writes` 才出现在 `tools/list`；`GBT_MCP_READONLY=1` 更严并优先；input schema 严格拒绝未知参数；stdout 只有 JSON-RPC |
-| 本地监视器 `gbc dashboard` | 回环只读近实时监视页（本地轮询 + SSE，不是 Watch 流）。CLI 命令，不是官方 `DashboardService`；封装只读 `GetSandUsageStatus`（空请求）与 `GetGrokBotUsageBreakdown`（首次不传 team id）。打开的详情约 10 秒轮询 sessions / todos / tasks / subagents；活动时间线解析已有 history/transcript 正文（运行中或等待中约 5 秒，否则 15–30 秒；活动列表离开视口时暂停刷新）。无 MCP 工具，不暴露官方写 RPC。未登录也可启动，页面提示在终端登录。默认 `127.0.0.1`，v1 拒绝非回环 `--host` |
+| 本地监视器 `gbc dashboard` | 回环只读近实时监视页（本地轮询 + SSE，不是 Watch 流）。CLI 命令，不是官方 `DashboardService`；封装只读 `GetSandUsageStatus`（空请求）与 `GetGrokBotUsageBreakdown`（首次不传 team id）。打开的详情约 10 秒轮询 sessions / todos / tasks / subagents；活动时间线解析已有 history/transcript 正文（运行中或等待中约 5 秒，否则 15–30 秒；活动列表离开视口时暂停刷新）。总览与详情只读展示等待处理、当前动作、数据新鲜度、最近动态、共享电脑/沙箱状态与 Slack/Teams 连接态（来自已有 List/Get 只读 RPC，不引入 Watch）。无 MCP 工具，不暴露官方写 RPC。未登录也可启动，页面提示在终端登录。默认 `127.0.0.1`，v1 拒绝非回环 `--host` |
 
 ## live 验证范围（2026-11-07，隔离测试 bot，结束后已删除）
 

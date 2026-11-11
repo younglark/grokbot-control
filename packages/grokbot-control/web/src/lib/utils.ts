@@ -46,18 +46,44 @@ export function whoamiSummary(w?: { kind?: string; logged_in?: boolean; login_ki
   return label ? `${kind} · ${label}` : kind;
 }
 
-export function formatTime(ms?: number): string {
-  if (!ms) return "尚无成功读取";
+export const DASHBOARD_TIME_ZONE = "Asia/Shanghai";
+
+export function formatShanghaiDateTime(ms?: number | string): string | undefined {
+  if (ms === undefined || ms === null || ms === "") return undefined;
+  const n = typeof ms === "number" ? ms : Number(ms);
+  if (!Number.isFinite(n)) return undefined;
   try {
-    return new Intl.DateTimeFormat("zh-CN", {
+    const text = new Intl.DateTimeFormat("zh-CN", {
+      timeZone: DASHBOARD_TIME_ZONE,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
       hour: "2-digit",
       minute: "2-digit",
       second: "2-digit",
       hour12: false,
-    }).format(new Date(ms));
+    }).format(new Date(n));
+    return `${text}（上海时间）`;
   } catch {
-    return String(ms);
+    return undefined;
   }
+}
+
+export function formatTime(ms?: number): string {
+  if (!ms) return "尚无成功读取";
+  return formatShanghaiDateTime(ms) ?? String(ms);
+}
+
+/** Todo created_at / updated_at have no documented unit. */
+export function formatUnspecifiedEpoch(raw?: string): string | undefined {
+  if (raw === undefined || raw === "") return undefined;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return String(raw);
+  if (n >= 1_000_000_000_000 && n <= 9_999_999_999_999) {
+    const text = formatShanghaiDateTime(n);
+    return text ? `${text}，按毫秒时间戳解读` : `${raw}（单位未标明）`;
+  }
+  return `${raw}（单位未标明）`;
 }
 
 export const CATEGORY_LABEL: Record<string, string> = {
