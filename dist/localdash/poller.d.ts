@@ -1,0 +1,114 @@
+import type { ControlPlane } from "../ops/plane.js";
+import type { DashboardBotDetail, DashboardFocus, DashboardFrame, DashboardTimeline } from "../dto/types.js";
+import { type DashboardEvidence } from "./evidence.js";
+export declare const FRAME_SCHEMA: "1.0.0";
+export declare const UPSTREAM_INTERVAL_MS = 5000;
+export declare const USAGE_INTERVAL_MS = 60000;
+export declare const WHOAMI_INTERVAL_MS = 30000;
+export declare const DETAIL_INTERVAL_MS = 10000;
+export declare const TIMELINE_ACTIVE_INTERVAL_MS = 5000;
+export declare const TIMELINE_IDLE_INTERVAL_MS = 20000;
+export type DashboardPollerOptions = {
+    detailIntervalMs?: number;
+    timelineActiveIntervalMs?: number;
+    timelineIdleIntervalMs?: number;
+};
+export type PollerListener = (frame: DashboardFrame) => void;
+export type DetailListener = (detail: DashboardBotDetail) => void;
+export type TimelineListener = (timeline: DashboardTimeline) => void;
+export type EvidenceListener = (evidence: DashboardEvidence) => void;
+/**
+ * Shared cache + singleflight for the local `gbc dashboard` monitor.
+ * This is local poll + SSE, not official WatchGrokBotTranscripts (that RPC is
+ * not on the used surface and is not wired).
+ */
+export declare class DashboardPoller {
+    private plane;
+    private browsers;
+    private timer;
+    private usageTimer;
+    private whoamiTimer;
+    private inflight;
+    private usageInflight;
+    private listeners;
+    private detailListeners;
+    private timelineListeners;
+    private evidenceListeners;
+    private evidence;
+    private backoffMs;
+    private refreshFailed;
+    private loggedIn;
+    private lastWhoami;
+    private lastComputer;
+    private lastUsage;
+    private lastBreakdown;
+    private breakdownError;
+    private lastChannels;
+    private sourceTimes;
+    private frame;
+    private closed;
+    private focuses;
+    private details;
+    private timelines;
+    private detailInflight;
+    private timelineInflight;
+    private detailTimers;
+    private timelineTimers;
+    private readonly detailIntervalMs;
+    private readonly timelineActiveIntervalMs;
+    private readonly timelineIdleIntervalMs;
+    constructor(plane: ControlPlane, opts?: DashboardPollerOptions);
+    get current(): DashboardFrame;
+    subscribe(fn: PollerListener): () => void;
+    subscribeDetail(fn: DetailListener): () => void;
+    subscribeTimeline(fn: TimelineListener): () => void;
+    subscribeEvidence(fn: EvidenceListener): () => void;
+    browserConnected(_clientId?: string, _epoch?: string): void;
+    browserDisconnected(clientId?: string, epoch?: string): void;
+    /** Initial whoami (server start) without starting upstream polls. */
+    start(): Promise<void>;
+    refreshUsage(): Promise<void>;
+    setFocus(input: DashboardFocus): void;
+    getDetail(agentId: string, clientId?: string): DashboardBotDetail | undefined;
+    getEvidence(agentId: string, sessionId?: string): DashboardEvidence;
+    getTimeline(agentId: string, sessionId?: string): DashboardTimeline | undefined;
+    close(): void;
+    private arm;
+    private disarmUpstream;
+    private canPollUpstream;
+    private scheduleUpstream;
+    private scheduleUsage;
+    private scheduleWhoami;
+    private tickUpstream;
+    private refreshWhoami;
+    private applyLoggedOut;
+    private loadUpstream;
+    private loadUsage;
+    private reconcileDetailLoops;
+    private scheduleDetail;
+    private tickDetail;
+    private loadDetail;
+    private withBreakdown;
+    private refreshOpenSessionViews;
+    /** Shared detail carries Bot-level facts only; viewed session stays per client. */
+    private sharedSessionView;
+    private decorateDetail;
+    private resolvedSession;
+    private sessionKnown;
+    private reconcileTimelineLoops;
+    private wantedTimelines;
+    private timelineInterval;
+    private scheduleTimeline;
+    private tickTimeline;
+    private loadTimeline;
+    private focusedAgentIds;
+    private clearDetailLoops;
+    private clearTimelineLoops;
+    private isRefreshFailure;
+    private onRefreshFailure;
+    private emptyFrame;
+    private publish;
+    private publishDetail;
+    private publishTimeline;
+    private publishEvidence;
+}

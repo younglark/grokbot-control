@@ -1,0 +1,10 @@
+{
+  "name": "@grokbot-control/proto-gen",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./GrokBotService": "./svc_aiserver.v1.GrokBotService_connect.js",
+    "./aiserver": "./aiserver.v1_pb.js",
+    "./agent": "./agent.v1_pb.js"
+  }
+}
