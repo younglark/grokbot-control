@@ -14,6 +14,7 @@ App 里能做的 Bot 生命周期、发消息、侧边栏、进度与中断，�
 
 - **Bot**：create / list / get（list 筛选）/ update / delete
 - **电脑**：state、reset（`preserve_data:false`）、`--hard`、`--wait` 阶段进度
+- **账号清理**：`account cleanup` 预览并删除当前账号自己拥有的个人 Bot，再按现有电脑重置重建共享电脑；不是彻底账号重置，也不处理订阅/账号删除/Library 等未知副作用
 - **消息与会话**：send、send status、history、sessions
 - **侧边栏**：SidebarSections CRUD、移动成员（删除分组 ≠ 删除 Bot）
 - **进度**：status、原生 todos / tasks / subagents、interrupt
@@ -86,6 +87,9 @@ gbc --json auth login --timeout 300
 gbc --json auth whoami          # 离线本地状态，不打印 token
 gbc --json bot list --limit 20  # 只读
 gbc --json computer state       # 只读
+gbc --mock --json account cleanup --dry-run   # 只读预览：清单、数量、计划指纹；不发写
+# 真实执行（会删除已确认的自有 Bot 并重建电脑，不可撤销）：
+#   gbc --json --allow-writes account cleanup --confirm=ACCOUNT_CLEANUP --plan=<fingerprint>
 gbc dashboard                   # 本地只读监视器（回环 URL；不是官方 DashboardService）
 #   gbc dashboard --mock --no-open
 #   npm run dev:gbc -- dashboard --mock
@@ -199,13 +203,14 @@ gbc dashboard [--port 8787] [--host 127.0.0.1] [--no-open]
 | `auth` | `login-begin` / `complete` / `login` / `whoami` / `poll` / `cancel` / `refresh` / `logout` |
 | `bot` | `create` / `list` / `get` / `update` / `delete` / `status` / `todos` / `tasks` / `subagents` / `interrupt` |
 | `computer` | `state` / `reset`（`--hard`、`--wait`、`--timeout`） |
+| `account` | `cleanup`（先 `--dry-run`；执行需 `--confirm=ACCOUNT_CLEANUP --plan=<fingerprint>`，可选 `--hard` / `--wait` / `--timeout`） |
 | `message` | `send` / `status` / `history` |
 | `session` | `list` |
 | `sidebar` | `list` / `create` / `rename` / `delete` / `move` |
 | `dashboard` | （可省略 `start`）本地只读监视器；`--port` / `--host` / `--no-open`。不是官方 DashboardService。详情含任务区、活动时间线、用量明细，以及等待处理 / 当前动作 / 新鲜度 / 最近动态 / 沙箱状态 / 渠道连接 |
 | `sync` | `pull` / `status` / `render` / `attachments` |
 
-危险写操作（`bot delete`、`sidebar delete`、`interrupt` 等）需要 `--confirm=<resource-id>` 精确匹配。`computer reset` 使用固定 token `--confirm=RESET_COMPUTER`，会重建共享电脑且启动后不可取消；`--hard` 走 `ForceRecreateSandBox`。远端写需要 `--allow-writes` 或 `GBT_ALLOW_WRITES=1`；`sync` 的本地归档写由命令本身授权，不要求远端 `--allow-writes`。
+危险写操作（`bot delete`、`sidebar delete`、`interrupt` 等）需要 `--confirm=<resource-id>` 精确匹配。`computer reset` 使用固定 token `--confirm=RESET_COMPUTER`，会重建共享电脑且启动后不可取消；`--hard` 走 `ForceRecreateSandBox`。`account cleanup` 先 `--dry-run` 给出可删清单与计划指纹；真实执行必须 `--allow-writes`、`--confirm=ACCOUNT_CLEANUP` 以及与当前清单匹配的 `--plan`。它只删除确定为当前账号自有、可删除的个人 Bot，再按现有 `computer reset` 重建共享电脑，不是彻底账号重置，也不处理订阅、账号删除、Library、会话或连接器。列表截断、权属不明、共享/团队 Bot，或预览后清单变化时不会发出写请求。删除中途失败或重建前核验发现残留/新 Bot 时不会重建。流程不是事务，已删除的 Bot 不能用本命令撤销。远端写需要 `--allow-writes` 或 `GBT_ALLOW_WRITES=1`；`sync` 的本地归档写由命令本身授权，不要求远端 `--allow-writes`。
 
 ### 退出码
 

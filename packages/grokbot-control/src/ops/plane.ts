@@ -9,6 +9,7 @@ import {
 } from "../connect/client.js";
 import { AuthOps } from "./auth.js";
 import { BotOps } from "./bot.js";
+import { AccountCleanupOps } from "./account.js";
 import { ComputerOps } from "./computer.js";
 import { MessageOps } from "./message.js";
 import { ProgressOps } from "./progress.js";
@@ -32,6 +33,7 @@ export class ControlPlane {
   readonly auth?: AuthProvider;
   readonly authOps: AuthOps;
   readonly computer: ComputerOps;
+  readonly account: AccountCleanupOps;
   /** Read-only GetSandUsageStatus / GetGrokBotUsageBreakdown wrapper; not a general official DashboardService facade. */
   readonly usage: UsageOps;
   readonly simulated: boolean;
@@ -47,6 +49,7 @@ export class ControlPlane {
     this.authOps = new AuthOps(this.auth, f);
     this.bot = new BotOps(this.client, f);
     this.computer = new ComputerOps(this.client, f);
+    this.account = new AccountCleanupOps(this.client, this.bot, this.computer, f);
     this.message = new MessageOps(this.client, f);
     this.session = new SessionOps(this.client, f);
     this.progress = new ProgressOps(this.client, f);

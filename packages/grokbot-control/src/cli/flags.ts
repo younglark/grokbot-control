@@ -22,6 +22,9 @@ export const COMMAND_FLAGS: Record<string, Record<string, FlagSpec>> = {
     state: { values: [], switches: [] },
     reset: { values: ["--confirm", "--timeout"], switches: ["--hard", "--wait"] },
   },
+  account: {
+    cleanup: { values: ["--confirm", "--plan", "--timeout"], switches: ["--hard", "--wait"] },
+  },
   bot: {
     list: { values: ["--limit", "--offset"], switches: [] },
     get: { values: ["--agent-id"], switches: [] },

@@ -15,6 +15,8 @@ EXAMPLES:
   gbc --mock --json session list --agent-id <id> [--limit 50] [--offset 0]
   gbc --mock --json bot status --agent-id <id>
   gbc --mock --json computer state
+  gbc --mock --json account cleanup --dry-run
+  gbc --mock --json --allow-writes account cleanup --confirm=ACCOUNT_CLEANUP --plan=<fingerprint>
   gbc --mock --json --allow-writes computer reset --confirm=RESET_COMPUTER
   gbc --json --allow-writes computer reset --confirm=RESET_COMPUTER --wait --timeout 600
   gbc --mock --json --allow-writes sidebar create --name Work
@@ -78,6 +80,24 @@ NOTES:
   - computer reset requires --confirm=RESET_COMPUTER and --allow-writes. It recreates the
     shared computer with preserve_data=false and cannot be canceled after it starts.
     --hard calls ForceRecreateSandBox instead of RecreateSandBox.
+  - account cleanup deletes personal bots this account owns, then recreates the shared
+    computer with the same preserve_data=false reset as \`computer reset\`. It is not a full
+    account reset: it does not cancel a subscription, delete the account, or claim to
+    clear sessions, connectors, Library, skills/routines, or all cloud data. Side effects
+    are not live-verified. Preview first: \`gbc account cleanup --dry-run\` lists targets,
+    skips (shared/team/others/unknown ownership are never guessed or deleted), counts,
+    data-loss warnings, and a plan fingerprint. A truncated ListGrokBotAgents response
+    is refused before any write. Real execution needs --allow-writes and
+    --confirm=ACCOUNT_CLEANUP --plan=<fingerprint> from that exact preview. If the
+    current list no longer matches the plan, no writes are sent. Deletes are serial and
+    reported one by one. Any failure, permission error, or unknown outcome stops the
+    flow; computer reset is not started and unknown writes are not retried. After
+    successful deletes a read-only re-list must show no planned residual and no new
+    owned targets, or reset is skipped. Zero owned bots is valid: matching empty plan,
+    no deletes, then reset. --hard/--wait/--timeout are forwarded to the existing
+    computer reset and keep its semantics (SIGINT stops waiting only). The flow is not
+    a transaction; already-deleted bots cannot be undone. Existing \`bot delete\` and
+    \`computer reset\` stay unchanged. No dashboard or MCP entry for this command.
   - computer reset --wait follows WatchSandBoxMigration phases (backing-up, creating, moving,
     cleaning-up, wiping, done/failed) and stops waiting at --timeout (1..3600s, default 600).
     SIGINT stops waiting only; the reset may continue. No percentage is reported.

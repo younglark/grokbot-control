@@ -84,6 +84,16 @@ export type MockState = {
   failSessions?: boolean;
   /** Test hook: override the synthetic generation. */
   transcriptGeneration?: number;
+  /** When true, ListGrokBotAgents returns truncated=true (incomplete inventory). */
+  listTruncated?: boolean;
+  /** Recorded write RPCs (delete / recreate / force-recreate). */
+  writeCalls?: Array<{ method: string; req: unknown }>;
+  /** Per-server-id delete hook: throw instead of removing the bot. */
+  deleteErrorById?: Record<string, "permission" | "unknown">;
+  /** Delete RPC succeeds but the bot is left in the list (residual). */
+  retainAfterDeleteIds?: string[];
+  /** Owned bots appended to later lists after at least one delete write. */
+  afterDeleteInjectBots?: Array<Record<string, unknown>>;
 };
 
 function defaultSandbox(): MockSandboxState {
@@ -114,6 +124,7 @@ export function createEmptyMockState(): MockState {
     usageFixture: "normal",
     breakdownFixture: "cents_by_source",
     callCounts: emptyCallCounts(),
+    writeCalls: [],
   };
 }
 
@@ -135,6 +146,10 @@ export function emptyCallCounts(): MockCallCounts {
 
 function counts(state: MockState): MockCallCounts {
   return (state.callCounts ??= emptyCallCounts());
+}
+
+function recordWrite(state: MockState, method: string, req: unknown): void {
+  (state.writeCalls ??= []).push({ method, req });
 }
 
 function ts(offsetSec = 0): { seconds: bigint; nanos: number } {
@@ -293,10 +308,12 @@ export function createMockTransport(state: MockState) {
           image: s.image,
         };
       },
-      async recreateSandBox() {
+      async recreateSandBox(req) {
+        recordWrite(state, "RecreateSandBox", req ?? {});
         return startReset();
       },
-      async forceRecreateSandBox() {
+      async forceRecreateSandBox(req) {
+        recordWrite(state, "ForceRecreateSandBox", req ?? {});
         return startReset();
       },
       async *watchSandBoxMigration(req) {
@@ -320,9 +337,13 @@ export function createMockTransport(state: MockState) {
         if (state.failListAgents) {
           throw new ConnectError("simulated list failure", Code.Unavailable);
         }
+        const agents = [...state.bots];
+        if ((state.writeCalls ?? []).some((c) => c.method === "DeleteGrokBotAgent") && state.afterDeleteInjectBots) {
+          agents.push(...state.afterDeleteInjectBots);
+        }
         return {
-          agents: state.bots,
-          truncated: false,
+          agents,
+          truncated: Boolean(state.listTruncated),
           slackConnections: state.slackConnections ?? [],
           teamsConnections: state.teamsConnections ?? [],
         };
@@ -380,12 +401,28 @@ export function createMockTransport(state: MockState) {
         return { agent: b };
       },
       async deleteGrokBotAgent(req) {
+        recordWrite(state, "DeleteGrokBotAgent", req ?? {});
         if (state.dropNextWrite) {
           state.dropNextWrite = false;
           throw new ConnectError("simulated drop", Code.DeadlineExceeded);
         }
+        const id = String(req.id ?? "");
+        const fail = state.deleteErrorById?.[id];
+        if (fail === "permission") {
+          throw new ConnectError("simulated permission denied", Code.PermissionDenied);
+        }
+        if (fail === "unknown") {
+          throw new ConnectError("simulated drop", Code.DeadlineExceeded);
+        }
+        const retain = new Set(state.retainAfterDeleteIds ?? []);
+        const match = (b: Record<string, unknown>) => String(b.agentId ?? "") !== id && String(b.id ?? "") !== id;
         const before = state.bots.length;
-        state.bots = state.bots.filter((b) => b.agentId !== req.id && b.id !== req.id);
+        if (retain.has(id)) {
+          const exists = state.bots.some((b) => !match(b));
+          if (!exists) throw new ConnectError("not found", Code.NotFound);
+          return {};
+        }
+        state.bots = state.bots.filter((b) => match(b));
         if (state.bots.length === before) throw new ConnectError("not found", Code.NotFound);
         return {};
       },
