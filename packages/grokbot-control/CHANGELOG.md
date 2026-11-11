@@ -4,9 +4,13 @@
 
 ## Unreleased
 
+## 0.5.0 — 2026-11-11（通过 GitHub tag `npm-v0.5.0` 分发，不发到 npmjs）
+
 ### 新增
 
 - **`gbc account cleanup`：删除当前账号自己拥有的个人 Bot，再按现有 `computer reset` 重建共享电脑。** 这不是彻底账号重置，也不处理订阅、账号删除、Library、会话、连接器或未经证实的云端副作用。先 `--dry-run` 预览清单、数量、数据损失提示和计划指纹；真实执行必须 `--allow-writes`、`--confirm=ACCOUNT_CLEANUP` 以及与当前清单匹配的 `--plan=<fingerprint>`。清单被截断、权属不明、共享/团队/他人 Bot、或预览后列表变化时不会发出写请求。删除串行报告；任一条失败或结果未知则停止且不重建。重建前会再次只读核验，出现残留或新的可删 Bot 时不会继续删除或重置。0 个自有 Bot 在空计划匹配后仍可重建。`--hard` / `--wait` / `--timeout` 复用现有电脑重置语义。流程不是事务，已删除的 Bot 不能用本命令撤销。没有 dashboard 写入口，也不新增 MCP 工具。既有的单 Bot `bot delete` 和 `computer reset` 保持不变。
+
+安装：`npx -y --package=github:younglark/grokbot-control#npm-v0.5.0 gbc`（`gbc-mcp` 同样要加 `--package`）。
 
 ## 0.4.2 — 2026-11-11（通过 GitHub tag `npm-v0.4.2` 分发，不发到 npmjs）
 
