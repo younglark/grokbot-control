@@ -2,6 +2,19 @@
 
 本文件记录公开包 `grokbot-control` 的用户可见变更。版本号遵循 SemVer。从 0.2.0 起通过 GitHub tag `npm-v<version>` 分发，不再发布到 npmjs。npmjs 上的 **0.1.3 已停止更新**。
 
+## 0.3.0 — 2026-11-11（通过 GitHub tag `npm-v0.3.0` 分发，不发到 npmjs）
+
+### 新增
+
+- **可选 bot 登录模式。** 默认仍是 CLI 登录（`redirectTarget=cli`，不加团队选择参数）。`--login-mode bot`、`GBT_LOGIN_MODE=bot` 或 MCP `login_mode: "bot"` 会使用与桌面 App 相同的 `loginDeepControl` URL（`redirectTarget=sand` + `supportsSelectedTeamLogin=true`）。不读取官方 App 凭据，也不发送官方客户端头。
+- **bot 模式登录轮询收束已 live 验证（2026-11-11）。** 得到 Cursor token（kind `cursor`，backend api2）。选中团队如何返回/绑定、是否需要 `x-cursor-team-id`、以及该模式之后的 OAuth 刷新仍未 live 验证。
+
+### 修复
+
+- **冲突的 `--login-mode` 不再静默后写覆盖。** 两个不一致的值以退出码 2（`usage`）失败；同一个值写两次可以通过。命令行参数覆盖 `GBT_LOGIN_MODE`。
+
+安装：`npx -y --package=github:younglark/grokbot-control#npm-v0.3.0 gbc`（`gbc-mcp` 同样要加 `--package`）。
+
 ## 0.2.1 — 2026-11-10（通过 GitHub tag `npm-v0.2.1` 分发，不发到 npmjs）
 
 源码 tag `v0.2.0` 已推送，但发版工作流在 `npm test` 处因后台 shell 测试挂起被取消，**没有生成 `npm-v0.2.0`**。请不要删除或改写已推送的 `v0.2.0`。0.2.1 是第一个应由 Actions 生成的 GitHub 安装 tag。
