@@ -13,7 +13,7 @@
 | 领域 | 内容 | 入口文档 |
 |---|---|---|
 | 协议 | 0.79.3 schema 冻结（`schema-0.79.3` + 增补 Exec 闭包的 `schema-0.79.3-daemon-exec`），一个生成器同时产出 control ESM 和 daemon TS | [protocol/](protocol/README.md) |
-| 控制面 | bot / message / session / sidebar / progress / computer / auth / sync，CLI 与 MCP 语义一致；原生跨进程刷新锁 | [control-plane/](control-plane/README.md) |
+| 控制面 | bot / message / session / sidebar / progress / computer / auth / sync，CLI 与 MCP 语义一致；原生跨进程刷新锁；本地 `gbc dashboard` 只读监视器（轮询 + SSE，不是官方 DashboardService） | [control-plane/](control-plane/README.md) |
 | daemon 启动 | IPC / Electron parentPort 交接、crash guard、启动 env 与 fd 清理、代理 env、discovery、ownership | [local-exec/overview.md](local-exec/overview.md) |
 | daemon 通道 | Box（SSE + POST）、UC（Watch/Poll/Submit/Withdraw）、连接交换、续订、unauthorized、network-change、backendReturn、outage ledger、多账号 | 同上 |
 | daemon 执行器 | 原版 Tft 只注册 4 个：shellStream、backgroundShell、read、ls；denylist（tree-sitter）、sandboxPolicy、spawnWorkload（Md/CE/cgroup/FUSE/oom） | [local-exec/remaining-diffs.md](local-exec/remaining-diffs.md) |

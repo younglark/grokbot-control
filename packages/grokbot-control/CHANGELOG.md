@@ -2,6 +2,19 @@
 
 本文件记录公开包 `grokbot-control` 的用户可见变更。版本号遵循 SemVer。从 0.2.0 起通过 GitHub tag `npm-v<version>` 分发，不再发布到 npmjs。npmjs 上的 **0.1.3 已停止更新**。
 
+## Unreleased
+
+### 新增
+
+- **本地只读监视器：`gbc dashboard`（亦接受 `gbc dashboard start`）。** 在回环地址启动一个近实时 Bot 监视页（本地轮询 + SSE），打印并打开带一次性路径 `/s/<随机>/` 的 URL。这是 CLI 命令，**不是**官方 protobuf `DashboardService`。第一期只封装只读的 `GetSandUsageStatus`（空请求）；不会通过 CLI、MCP 或 HTTP 暴露官方写 RPC（`Set*`、`ExecuteSandMcpTool`、`CancelSandTrial`、`SendTeamInvite` 等）。默认绑定 `127.0.0.1`，v1 拒绝非回环 `--host`。未登录时服务器仍会启动，页面提示在终端运行 `gbc auth login` 后刷新；页面不收集凭据。`--json` 输出一次含 `url` / `bind` / `opened` 的封套后保持运行；`--plain` 只打印 URL；`--no-open` 不打开浏览器。Ctrl+C / SIGTERM 退出码 0，不会中断远端 Bot。没有 v1 MCP dashboard 工具。
+
+### 说明
+
+- 「近实时」是本地 5 秒轮询 + SSE，不是 `WatchGrokBotTranscripts`（该 RPC 不在已用表面，也未接线）。
+- `computer.state` 未经实时核验；未知或过期状态不会显示为绿色「运行中」，也不等同于离线。
+- `usage_percent` 的单位尚未 live 核实；包含额度为 0 时不绘制满额进度条；计费链接仅在接口返回完整 URL 时展示，不会拼接。
+- OAuth 刷新仍未 live 核实。
+
 ## 0.3.0 — 2026-11-11（通过 GitHub tag `npm-v0.3.0` 分发，不发到 npmjs）
 
 ### 新增

@@ -12,4 +12,6 @@
 | [../protocol/protocol-map.md](../protocol/protocol-map.md) | App 动作 ↔ RPC ↔ SDK/CLI/MCP 契约 |
 | [../protocol/auth-flow.md](../protocol/auth-flow.md) | 登录/刷新协议证据 |
 
-单包命令：`npm test -w grokbot-control`、`npm run dev:gbc -- --mock --json bot list`。
+单包命令：`npm test -w grokbot-control`、`npm run dev:gbc -- --mock --json bot list`、`npm run dev:gbc -- dashboard --mock`。
+
+`gbc dashboard` 是本地回环上的只读 Bot 监视器（轮询 + SSE），与官方 protobuf `DashboardService` 不是同一件事。第一期只封装只读的 `GetSandUsageStatus`，不提供 MCP 工具，也不暴露官方写 RPC。

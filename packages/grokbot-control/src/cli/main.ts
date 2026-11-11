@@ -12,6 +12,7 @@ import { catchToExit, emitResult, outputMode, usageExit } from "./io.js";
 import { assertCommandFlags, assertNoLeadingFlag } from "./flags.js";
 import { failResult, okResult } from "../dto/result.js";
 import { parseCliLimit, parseCliOffset } from "../ops/limits.js";
+import { dashboardCommand } from "./dashboard.js";
 
 async function main(): Promise<number> {
   const argv = process.argv.slice(2);
@@ -24,12 +25,18 @@ async function main(): Promise<number> {
     const mode = outputMode(globals, process.stdout.isTTY);
     assertNoLeadingFlag(rest);
 
-    const [noun, verb] = rest;
+    // Local `gbc dashboard` is a noun-only (and `dashboard start`) special case.
+    // Official protobuf DashboardService is a different thing and is not a CLI noun.
+    let argvRest = rest;
+    if (argvRest[0] === "dashboard" && (argvRest[1] === undefined || argvRest[1].startsWith("-"))) {
+      argvRest = ["dashboard", "start", ...argvRest.slice(1)];
+    }
+    const [noun, verb] = argvRest;
     if (!noun || !verb) usageExit("missing <noun> <verb>", "gbc --help");
-    assertCommandFlags(noun, verb, rest);
+    assertCommandFlags(noun, verb, argvRest);
 
     if (noun === "sync")
-      return emitResult(await syncCommand(globals, rest), mode);
+      return emitResult(await syncCommand(globals, argvRest), mode);
     const plane = buildPlane(globals);
     const write = {
       dryRun: globals.dryRun,
@@ -37,7 +44,14 @@ async function main(): Promise<number> {
     };
 
     let code = 0;
-    if (noun === "auth") {
+    if (noun === "dashboard" && verb === "start") {
+      code = await dashboardCommand(globals, argvRest, mode, plane);
+    } else if (noun === "dashboard") {
+      usageExit(
+        `unknown command: dashboard ${verb}`,
+        "gbc dashboard  or  gbc dashboard start  [--port] [--host] [--no-open]",
+      );
+    } else if (noun === "auth") {
       const ops = plane.authOps;
       const loginOpts = () => ({ loginMode: globals.loginMode });
       if (verb === "whoami" || verb === "status") {

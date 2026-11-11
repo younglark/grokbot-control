@@ -22,9 +22,11 @@
 | `npm run smoke:electron` | 用外部 Electron 跑 daemon 交接冒烟；没有 Electron 时跳过 |
 | `npm run verify:package` | 真实 `npm pack` 公开包并在隔离目录安装，检查 bin / SDK 导出 |
 | `npm run release:github` | 本地预览：检查、打包、生成父提交为空的 commit（默认不打、不推官方 `npm-v*` tag） |
-| `npm run dev:gbc -- <args>` / `npm run dev:mcp` | 从源码运行 CLI / MCP |
+| `npm run dev:gbc -- <args>` / `npm run dev:mcp` | 从源码运行 CLI / MCP（例如 `npm run dev:gbc -- dashboard --mock`） |
 
 **每次跑测试前都先 `export UC_SKIP_OFFICIAL=1`。**
+
+本地 `gbc dashboard` 的 UI 测试使用 Playwright，针对 `packages/grokbot-control/dist/dashboard/` 打包结果（先 `npm run build`），不走 Vite 开发服务器，也不打 live 上游 RPC。若未安装浏览器，相关用例会跳过。CI 与本地可执行：`npx playwright install --with-deps chromium`。
 
 ## 测试分层
 

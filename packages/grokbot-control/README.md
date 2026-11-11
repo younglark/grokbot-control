@@ -19,7 +19,7 @@ App 里能做的 Bot 生命周期、发消息、侧边栏、进度与中断，�
 - **进度**：status、原生 todos / tasks / subagents、interrupt
 - **鉴权**：独立 Cursor 浏览器登录（默认 `cli`）；可选 `bot` 登录模式使用与官方 App 相同的 URL 形态；凭据存 `~/.gbc`（0600）；不读取 App 的 `sand-secrets.json`
 - **文件同步**：`sync pull|status|render|attachments`（无 SQLite；细节见 [docs/control-plane/sync-format.md](https://github.com/younglark/grokbot-control/blob/main/docs/control-plane/sync-format.md)）
-- **双入口**：同一 shared SDK → CLI（`gbc`）与 MCP（`gbc-mcp`）
+- **本地监视器**：`gbc dashboard` 在本机回环打开只读近实时监视页（轮询 + SSE）。这是本地 CLI 命令，不是官方 `DashboardService`，也不模仿官方 App UI
 - **写安全**：远端写需 `--allow-writes`；危险操作需 `--confirm=<id>`；`--dry-run` 纯本地计划。MCP 默认只注册只读工具与 auth，写工具需 `GBT_ALLOW_WRITES=1` 或 `--allow-writes`
 - **Agent 输出**：CLI 成功 stdout 在终端和管道下都是同一套 ResultEnvelope；`--plain` 只输出 data。未知 flag 以退出码 2 拒绝。列表默认 `--limit=50`，截断时带 `truncated` / `next` / `hint`
 
@@ -86,6 +86,9 @@ gbc --json auth login --timeout 300
 gbc --json auth whoami          # 离线本地状态，不打印 token
 gbc --json bot list --limit 20  # 只读
 gbc --json computer state       # 只读
+gbc dashboard                   # 本地只读监视器（回环 URL；不是官方 DashboardService）
+#   gbc dashboard --mock --no-open
+#   npm run dev:gbc -- dashboard --mock
 gbc --json --allow-writes computer reset --confirm=RESET_COMPUTER --wait --timeout 600
 gbc --json sidebar list
 gbc --json auth logout          # 只删本工具本地凭据，不吊销服务端会话
@@ -188,6 +191,7 @@ GBT_MCP_READONLY=1 npx -y --package=github:younglark/grokbot-control#npm-v0.3.0 
 
 ```text
 gbc [--json] [--mock] [--allow-writes] [--dry-run] [--base-url URL] [--auth-kind cursor|xai] [--login-mode cli|bot] <noun> <verb> [flags]
+gbc dashboard [--port 8787] [--host 127.0.0.1] [--no-open]
 ```
 
 | 名词 | 动词（摘要） |
@@ -198,6 +202,7 @@ gbc [--json] [--mock] [--allow-writes] [--dry-run] [--base-url URL] [--auth-kind
 | `message` | `send` / `status` / `history` |
 | `session` | `list` |
 | `sidebar` | `list` / `create` / `rename` / `delete` / `move` |
+| `dashboard` | （可省略 `start`）本地只读监视器；`--port` / `--host` / `--no-open`。不是官方 DashboardService |
 | `sync` | `pull` / `status` / `render` / `attachments` |
 
 危险写操作（`bot delete`、`sidebar delete`、`interrupt` 等）需要 `--confirm=<resource-id>` 精确匹配。`computer reset` 使用固定 token `--confirm=RESET_COMPUTER`，会重建共享电脑且启动后不可取消；`--hard` 走 `ForceRecreateSandBox`。远端写需要 `--allow-writes` 或 `GBT_ALLOW_WRITES=1`；`sync` 的本地归档写由命令本身授权，不要求远端 `--allow-writes`。
@@ -250,12 +255,19 @@ gbc sync attachments --dir /absolute/private/root \
 ## Development
 
 ```bash
-npm install                    # 开发期；CI 用 npm ci
+npm install                    # 开发期；CI 用 npm ci（只在仓库根）
 npm run dev -- --mock --json computer state
-npm run build
+npm run dev -- dashboard --mock
+npm run build                  # 同时编译 CLI 与 dist/dashboard/ 静态页
 npm test
 npm run typecheck
 npm run test:protocol-tools   # 可选：协议工具 Python 单测
+```
+
+UI 端到端测试使用 Playwright，针对打包后的 `dist/dashboard/`，不走 Vite 开发服务器。若本机没有浏览器，相关用例会跳过。安装：
+
+```bash
+npx playwright install --with-deps chromium
 ```
 
 在仓库根目录等价的快捷命令：
@@ -298,3 +310,7 @@ npm run mcp                   # 或：GBT_MOCK=1 node packages/grokbot-control/d
 
 同仓库的私有子包 [`packages/local-exec-daemon`](https://github.com/younglark/grokbot-control/tree/main/packages/local-exec-daemon)，目标是与 App 0.79.3 原版 local-exec-daemon 行为一致。它不随本包发布，与 SDK、`gbc`、`gbc-mcp` 分开构建；目前只做过离线合成环境的验证，不是完整 drop-in。说明见 [docs/local-exec/](https://github.com/younglark/grokbot-control/blob/main/docs/local-exec/README.md)。
 
+
+### 本地监视器 UI
+
+`web/components.json` 配置 shadcn/ui（Tailwind v4 / new-york）；实际源码取自官方 registry，来源与 MIT 许可见 `web/REGISTRY.md` 和 `web/SHADCN-LICENSE.txt`。宽屏侧栏与详情分栏，中等窗口使用 Sheet，600–899px 与手机先列表后详情；Cmd/Ctrl+K 打开标准 Command Dialog。深浅主题采用中性 zinc 与单一蓝色强调。UI 测试针对 `dist/dashboard/`，只使用合成数据。

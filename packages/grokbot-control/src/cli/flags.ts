@@ -51,6 +51,9 @@ export const COMMAND_FLAGS: Record<string, Record<string, FlagSpec>> = {
   session: {
     list: { values: ["--agent-id", "--limit", "--offset"], switches: [] },
   },
+  dashboard: {
+    start: { values: ["--port", "--host"], switches: ["--no-open"] },
+  },
   sidebar: {
     list: { values: ["--limit", "--offset"], switches: [] },
     create: { values: ["--name"], switches: [] },

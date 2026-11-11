@@ -2,6 +2,7 @@ export const HELP = `gbc — Grok Bot control CLI (programmable App-equivalent c
 
 USAGE:
   gbc [--json|--plain] [--mock] [--allow-writes] [--dry-run] [--base-url URL] [--auth-kind cursor|xai] [--login-mode cli|bot] <noun> <verb> [flags]
+  gbc dashboard [--port 8787] [--host 127.0.0.1] [--no-open]
 
 EXAMPLES:
   gbc --mock --json bot create --name demo --description "test"
@@ -29,6 +30,19 @@ EXAMPLES:
   gbc --json auth cancel
   gbc --json auth refresh [--force]
   gbc --json auth logout
+
+DASHBOARD (local read-only Bot monitor; not the official DashboardService):
+  gbc dashboard
+  gbc dashboard start [--port 8787] [--host 127.0.0.1] [--no-open]
+  Prints a loopback URL (http://127.0.0.1:<port>/s/<random>/) and opens a browser.
+  --json: one ResultEnvelope with data.url / data.bind / data.opened, then stays up (no stdout heartbeat).
+  --plain: print only the URL. --no-open prints without opening a browser.
+  Default bind is 127.0.0.1; v1 refuses a non-loopback --host. --port 0 is allowed;
+  if the requested port is taken, another is chosen and the actual URL is printed.
+  Unauthenticated: the server still starts; the page asks you to run \`gbc auth login\` in the
+  terminal and refresh. The page never collects credentials. Ctrl+C / SIGTERM exit 0;
+  remote Bots are not interrupted. Near-realtime is local poll + SSE, not a Watch stream.
+  No MCP dashboard tools in v1. Official DashboardService write RPCs are never exposed.
 
 SYNC (file-first snapshots; no SQLite):
   gbc sync pull --agent-id <id> [--session-id <sid>] --dir /absolute/private/root \\

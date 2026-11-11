@@ -5,6 +5,7 @@ import { ControlPlane } from "../ops/plane.js";
 import { createMockTransport } from "../testing/mock-transport.js";
 import type { MockState } from "../testing/mock-transport.js";
 import { loadMockState, saveMockState } from "../testing/mock-persist.js";
+import { loggedOutMockProvider } from "../testing/mock-auth.js";
 
 export type CliGlobal = {
   json: boolean;
@@ -114,15 +115,18 @@ let sharedMockState: MockState | undefined;
 export function buildPlane(globals: CliGlobal): ControlPlane {
   if (globals.mock) {
     sharedMockState ??= loadMockState();
+    const loggedOut = process.env.GBT_MOCK_LOGGED_OUT === "1";
     return new ControlPlane({
       baseUrl: "mock://gbc",
       transport: createMockTransport(sharedMockState),
       simulated: true,
-      auth: staticTokenProvider({
-        kind: globals.authKind,
-        backend: globals.baseUrl,
-        accessToken: "mock-token",
-      }),
+      auth: loggedOut
+        ? loggedOutMockProvider({ kind: globals.authKind, backend: globals.baseUrl })
+        : staticTokenProvider({
+            kind: globals.authKind,
+            backend: globals.baseUrl,
+            accessToken: "mock-token",
+          }),
     });
   }
   const auth = createAuthProvider({

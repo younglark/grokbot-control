@@ -36,7 +36,7 @@ const connect = binary('@connectrpc/protoc-gen-connect-es','1.6.1','protoc-gen-c
 installed('@bufbuild/protobuf','1.10.1');
 installed('@connectrpc/connect','1.6.1');
 installed('@connectrpc/connect-node','1.6.1');
-const names = ['agent.v1.proto','aiserver.v1.proto','aiserver.v1_2.proto','anyrun.v1.proto','internapi.v1.proto','svc_aiserver.v1.GrokBotService.proto'];
+const names = ['agent.v1.proto','aiserver.v1.proto','aiserver.v1_2.proto','anyrun.v1.proto','internapi.v1.proto','svc_aiserver.v1.GrokBotService.proto','svc_aiserver.v1.DashboardService.proto'];
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(),'gbc-protocol-codegen-'));
 try {
   const input = path.join(tmp,'input'); fs.mkdirSync(input);

@@ -1,0 +1,73 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@custom-variant dark (&:is(.dark *));
+@theme inline {
+  --color-status-running: var(--status-running);
+  --color-status-waiting: var(--status-waiting);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--primary);
+  --color-sidebar-primary-foreground: var(--primary-foreground);
+  --color-sidebar-accent: var(--accent);
+  --color-sidebar-accent-foreground: var(--foreground);
+  --color-sidebar-border: var(--border);
+  --color-sidebar-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+:root {
+ --status-running: oklch(.508 .118 165.612);
+ --status-waiting: oklch(.555 .163 48.998);
+ --radius: .75rem;
+ --background: oklch(.98 0 0); --foreground: oklch(.21 .006 285.885);
+ --card: oklch(1 0 0); --card-foreground: var(--foreground);
+ --popover: var(--card); --popover-foreground: var(--foreground);
+ --primary: oklch(.546 .215 262.881); --primary-foreground: oklch(.985 0 0);
+ --secondary: oklch(.967 .001 286.375); --secondary-foreground: var(--foreground);
+ --muted: var(--secondary); --muted-foreground: oklch(.552 .016 285.938);
+ --accent: oklch(.95 .014 260); --accent-foreground: var(--foreground);
+ --destructive: oklch(.577 .245 27.325);
+ --border: oklch(.922 .004 286.32); --input: var(--border); --ring: var(--primary);
+ --sidebar: oklch(.965 .002 286);
+}
+.dark {
+ --status-running: oklch(.765 .177 163.223);
+ --status-waiting: oklch(.828 .189 84.429);
+ --background: oklch(.17 .005 285.823); --foreground: oklch(.985 0 0);
+ --card: oklch(.21 .006 285.885); --card-foreground: var(--foreground);
+ --popover: var(--card); --popover-foreground: var(--foreground);
+ --primary: oklch(.707 .165 254.624); --primary-foreground: oklch(.21 .034 264);
+ --secondary: oklch(.274 .006 286.033); --secondary-foreground: var(--foreground);
+ --muted: var(--secondary); --muted-foreground: oklch(.705 .015 286.067);
+ --accent: oklch(.28 .018 260); --accent-foreground: var(--foreground);
+ --destructive: oklch(.704 .191 22.216);
+ --border: oklch(1 0 0 / 10%); --input: oklch(1 0 0 / 15%); --ring: var(--primary);
+ --sidebar: oklch(.19 .005 285);
+}
+@layer base {
+ * { @apply border-border outline-ring/50; }
+ body { @apply bg-background text-foreground antialiased; margin:0; font-family:ui-sans-serif,system-ui,-apple-system,"PingFang SC",sans-serif; }
+ button, [role=button] { cursor:pointer; }
+}
+/* Phone tap targets and overflow safety apply to actual interactive controls. */
+@media(max-width:599px) { button,input { min-height:44px; } }

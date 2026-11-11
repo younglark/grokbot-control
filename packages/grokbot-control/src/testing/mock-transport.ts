@@ -6,6 +6,7 @@
 import { createRouterTransport } from "@connectrpc/connect";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { GrokBotService } from "#proto-gen/GrokBotService";
+import { DashboardService } from "#proto-gen/DashboardService";
 import type { SidebarSection } from "../dto/types.js";
 
 export type MockSandboxState = {
@@ -18,8 +19,27 @@ export type MockSandboxState = {
   migrationPhases?: Array<{ phase: number; detail?: string }>;
 };
 
+export type MockUsageFixture =
+  | "normal"
+  | "near_exhausted"
+  | "exhausted"
+  | "unlimited"
+  | "enterprise_shared"
+  | "failure";
+
+export type MockCallCounts = {
+  listGrokBotAgents: number;
+  listGrokBotAgentStatuses: number;
+  getSandBoxRunState: number;
+  getGrokBotUserRuntimeSettings: number;
+  getSandUsageStatus: number;
+};
+
 export type MockState = {
   bots: Array<Record<string, unknown>>;
+  /** Official GetSandUsageStatus fixture for the local `gbc dashboard` monitor. */
+  usageFixture?: MockUsageFixture;
+  callCounts?: MockCallCounts;
   sections: SidebarSection[];
   /** Force next sidebar update to conflict. */
   forceSidebarConflict?: boolean;
@@ -60,7 +80,96 @@ export function createEmptyMockState(): MockState {
     tasks: [],
     subagents: [],
     transcript: [],
+    usageFixture: "normal",
+    callCounts: emptyCallCounts(),
   };
+}
+
+export function emptyCallCounts(): MockCallCounts {
+  return {
+    listGrokBotAgents: 0,
+    listGrokBotAgentStatuses: 0,
+    getSandBoxRunState: 0,
+    getGrokBotUserRuntimeSettings: 0,
+    getSandUsageStatus: 0,
+  };
+}
+
+function counts(state: MockState): MockCallCounts {
+  return (state.callCounts ??= emptyCallCounts());
+}
+
+function ts(offsetSec = 0): { seconds: bigint; nanos: number } {
+  return { seconds: BigInt(Math.floor(Date.now() / 1000) + offsetSec), nanos: 0 };
+}
+
+/** Synthetic GetSandUsageStatus responses. Numbers are fixtures, not live data. */
+export function usageFixtureResponse(name: MockUsageFixture): Record<string, unknown> {
+  const base = {
+    currentPeriodStart: ts(-20 * 24 * 3600),
+    nextResetTimestampUtc: ts(10 * 24 * 3600),
+    availableBankedResetCount: 0n,
+    usesPooledEnterpriseAllowance: false,
+    sandTrialCancelable: false,
+    isTeamSeat: false,
+    isUnified: false,
+    billingBrand: 1,
+    accountMergePausingBots: false,
+  };
+  switch (name) {
+    case "near_exhausted":
+      return {
+        ...base,
+        usagePercent: 92,
+        includedLimitZero: false,
+        hasAvailableUsage: true,
+        hasNonZeroIncludedLimit: true,
+        cursorPlanName: "Pro",
+        grokPlanLabel: "SuperGrok",
+        availableBankedResetCount: 1n,
+      };
+    case "exhausted":
+      return {
+        ...base,
+        usagePercent: 100,
+        includedLimitZero: false,
+        hasAvailableUsage: false,
+        hasNonZeroIncludedLimit: true,
+        cursorPlanName: "Pro",
+        grokPlanLabel: "SuperGrok",
+      };
+    case "unlimited":
+      return {
+        ...base,
+        includedLimitZero: true,
+        hasAvailableUsage: true,
+        hasNonZeroIncludedLimit: false,
+        cursorPlanName: "Ultra",
+        // usagePercent omitted — do not invent a number when there is no included limit
+      };
+    case "enterprise_shared":
+      return {
+        ...base,
+        usagePercent: 41,
+        includedLimitZero: false,
+        hasAvailableUsage: true,
+        hasNonZeroIncludedLimit: true,
+        usesPooledEnterpriseAllowance: true,
+        isTeamSeat: true,
+        cursorPlanName: "Enterprise",
+      };
+    case "normal":
+    default:
+      return {
+        ...base,
+        usagePercent: 37,
+        includedLimitZero: false,
+        hasAvailableUsage: true,
+        hasNonZeroIncludedLimit: true,
+        cursorPlanName: "Pro",
+        grokPlanLabel: "SuperGrok",
+      };
+  }
 }
 
 export function createMockTransport(state: MockState) {
@@ -84,6 +193,7 @@ export function createMockTransport(state: MockState) {
     };
     service(GrokBotService, {
       async getSandBoxRunState() {
+        counts(state).getSandBoxRunState += 1;
         const s = sandbox();
         return {
           state: s.state,
@@ -114,6 +224,7 @@ export function createMockTransport(state: MockState) {
         }
       },
       async listGrokBotAgents() {
+        counts(state).listGrokBotAgents += 1;
         return { agents: state.bots, truncated: false, slackConnections: [], teamsConnections: [] };
       },
       async createGrokBotTemporalAgent(req) {
@@ -207,6 +318,7 @@ export function createMockTransport(state: MockState) {
         };
       },
       async listGrokBotAgentStatuses(req) {
+        counts(state).listGrokBotAgentStatuses += 1;
         const ids = new Set(req.agentIds);
         return {
           statuses: state.statuses.filter((s) => ids.has(String(s.agentId))),
@@ -225,6 +337,7 @@ export function createMockTransport(state: MockState) {
         return { hadActiveRun: true };
       },
       async getGrokBotUserRuntimeSettings() {
+        counts(state).getGrokBotUserRuntimeSettings += 1;
         return {
           settings: {
             sidebarSections: {
@@ -286,6 +399,17 @@ export function createMockTransport(state: MockState) {
             xToolAccess: 0,
           },
         };
+      },
+    });
+    // Official DashboardService read fixture only. No write RPCs are implemented.
+    service(DashboardService, {
+      async getSandUsageStatus() {
+        counts(state).getSandUsageStatus += 1;
+        const fixture = state.usageFixture ?? "normal";
+        if (fixture === "failure") {
+          throw new ConnectError("simulated usage failure", Code.Unavailable);
+        }
+        return usageFixtureResponse(fixture);
       },
     });
   });

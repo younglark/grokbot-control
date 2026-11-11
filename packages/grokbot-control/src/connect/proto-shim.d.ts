@@ -13,3 +13,10 @@ declare module "#proto-gen/agent" {
   const _exports: Record<string, unknown>;
   export = _exports;
 }
+
+declare module "#proto-gen/DashboardService" {
+  // Official aiserver.v1.DashboardService Connect stub.
+  // Distinct from the local CLI command `gbc dashboard`.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  export const DashboardService: any;
+}
