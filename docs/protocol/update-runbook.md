@@ -2,18 +2,18 @@
 
 目标：在不运行任何官方代码的前提下，把新版本 schema 冻结成**新目录**，重新生成两个消费方，再核对 daemon 行为证据是否还成立。
 
-## 0. 当前状态（0.79.3）
+## 0. 当前状态（0.79.4，2026-11-11）
 
 | 项 | 位置 |
 |---|---|
-| 不可变 App 归档（proto.cjs 提取） | `packages/protocol/baselines/schema-0.79.3/` + `schema-0.79.3.sha256.json` |
-| **生成器实际输入** | `packages/protocol/baselines/schema-0.79.3-daemon-exec/` + `.sha256.json`：父归档 + 从 daemon bundle 紧凑描述符还原的 Exec* 闭包（增量，不改编号） |
+| 不可变 App 归档（proto.cjs 提取） | `packages/protocol/baselines/schema-0.79.4/` + `schema-0.79.4.sha256.json`（`schema-0.79.3/` 保留为历史冻结） |
+| **生成器实际输入** | `packages/protocol/baselines/schema-0.79.4-daemon-exec/` + `.sha256.json`：父归档 + 从 daemon bundle 紧凑描述符还原的 Exec* 闭包（增量，不改编号；0.79.4 的闭包与 0.79.3 逐字相同，按 `SOURCE.json` 的方法重放） |
 | 生成器 | `packages/protocol/scripts/generate.cjs`（第 9 行选输入目录；先校验 sha256 清单，不符即报错） |
 | 工具链 | Buf 1.50.0、protoc-gen-es 1.10.1、protoc-gen-connect-es 1.6.1（运行时 @bufbuild/protobuf 1.10.1、@connectrpc/connect 1.6.1，与 App 一致） |
 | 输出 | 控制面 ESM JS `packages/grokbot-control/vendor/proto-gen/`；daemon TS→CJS `packages/local-exec-daemon/src/generated/`；两边 `SOURCE.json` 相同 |
-| daemon 证据源 | `dist/local-exec-daemon/main.cjs` sha256 `5c1424ed…36be` → 格式化副本 `daemon.formatted.cjs`（187 625 行，sha256 `ad69a772…684c`），所有文档中的 **D:行号** 都指这个文件 |
+| daemon 证据源 | 0.79.3 `dist/local-exec-daemon/main.cjs` sha256 `5c1424ed…36be` → 格式化副本 `daemon.formatted.cjs`（187 625 行，sha256 `ad69a772…684c`），所有文档中的 **D:行号** 都指这个文件。0.79.4 的 main.cjs `c2b2c0ed…6420` 格式化后（`1ca01f7d…7678`）行数相同，只有 4 行不同，D: 行号对两版都成立 |
 
-哈希全值见 [baseline-manifest.md](baseline-manifest.md)。
+哈希全值见 [baseline-manifest.md](baseline-manifest.md)。0.79.3 → 0.79.4 的比对结论见 [app-0.79.4-delta.md](app-0.79.4-delta.md)。
 
 ## 1. 获取与校验（需要授权）
 
@@ -49,7 +49,8 @@ daemon 的 oneof/cancel 测试和独立 golden 测试必须全部通过。
 
 ## 5. 重新锚定 daemon 证据（D: 行号）
 
-1. 校验新 `dist/local-exec-daemon/main.cjs` 的 sha256。如果和 `5c1424ed…36be` 相同，daemon 行为没变，D: 行号继续有效，到此结束。
+1. 校验新 `dist/local-exec-daemon/main.cjs` 的 sha256。如果和当前记录（0.79.4：`c2b2c0ed…6420`）相同，daemon 行为没变，D: 行号继续有效，到此结束。
+   sha 不同时先逐行 diff 新旧格式化副本：0.79.4 就是「只有 Sentry id + 内置版本」的情形，行号全部有效，只需移植那一处差异。
 2. 如果不同：
    - 在仓库外生成 `npx prettier@3 --parser babel < main.cjs > daemon.formatted.cjs`，只格式化，不执行，并记录 sha256 和行数；
    - 压缩名每次构建都会变，所以用字符串锚点（错误文案、RPC 名、常量）重新定位 [local-exec/evidence/](../local-exec/evidence/) 中每条 D: 引用；

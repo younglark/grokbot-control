@@ -1,3 +1,4 @@
+> Current schema is App **0.79.4** (`baselines/schema-0.79.4/`, see `docs/protocol/baseline-manifest.md`); this file stays the 0.79.3 record.
 > Historical pre-workspace restore record. Paths/commands below describe that stage; current canonical input and commands are in [README.md](README.md). The immutable archive moved unchanged; no duplicate root proto directory remains.
 
 # Restored Grok Bot protocol (`.proto`)

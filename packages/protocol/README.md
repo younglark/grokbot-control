@@ -1,6 +1,6 @@
 # Protocol workspace (private build tooling, not a runtime package)
 
-Immutable App proto.cjs archive remains [baselines/schema-0.79.3](baselines/schema-0.79.3/) (hashes in `baselines/schema-0.79.3.sha256.json`). **Current generator input:** [baselines/schema-0.79.3-daemon-exec](baselines/schema-0.79.3-daemon-exec/) — additive ExecServerMessage/ExecClientMessage (+closure) from daemon compact descriptors; parent `schema-0.79.3` untouched. Hashes: `baselines/schema-0.79.3-daemon-exec.sha256.json`. **Never overwrite an existing frozen version**: upgrades create a new version directory/hash manifest and explicit generator target change.
+Immutable App proto.cjs archive: [baselines/schema-0.79.4](baselines/schema-0.79.4/) (hashes in `baselines/schema-0.79.4.sha256.json`). **Current generator input:** [baselines/schema-0.79.4-daemon-exec](baselines/schema-0.79.4-daemon-exec/) — additive ExecServerMessage/ExecClientMessage (+closure) from daemon compact descriptors; parent `schema-0.79.4` untouched. Hashes: `baselines/schema-0.79.4-daemon-exec.sha256.json`. The 0.79.3 pair (`schema-0.79.3`, `schema-0.79.3-daemon-exec`) stays frozen as history. **Never overwrite an existing frozen version**: upgrades create a new version directory/hash manifest and explicit generator target change.
 
 Provenance: [NOTICE.md](NOTICE.md), [original restore record](RESTORE.md), [method/upgrade evidence](../../docs/protocol/README.md). The restore record is historical, not a current command recipe.
 
@@ -22,4 +22,4 @@ Both SOURCE.json files are identical: same canonical input path, input SHA256 an
 
 Generated **artifacts may be duplicated** per consumer/module format. Hand-maintained schema/tooling is not duplicated. Neither public package may have a `workspace:`/`file:` or private protocol runtime dependency. This is essential for independent npm installation.
 
-Inner ExecServerMessage/ExecClientMessage (+closure) restored in `schema-0.79.3-daemon-exec` (daemon `$()`/`ee()` evidence; not hand-copied field numbers). Parent `schema-0.79.3` unchanged. Existing schema-license and compatibility limits remain; not a drop-in claim.
+Inner ExecServerMessage/ExecClientMessage (+closure) restored in `schema-0.79.3-daemon-exec` (daemon `$()`/`ee()` evidence; not hand-copied field numbers) and carried unchanged into `schema-0.79.4-daemon-exec` (0.79.4 daemon descriptors are byte-identical; see its `SOURCE.json`). Parent archives unchanged. Existing schema-license and compatibility limits remain; not a drop-in claim.

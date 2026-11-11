@@ -51,7 +51,7 @@ python3 tools/protocol/used_surface.py --src packages/grokbot-control/src --old 
 ```
 *Executed:* 0.78.4 → 0.79.2: 0 breaking, 14 additive field lines.
 
-## 0.79.3 run (2026-11-07) — current vendor
+## 0.79.3 run (2026-11-07)
 
 - Feed opened without login → 0.79.3 / `4739412…`; deb downloaded to a dir outside the repo, hashed, `dpkg-deb -x` (no install, no execution).
 - `asar_extract.py` → proto.cjs / main-app.cjs / main-core.cjs (hashes in baseline-manifest.md).
@@ -62,3 +62,14 @@ python3 tools/protocol/used_surface.py --src packages/grokbot-control/src --old 
 - Upstream `compare.mjs` / `cross-wire.mjs` **not run** (they `require()` the App's proto.cjs).
 - `fingerprint.py` on main-app.cjs: same auth anchors as 0.79.2; only minified identifiers changed.
 - Current restored `.proto` live only at **`packages/protocol/baselines/schema-0.79.3/`** (immutable canonical archive). Historical extraction commands above ran in external temp directories; current generation uses root `npm run generate`.
+
+## 0.79.4 run (2026-11-11) — current vendor
+
+- Feed opened without login (10:24 UTC+8) → 0.79.4 / `7b5e3d8…`; deb downloaded to `/workspace/grokbot-linux-0.79.4/` (outside the repo), hashed, `dpkg-deb -x` (no install, no execution). Hashes in baseline-manifest.md.
+- `asar_extract.py` → every non-renderer, non-locale member (164 files) for both 0.79.3 and 0.79.4; sha256 compared file by file (8 differ, `messages-worker.cjs` identical).
+- `extract_proto.py` @ `49fd8ce` (text parse): 0 unresolved / 0 relocated; `diff_snapshot.py` vs 0.79.3: +2 optional fields, nothing else.
+- Exec closure: re-applied the 0.79.3 parent → daemon-exec hunks; checked all 129 added types / 13 compacts against the 0.79.4 daemon text (see `schema-0.79.4-daemon-exec/SOURCE.json`).
+- `npm run generate` / `generate:check`; `verify_generated.mjs`: 0 errors on the 0.79.4 snapshot.
+- `fingerprint.py` on main-app/main-core: same anchors as 0.79.3 after normalising offsets and minified names.
+- Prettier 3.9.10 copies of both versions' bundles (outside the repo) diffed with minified names normalised. Results: [app-0.79.4-delta.md](app-0.79.4-delta.md).
+- Upstream `restore.sh` / `compare.mjs` / `cross-wire.mjs` **not run**.

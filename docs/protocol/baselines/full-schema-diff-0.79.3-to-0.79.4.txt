@@ -1,0 +1,21 @@
+====================================================================
+messages  2923 -> 2923   (+0 -0 ~2)
+enums     387 -> 387
+services  7 -> 7
+====================================================================
+
+--- new messages ---
+
+--- removed messages ---
+
+--- changed messages ---
+  ~ aiserver.v1.CompleteMcpOAuthRequest
+      +3:oauth_error:string?
+  ~ aiserver.v1.CompleteMcpOAuthResponse
+      +6:continue_authorization_url:string?
+
+--- enum changes ---
+  (0 enums changed, +0 new, -0 removed)
+
+--- service / RPC changes ---
+  methods 662 -> 662

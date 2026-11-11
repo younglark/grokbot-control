@@ -29,9 +29,9 @@ packages/headless-node              仅设计：未来宿主 = 控制 SDK + 以�
 官方 App app.asar
   └─ dist/electron-main/proto.cjs（紧凑描述符，只当文本读）
        └─ extract_proto.py（上游 grokbot-proto @ 49fd8ce）
-            └─ packages/protocol/baselines/schema-0.79.3/              冻结，不可改
+            └─ packages/protocol/baselines/schema-0.79.4/              冻结，不可改（0.79.3 目录保留为历史）
                  + daemon bundle 中的 Exec* 描述符（增量合并）
-                 └─ packages/protocol/baselines/schema-0.79.3-daemon-exec/  当前生成输入，冻结
+                 └─ packages/protocol/baselines/schema-0.79.4-daemon-exec/  当前生成输入，冻结
                       └─ npm run generate
                            Buf 1.50.0 + protoc-gen-es 1.10.1 + protoc-gen-connect-es 1.6.1
                            运行时 @bufbuild/protobuf 1.10.1、@connectrpc/connect(-node) 1.6.1（与 App 相同）

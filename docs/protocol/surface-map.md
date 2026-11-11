@@ -1,6 +1,6 @@
 # Used protocol surface → SDK / CLI / MCP
 
-Service `aiserver.v1.GrokBotService`. Field-level detail: [baselines/used-surface-0.79.3.json](baselines/used-surface-0.79.3.json) (vendor = 0.79.3).
+Service `aiserver.v1.GrokBotService`. Field-level detail: [baselines/used-surface-0.79.4.json](baselines/used-surface-0.79.4.json) (vendor = 0.79.4; identical to the 0.79.3 subset, see [used-surface-diff-0.79.3-to-0.79.4.md](baselines/used-surface-diff-0.79.3-to-0.79.4.md)).
 The RPC list is derived from code (`client.<rpc>(` in `src/`) by `tools/protocol/used_surface.py`.
 
 | RPC | SDK (`src/ops`) | CLI | MCP tool | Write? | Level |
