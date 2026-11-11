@@ -374,11 +374,18 @@ export function buildTools(opts?: {
     {
       name: "auth_login_begin",
       description:
-        "Start independent Cursor browser login. Returns authorization_url for the user to open; verifier stays in a 0600 pending file.",
+        "Start independent Cursor browser login. Returns authorization_url for the user to open; verifier stays in a 0600 pending file. Optional login_mode=bot uses the App URL shape (redirectTarget=sand, supportsSelectedTeamLogin=true) without reading official App credentials or inventing a team id. Default is cli.",
       readOnly: true,
       authTool: true,
-      inputSchema: input({}),
-      handler: (p) => p.authOps.begin(),
+      inputSchema: input({
+        login_mode: z
+          .enum(["cli", "bot"])
+          .optional()
+          .describe(
+            "Login URL preset. cli (default) uses redirectTarget=cli. bot uses redirectTarget=sand and supportsSelectedTeamLogin=true. Does not read App secrets or set team headers.",
+          ),
+      }),
+      handler: (p, a) => p.authOps.begin({ loginMode: a.login_mode as "cli" | "bot" | undefined }),
     },
     {
       name: "auth_login_complete",

@@ -80,16 +80,17 @@ Source: STATIC reverse engineering of Grok Bot Linux 0.79.2 (`/workspace/grokbot
 | Step | Implementation | Evidence |
 |---|---|---|
 | Challenge | verifier = base64url(32 random bytes); challenge = base64url(SHA256(verifier)); uuid v4 | A:38644-38657 |
-| Login URL | `https://cursor.com/loginDeepControl?challenge&uuid&mode=login&redirectTarget=cli` | A:38644-38657, A:38845 (library default `cli`; App uses `sand`, A:49834) |
+| Login URL | Default (`cli`): `https://cursor.com/loginDeepControl?challenge&uuid&mode=login&redirectTarget=cli`. Optional (`bot` / `--login-mode=bot` / `GBT_LOGIN_MODE=bot`): same path with `redirectTarget=sand` and `supportsSelectedTeamLogin=true`. Challenge/uuid are generated fresh each time. | A:38644-38657, A:38845 (library default `cli`); App uses `sand`, A:49834; `supportsSelectedTeamLogin` optional in Rdn |
 | Poll | `GET {backend}/auth/poll?uuid&verifier`; 404 pending; 1s×1.2^i ≤10s; ≤150 tries; 3 consecutive non-404 → stop; 403 `sign_in_policy_violation` → denied | A:38720-38816 |
 | Result | `{accessToken, refreshToken}` stored; `{xaiAccessToken,…}` → unsupported | A:38584-38622 |
 | Refresh | `POST {backend}/oauth/token` JSON `{client_id, grant_type:"refresh_token", refresh_token}`; response `{access_token, refresh_token?, shouldLogout?, error?}`; 300s early window | A:56108-56125, A:54459, C:35811 |
 | client_id | App picks a public id per backend (C:35866-35869). **Not embedded**; set `GBT_OAUTH_CLIENT_ID` explicitly | analysis §6 |
 
-CLI: `auth login-begin` → `auth complete [--timeout 1..900]` (cross-process via 0600 pending file, 15 min TTL),
-or `auth login`; `auth poll` (single), `auth cancel`, `auth refresh [--force]`, `auth whoami`/`status` (offline),
-`auth logout` (local only). MCP: `auth_whoami`, `auth_login_begin`, `auth_login_complete` (≤120 s),
+CLI: `auth login-begin [--login-mode cli|bot]` → `auth complete [--timeout 1..900]` (cross-process via 0600 pending file, 15 min TTL),
+or `auth login [--login-mode cli|bot]`; `auth poll` (single), `auth cancel`, `auth refresh [--force]`, `auth whoami`/`status` (offline),
+`auth logout` (local only). Also `--login-mode` as a global flag, or `GBT_LOGIN_MODE`. MCP: `auth_whoami`, `auth_login_begin` (optional `login_mode`), `auth_login_complete` (≤120 s),
 `auth_login_cancel`, `auth_logout` (credential writers excluded from `GBT_MCP_READONLY=1`); `auth_refresh` is **not** in READONLY.
+SDK: `createAuthProvider({ loginMode: "bot" })` or `beginLogin({ loginMode: "bot" })`. Default remains `cli`.
 Failure semantics: network/timeout/5xx/429 → retryable, creds kept, cooldown; fallback only if old token still
 valid and revision unchanged. `shouldLogout`/policy/terminal → rescue newer pair under lock else clear; never
 fallback revoked token. malformed/config → structured error, creds kept. Pre-RPC refresh failure keeps
@@ -99,10 +100,14 @@ read-only unary may refresh+retry once. Credentials carry provenance (client_id 
 ### Live status (2026-11-07, one manual run)
 - Verified live: browser login (`loginDeepControl`, `redirectTarget=cli`) → `GET /auth/poll` → Cursor token (kind `cursor`, backend api2);
   read-only RPCs `ListGrokBotAgents`, `GetGrokBotUserRuntimeSettings` (sidebar), `ListGrokBotAgentStatuses` succeeded with only `authorization: Bearer`.
-- NOT verified live: token refresh (`GBT_OAUTH_CLIENT_ID` still must be configured), all write RPCs, history/session/todos/tasks.
+- NOT verified live: token refresh (`GBT_OAUTH_CLIENT_ID` still must be configured), all write RPCs, history/session/todos/tasks,
+  bot-mode login (`redirectTarget=sand` + `supportsSelectedTeamLogin=true`), selected-team callback / binding, refresh after bot-mode login.
 
 ### Auth items still unverified live
 - Whether `supportsSelectedTeamLogin` / team selection (`x-cursor-team-id`) is needed for Grok Bot RPCs.
+  Optional bot mode adds the URL parameter from static evidence; it does **not** infer that a team was bound,
+  guess a team id, or send `x-cursor-team-id`.
+- Whether `redirectTarget=sand` completes through this tool's `/auth/poll` loop, or instead deep-links into the official App.
 - Whether write RPCs need App headers (`x-cursor-client-type`, version, `x-ghost-mode`, …); reads worked with Bearer only.
 - Which public client_id is appropriate for a third-party tool; refresh is off until configured.
 - Login/refresh device-policy header `x-cursor-mdm-signin-policy` is not sent (not forged).

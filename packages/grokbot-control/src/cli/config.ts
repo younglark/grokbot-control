@@ -1,6 +1,6 @@
 import { GbcError } from "../errors.js";
-import { createAuthProvider, staticTokenProvider } from "../auth/provider.js";
-import type { AuthKind } from "../auth/types.js";
+import { createAuthProvider, parseLoginMode, staticTokenProvider } from "../auth/provider.js";
+import type { AuthKind, LoginMode } from "../auth/types.js";
 import { ControlPlane } from "../ops/plane.js";
 import { createMockTransport } from "../testing/mock-transport.js";
 import type { MockState } from "../testing/mock-transport.js";
@@ -14,6 +14,8 @@ export type CliGlobal = {
   dryRun: boolean;
   baseUrl: string;
   authKind: AuthKind;
+  /** Optional login URL preset from --login-mode or GBT_LOGIN_MODE; undefined means provider/env default (cli). */
+  loginMode?: LoginMode;
   mock: boolean;
   trustBackend: boolean;
 };
@@ -26,6 +28,7 @@ export function parseGlobals(argv: string[]): { globals: CliGlobal; rest: string
     dryRun: false,
     baseUrl: process.env.GBT_BASE_URL || "https://api2.cursor.sh",
     authKind: (process.env.GBT_AUTH_KIND as AuthKind) || "cursor",
+    loginMode: parseLoginMode(process.env.GBT_LOGIN_MODE),
     mock: process.env.GBT_MOCK === "1",
     trustBackend: process.env.GBT_TRUST_BACKEND === "1",
   };
@@ -42,6 +45,8 @@ export function parseGlobals(argv: string[]): { globals: CliGlobal; rest: string
     else if (a.startsWith("--base-url=")) globals.baseUrl = a.slice("--base-url=".length);
     else if (a === "--auth-kind") globals.authKind = (argv[++i] as AuthKind) || "cursor";
     else if (a.startsWith("--auth-kind=")) globals.authKind = a.slice("--auth-kind=".length) as AuthKind;
+    else if (a === "--login-mode") globals.loginMode = requiredLoginMode(argv[++i], "--login-mode");
+    else if (a.startsWith("--login-mode=")) globals.loginMode = requiredLoginMode(a.slice("--login-mode=".length), "--login-mode");
     else rest.push(a);
   }
   if (globals.json && globals.plain) {
@@ -51,6 +56,23 @@ export function parseGlobals(argv: string[]): { globals: CliGlobal; rest: string
     });
   }
   return { globals, rest };
+}
+
+function requiredLoginMode(raw: string | undefined, flagName: string): LoginMode {
+  if (raw === undefined || raw.startsWith("--") || !raw.trim()) {
+    throw new GbcError("usage", `${flagName} requires a value`, {
+      exitCode: 2,
+      hint: "pass --login-mode=cli or --login-mode=bot",
+    });
+  }
+  const parsed = parseLoginMode(raw);
+  if (!parsed) {
+    throw new GbcError("usage", `${flagName} requires a value`, {
+      exitCode: 2,
+      hint: "pass --login-mode=cli or --login-mode=bot",
+    });
+  }
+  return parsed;
 }
 
 /**
@@ -97,6 +119,7 @@ export function buildPlane(globals: CliGlobal): ControlPlane {
     kind: globals.authKind,
     backend: globals.baseUrl,
     trustCustomBackend: globals.trustBackend,
+    loginMode: globals.loginMode,
   });
   return new ControlPlane({
     baseUrl: globals.baseUrl,

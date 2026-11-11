@@ -17,7 +17,7 @@ App 里能做的 Bot 生命周期、发消息、侧边栏、进度与中断，�
 - **消息与会话**：send、send status、history、sessions
 - **侧边栏**：SidebarSections CRUD、移动成员（删除分组 ≠ 删除 Bot）
 - **进度**：status、原生 todos / tasks / subagents、interrupt
-- **鉴权**：独立 Cursor 浏览器登录；凭据存 `~/.gbc`（0600）；不读取 App 的 `sand-secrets.json`
+- **鉴权**：独立 Cursor 浏览器登录（默认 `cli`）；可选 `bot` 登录模式使用与官方 App 相同的 URL 形态；凭据存 `~/.gbc`（0600）；不读取 App 的 `sand-secrets.json`
 - **文件同步**：`sync pull|status|render|attachments`（无 SQLite；细节见 [docs/control-plane/sync-format.md](https://github.com/younglark/grokbot-control/blob/main/docs/control-plane/sync-format.md)）
 - **双入口**：同一 shared SDK → CLI（`gbc`）与 MCP（`gbc-mcp`）
 - **写安全**：远端写需 `--allow-writes`；危险操作需 `--confirm=<id>`；`--dry-run` 纯本地计划。MCP 默认只注册只读工具与 auth，写工具需 `GBT_ALLOW_WRITES=1` 或 `--allow-writes`
@@ -80,6 +80,8 @@ gbc --json auth login --timeout 300
 # URL 走 stderr 的 open_browser 事件；也可分步：
 #   gbc --json auth login-begin
 #   gbc --json auth complete --timeout 300
+# 可选 Bot 风格登录（App URL：redirectTarget=sand + supportsSelectedTeamLogin=true；默认仍是 cli）：
+#   gbc --json auth login --login-mode bot --timeout 300
 
 gbc --json auth whoami          # 离线本地状态，不打印 token
 gbc --json bot list --limit 20  # 只读
@@ -115,6 +117,8 @@ stdio；**stdout 仅协议帧**，不要把 CLI 日志打到 stdout。
 }
 ```
 
+如需默认使用 Bot 风格登录 URL，再设置 `"GBT_LOGIN_MODE": "bot"`；也可在调用 `auth_login_begin` 时传入 `login_mode: "bot"`，不必改启动配置。两种方式都不会读取官方 App 凭据。
+
 需要写工具时：
 
 ```json
@@ -141,6 +145,8 @@ CLI 输出：成功结果在 TTY 和管道下都是同一套 `schema_version` �
 | `GBT_ALLOW_WRITES=1` 或启动参数 `--allow-writes` | 注册并允许远端写工具（默认不注册） |
 | `GBT_MCP_READONLY=1` | 仅 `auth_whoami` + 只读业务工具（不含 login/logout/cancel/refresh 及写工具）；优先于 `GBT_ALLOW_WRITES` |
 | `GBT_OAUTH_CLIENT_ID` | 公开 OAuth client id（刷新用；不内置） |
+| `GBT_LOGIN_MODE` | 登录 URL 预设：`cli`（默认）或 `bot`（App 形态）。也可在 CLI 用 `--login-mode`，MCP 用 `auth_login_begin.login_mode` |
+| `GBT_LOGIN_REDIRECT_TARGET` | 只覆盖 `redirectTarget`（兼容旧配置）；未设置时跟随 `GBT_LOGIN_MODE` 的默认值（cli→cli，bot→sand） |
 | `GBT_CREDENTIALS_DIR` | 凭据目录，默认 `~/.gbc` |
 | `GBT_SYNC_ROOT` | 设置后才提供 `sync_status` |
 | `GBT_SYNC_ALLOW_LOCAL_WRITES=1` | 在已开启 `GBT_ALLOW_WRITES` 时，另需才提供 `sync_pull` / `sync_render` / `sync_attachments` |
@@ -158,11 +164,13 @@ GBT_MCP_READONLY=1 npx -y --package=github:younglark/grokbot-control#npm-v0.2.1 
 
 独立 Cursor 浏览器登录（静态逆向协议，非官方公开 API）。仅支持 Cursor token；xAI identity 返回 `unsupported`。
 
+默认登录模式是 `cli`（`redirectTarget=cli`，不含 `supportsSelectedTeamLogin`；2026-11-07 曾 live 验证）。可选 `bot` 模式只改变登录 URL，使其与官方 App 一致（`redirectTarget=sand` + `supportsSelectedTeamLogin=true`）。每次都会新生成 uuid / challenge / verifier。凭据仍只写在 `~/.gbc`，不读取官方 App 的 `sand-secrets.json` 或钥匙串，不猜测 team id，也不发送 `x-cursor-team-id` 或其它官方头。bot 模式的轮询收束、选中团队如何返回/绑定、以及该模式之后的刷新都**尚未 live 验证**。
+
 | 命令 | 作用 |
 |---|---|
-| `gbc --json auth login-begin` | 输出 `authorization_url`（不含 verifier） |
+| `gbc --json auth login-begin [--login-mode cli\|bot]` | 输出 `authorization_url`（不含 verifier） |
 | `gbc --json auth complete --timeout 300` | 轮询 `/auth/poll`；成功后写入 `~/.gbc`（0600） |
-| `gbc --json auth login --timeout 300` | begin + complete；URL 经 stderr |
+| `gbc --json auth login [--login-mode cli\|bot] --timeout 300` | begin + complete；URL 经 stderr |
 | `gbc --json auth whoami` | 离线本地状态，不联网、不打印 token |
 | `gbc --json auth refresh [--force]` | 临期 / 缺非法 exp / `--force` 才刷新 |
 | `gbc --json auth logout` | 只删本工具本地凭据 |
@@ -179,7 +187,7 @@ GBT_MCP_READONLY=1 npx -y --package=github:younglark/grokbot-control#npm-v0.2.1 
 ## CLI 概览
 
 ```text
-gbc [--json] [--mock] [--allow-writes] [--dry-run] [--base-url URL] [--auth-kind cursor|xai] <noun> <verb> [flags]
+gbc [--json] [--mock] [--allow-writes] [--dry-run] [--base-url URL] [--auth-kind cursor|xai] [--login-mode cli|bot] <noun> <verb> [flags]
 ```
 
 | 名词 | 动词（摘要） |

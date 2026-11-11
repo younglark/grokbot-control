@@ -8,8 +8,19 @@ export type {
   ComputerResetWait,
 } from "./ops/computer.js";
 export { createGrokBotClient, mapConnectError } from "./connect/client.js";
-export { createAuthProvider, staticTokenProvider } from "./auth/provider.js";
+export {
+  createAuthProvider,
+  staticTokenProvider,
+  generateLoginChallenge,
+  buildLoginUrl,
+  resolveLoginParams,
+  parseLoginMode,
+  parseRedirectTarget,
+  LOGIN_MODE_PRESETS,
+} from "./auth/provider.js";
 export { FileCredentialStore, redactCredential } from "./auth/store.js";
+export type { LoginMode, AuthKind, AuthBeginResult } from "./auth/types.js";
+export { LOGIN_MODES } from "./auth/types.js";
 export { createMockTransport, createEmptyMockState } from "./testing/mock-transport.js";
 export { SCHEMA_VERSION, okResult, failResult } from "./dto/result.js";
 export type { ResultEnvelope, Outcome } from "./dto/result.js";

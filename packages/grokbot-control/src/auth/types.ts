@@ -1,5 +1,14 @@
 export type AuthKind = "cursor" | "xai";
 
+/**
+ * Login URL preset. Default `cli` keeps the library redirectTarget (A:38845; live 2026-11-07).
+ * `bot` matches the official App login URL shape: redirectTarget=sand (A:49834) and
+ * supportsSelectedTeamLogin=true (Rdn). This is a URL-shape option only — it does not
+ * read App credentials, invent a team id, or send x-cursor-team-id / App client headers.
+ */
+export const LOGIN_MODES = ["cli", "bot"] as const;
+export type LoginMode = (typeof LOGIN_MODES)[number];
+
 /** How the local credential was obtained. */
 export type LoginKind = "browser_deep_control" | "static" | "unknown";
 
@@ -47,6 +56,10 @@ export type PendingLogin = {
   uuid: string;
   verifier: string;
   redirect_target: string;
+  /** URL preset used to build authorization_url. Absent on legacy pending files. */
+  login_mode?: LoginMode;
+  /** Whether supportsSelectedTeamLogin=true was included. Absent on legacy pending files. */
+  supports_selected_team_login?: boolean;
   created_at_ms: number;
   expires_at_ms: number;
 };
@@ -56,6 +69,9 @@ export type AuthBeginResult = {
   authorization_url: string;
   uuid: string;
   expires_at_ms: number;
+  login_mode: LoginMode;
+  redirect_target: string;
+  supports_selected_team_login: boolean;
   note: string;
 };
 
@@ -110,8 +126,8 @@ export type AuthProvider = {
   kind: AuthKind;
   backend: string;
   getAccessToken(opts?: { force?: boolean }): Promise<string | undefined>;
-  /** Start independent browser login; persists pending state (0600). */
-  beginLogin(): Promise<AuthBeginResult>;
+  /** Start independent browser login; persists pending state (0600). Per-call opts override provider/env defaults. */
+  beginLogin(opts?: { loginMode?: LoginMode; redirectTarget?: string }): Promise<AuthBeginResult>;
   /** Single poll attempt against the persisted pending login. */
   pollLogin(): Promise<AuthCompleteResult>;
   /** Poll until completed, timeout, cancel or 3 consecutive non-404 failures. */

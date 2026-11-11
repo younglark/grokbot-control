@@ -1,4 +1,5 @@
-import type { AuthProvider } from "../auth/types.js";
+import type { AuthProvider, LoginMode } from "../auth/types.js";
+import { parseLoginMode, parseRedirectTarget } from "../auth/provider.js";
 import { failResult, newRequestId, okResult, type ResultEnvelope } from "../dto/result.js";
 import { GbcError } from "../errors.js";
 
@@ -42,8 +43,19 @@ export class AuthOps {
     return this.auth.whoamiLocal().then((w) => ({ ...okResult(w, { request_id }), simulated: this.flags.simulated }));
   }
 
-  begin() {
-    return this.run((a) => a.beginLogin());
+  begin(opts?: { loginMode?: string; redirectTarget?: string }) {
+    let loginMode: LoginMode | undefined;
+    let redirectTarget: string | undefined;
+    try {
+      loginMode = parseLoginMode(opts?.loginMode);
+      redirectTarget = parseRedirectTarget(opts?.redirectTarget);
+    } catch (e) {
+      const err = e instanceof GbcError ? e : new GbcError("invalid_argument", "invalid login options", { exitCode: 2 });
+      return Promise.resolve(
+        failResult(err.code, err.message, { hint: err.hint, details: err.details }),
+      );
+    }
+    return this.run((a) => a.beginLogin({ loginMode, redirectTarget }));
   }
 
   /** Single poll; pending -> ok:false code auth_pending retryable (safe: read-only poll). */

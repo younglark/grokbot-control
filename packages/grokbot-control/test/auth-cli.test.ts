@@ -77,6 +77,9 @@ describe("CLI cross-process auth (local fake backend)", () => {
     assert.equal(b.code, 0, b.err);
     const url = new URL(JSON.parse(b.out).data.authorization_url);
     assert.equal(url.pathname, "/loginDeepControl");
+    assert.equal(url.searchParams.get("redirectTarget"), "cli");
+    assert.equal(url.searchParams.get("supportsSelectedTeamLogin"), null);
+    assert.equal(JSON.parse(b.out).data.login_mode, "cli");
     const files = fs.readdirSync(dir);
     const pf = files.find((f) => f.startsWith("pending-"))!;
     assert.equal(fs.statSync(path.join(dir, pf)).mode & 0o777, 0o600);
@@ -123,6 +126,41 @@ describe("CLI cross-process auth (local fake backend)", () => {
     assert.match(t.err, /auth_pending/);
     const bad = await run(["auth", "complete", "--timeout", "abc"], env);
     assert.equal(bad.code, 2);
+  });
+
+  it("--login-mode=bot and GBT_LOGIN_MODE=bot use App URL shape; default stays cli; invalid mode exits 2; xai rejected", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gbc-cli-auth-"));
+    const env = { GBT_CREDENTIALS_DIR: dir, GBT_TRUST_BACKEND: "1", GBT_WEBSITE_URL: "http://127.0.0.1:9", GBT_BASE_URL: base };
+    const botFlag = await run(["auth", "login-begin", "--login-mode=bot"], env);
+    assert.equal(botFlag.code, 0, botFlag.err);
+    const botData = JSON.parse(botFlag.out).data;
+    const botUrl = new URL(botData.authorization_url);
+    assert.equal(botUrl.searchParams.get("redirectTarget"), "sand");
+    assert.equal(botUrl.searchParams.get("supportsSelectedTeamLogin"), "true");
+    assert.equal(botUrl.searchParams.get("mode"), "login");
+    assert.equal(botData.login_mode, "bot");
+    assert.ok(botUrl.searchParams.get("challenge"));
+    assert.ok(botUrl.searchParams.get("uuid"));
+    assert.notEqual(botUrl.searchParams.get("uuid"), "dc6b22f6-8738-4726-84bc-17e752e6d25d");
+    assert.notEqual(botUrl.searchParams.get("challenge"), "pgmrnwX4rQfa7_ezRy4RJOwR0-n7CihbVaayRzHptE8");
+
+    const botEnv = await run(["auth", "login-begin"], { ...env, GBT_LOGIN_MODE: "bot" });
+    assert.equal(botEnv.code, 0, botEnv.err);
+    assert.equal(new URL(JSON.parse(botEnv.out).data.authorization_url).searchParams.get("redirectTarget"), "sand");
+
+    const def = await run(["auth", "login-begin"], env);
+    assert.equal(def.code, 0, def.err);
+    const defUrl = new URL(JSON.parse(def.out).data.authorization_url);
+    assert.equal(defUrl.searchParams.get("redirectTarget"), "cli");
+    assert.equal(defUrl.searchParams.get("supportsSelectedTeamLogin"), null);
+
+    const bad = await run(["auth", "login-begin", "--login-mode=sand"], env);
+    assert.equal(bad.code, 2, bad.err);
+    assert.match(bad.err, /invalid login mode|invalid_argument|usage/);
+
+    const xai = await run(["--auth-kind=xai", "auth", "login-begin", "--login-mode=bot"], env);
+    assert.equal(xai.code, 9, xai.err);
+    assert.match(xai.err, /unsupported/);
   });
 
   it("--mock refuses login (no accidental simulated auth); GBT_TRUST_BACKEND=0 refuses local backend", async () => {

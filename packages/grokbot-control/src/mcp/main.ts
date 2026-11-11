@@ -6,6 +6,7 @@ import { createRequire } from "node:module";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { parseLoginMode } from "../auth/provider.js";
 import { buildPlane } from "../cli/config.js";
 import { failResult } from "../dto/result.js";
 import { buildTools, toolAnnotations } from "./tools.js";
@@ -81,6 +82,7 @@ async function main() {
     dryRun: false,
     baseUrl: process.env.GBT_BASE_URL || "https://api2.cursor.sh",
     authKind: (process.env.GBT_AUTH_KIND as "cursor" | "xai") || "cursor",
+    loginMode: parseLoginMode(process.env.GBT_LOGIN_MODE),
     mock,
     trustBackend: process.env.GBT_TRUST_BACKEND === "1",
   });

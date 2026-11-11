@@ -10,10 +10,10 @@ export const COMMAND_FLAGS: Record<string, Record<string, FlagSpec>> = {
   auth: {
     whoami: { values: [], switches: [] },
     status: { values: [], switches: [] },
-    "login-begin": { values: [], switches: [] },
+    "login-begin": { values: ["--login-mode"], switches: [] },
     poll: { values: [], switches: [] },
     complete: { values: ["--timeout"], switches: [] },
-    login: { values: ["--timeout"], switches: [] },
+    login: { values: ["--timeout", "--login-mode"], switches: [] },
     cancel: { values: [], switches: [] },
     refresh: { values: [], switches: ["--force"] },
     logout: { values: [], switches: [] },
@@ -69,6 +69,7 @@ export const GLOBAL_FLAGS = [
   "--trust-backend",
   "--base-url",
   "--auth-kind",
+  "--login-mode",
   "--help",
   "-h",
 ];

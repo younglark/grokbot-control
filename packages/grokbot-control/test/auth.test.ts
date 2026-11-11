@@ -13,6 +13,11 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import {
   createAuthProvider,
   generateLoginChallenge,
+  buildLoginUrl,
+  resolveLoginParams,
+  parseLoginMode,
+  parseRedirectTarget,
+  LOGIN_MODE_PRESETS,
   REFRESH_EARLY_MS,
   classifyExpiry,
   staticTokenProvider,
@@ -49,6 +54,7 @@ beforeEach(() => {
   delete process.env.GBT_TRUST_BACKEND;
   delete process.env.GBT_WEBSITE_URL;
   delete process.env.GBT_LOGIN_REDIRECT_TARGET;
+  delete process.env.GBT_LOGIN_MODE;
   delete process.env.GBT_AUTH_CONFIRM_MIGRATE;
 });
 
@@ -71,6 +77,10 @@ describe("login challenge + URL (evidence A:38644-38657)", () => {
     assert.deepEqual([...u.searchParams.keys()].sort(), ["challenge", "mode", "redirectTarget", "uuid"]);
     assert.equal(u.searchParams.get("mode"), "login");
     assert.equal(u.searchParams.get("redirectTarget"), "cli");
+    assert.equal(u.searchParams.get("supportsSelectedTeamLogin"), null);
+    assert.equal(begin.login_mode, "cli");
+    assert.equal(begin.redirect_target, "cli");
+    assert.equal(begin.supports_selected_team_login, false);
     assert.equal(u.searchParams.get("uuid"), begin.uuid);
     const store = new FileCredentialStore();
     const pf = store.pendingFile("cursor", API);
@@ -81,6 +91,155 @@ describe("login challenge + URL (evidence A:38644-38657)", () => {
     assert.ok(!JSON.stringify(begin).includes(p.verifier));
     const env = await new AuthOps(auth).begin();
     assert.ok(!JSON.stringify(env).includes(new FileCredentialStore().loadPending("cursor", API)!.verifier));
+  });
+});
+
+
+const SAMPLE_CHALLENGE = "pgmrnwX4rQfa7_ezRy4RJOwR0-n7CihbVaayRzHptE8";
+const SAMPLE_UUID = "dc6b22f6-8738-4726-84bc-17e752e6d25d";
+
+describe("optional bot login mode (static URL shape only; not live-verified)", () => {
+  it("resolveLoginParams defaults to cli; bot preset is sand + supportsSelectedTeamLogin", () => {
+    const cli = resolveLoginParams({ env: {} });
+    assert.deepEqual(cli, { loginMode: "cli", redirectTarget: "cli", supportsSelectedTeamLogin: false });
+    const bot = resolveLoginParams({ loginMode: "bot", env: {} });
+    assert.deepEqual(bot, { loginMode: "bot", redirectTarget: "sand", supportsSelectedTeamLogin: true });
+    assert.equal(parseLoginMode(undefined), undefined);
+    assert.equal(parseLoginMode(""), undefined);
+    assert.equal(parseRedirectTarget("sand"), "sand");
+    assert.equal(LOGIN_MODE_PRESETS.bot.redirectTarget, "sand");
+  });
+
+  it("invalid login mode and redirectTarget are rejected", () => {
+    assert.throws(() => parseLoginMode("sand"), (e: GbcError) => e.code === "invalid_argument" && e.exitCode === 2);
+    assert.throws(() => parseLoginMode("CLI"), (e: GbcError) => e.code === "invalid_argument");
+    assert.throws(() => parseRedirectTarget("cli&mode=login"), (e: GbcError) => e.code === "invalid_argument");
+    assert.throws(() => parseRedirectTarget("sand?x=1"), (e: GbcError) => e.code === "invalid_argument");
+    const bad = new AuthOps(createAuthProvider({ kind: "cursor", backend: API }));
+    return bad.begin({ loginMode: "nope" }).then((r) => {
+      assert.equal(r.ok, false);
+      assert.equal(r.code, "invalid_argument");
+    });
+  });
+
+  it("GBT_LOGIN_REDIRECT_TARGET=sand without bot mode keeps omitting the team param (compat)", async () => {
+    process.env.GBT_LOGIN_REDIRECT_TARGET = "sand";
+    const begin = await createAuthProvider({ kind: "cursor", backend: API }).beginLogin();
+    const u = new URL(begin.authorization_url);
+    assert.equal(begin.login_mode, "cli");
+    assert.equal(u.searchParams.get("redirectTarget"), "sand");
+    assert.equal(u.searchParams.get("supportsSelectedTeamLogin"), null);
+    assert.deepEqual([...u.searchParams.keys()].sort(), ["challenge", "mode", "redirectTarget", "uuid"]);
+  });
+
+  it("bot mode URL matches App shape; challenge/verifier/uuid are fresh and not the sample values", async () => {
+    const auth = createAuthProvider({ kind: "cursor", backend: API, loginMode: "bot" });
+    const first = await auth.beginLogin();
+    const u1 = new URL(first.authorization_url);
+    assert.equal(u1.origin + u1.pathname, "https://cursor.com/loginDeepControl");
+    assert.deepEqual(
+      [...u1.searchParams.keys()].sort(),
+      ["challenge", "mode", "redirectTarget", "supportsSelectedTeamLogin", "uuid"],
+    );
+    assert.equal(u1.searchParams.get("mode"), "login");
+    assert.equal(u1.searchParams.get("redirectTarget"), "sand");
+    assert.equal(u1.searchParams.get("supportsSelectedTeamLogin"), "true");
+    assert.equal(first.login_mode, "bot");
+    assert.equal(first.redirect_target, "sand");
+    assert.equal(first.supports_selected_team_login, true);
+    assert.notEqual(u1.searchParams.get("challenge"), SAMPLE_CHALLENGE);
+    assert.notEqual(u1.searchParams.get("uuid"), SAMPLE_UUID);
+    const store = new FileCredentialStore();
+    const p1 = store.loadPending("cursor", API)!;
+    assert.equal(p1.login_mode, "bot");
+    assert.equal(p1.supports_selected_team_login, true);
+    assert.equal(p1.redirect_target, "sand");
+    assert.equal(u1.searchParams.get("challenge"), crypto.createHash("sha256").update(p1.verifier).digest("base64url"));
+    assert.ok(!JSON.stringify(first).includes(p1.verifier));
+
+    const second = await auth.beginLogin();
+    const u2 = new URL(second.authorization_url);
+    const p2 = store.loadPending("cursor", API)!;
+    assert.notEqual(u1.searchParams.get("uuid"), u2.searchParams.get("uuid"));
+    assert.notEqual(u1.searchParams.get("challenge"), u2.searchParams.get("challenge"));
+    assert.notEqual(p1.verifier, p2.verifier);
+    assert.equal(u2.searchParams.get("redirectTarget"), "sand");
+    assert.equal(u2.searchParams.get("supportsSelectedTeamLogin"), "true");
+    assert.equal(
+      buildLoginUrl("https://cursor.com", {
+        challenge: "c",
+        uuid: "u",
+        redirectTarget: "sand",
+        supportsSelectedTeamLogin: true,
+      }).includes("supportsSelectedTeamLogin=true"),
+      true,
+    );
+  });
+
+  it("GBT_LOGIN_MODE=bot is the provider default; per-call cli overrides back to the library URL", async () => {
+    process.env.GBT_LOGIN_MODE = "bot";
+    const auth = createAuthProvider({ kind: "cursor", backend: API });
+    const bot = await auth.beginLogin();
+    assert.equal(bot.login_mode, "bot");
+    assert.equal(new URL(bot.authorization_url).searchParams.get("redirectTarget"), "sand");
+    const cli = await auth.beginLogin({ loginMode: "cli" });
+    const u = new URL(cli.authorization_url);
+    assert.equal(cli.login_mode, "cli");
+    assert.equal(u.searchParams.get("redirectTarget"), "cli");
+    assert.equal(u.searchParams.get("supportsSelectedTeamLogin"), null);
+  });
+
+  it("explicit redirectTarget is kept when switching to bot mode; team param still follows the mode", async () => {
+    process.env.GBT_LOGIN_REDIRECT_TARGET = "custom-target";
+    const begin = await createAuthProvider({ kind: "cursor", backend: API }).beginLogin({ loginMode: "bot" });
+    const u = new URL(begin.authorization_url);
+    assert.equal(begin.login_mode, "bot");
+    assert.equal(u.searchParams.get("redirectTarget"), "custom-target");
+    assert.equal(u.searchParams.get("supportsSelectedTeamLogin"), "true");
+  });
+
+  it("invalid GBT_LOGIN_MODE fails at provider construction", () => {
+    process.env.GBT_LOGIN_MODE = "sand";
+    assert.throws(() => createAuthProvider({ kind: "cursor", backend: API }), (e: GbcError) => e.code === "invalid_argument");
+  });
+
+  it("xAI kind remains unsupported in bot mode", async () => {
+    const r = await new AuthOps(createAuthProvider({ kind: "xai", backend: API })).begin({ loginMode: "bot" });
+    assert.equal(r.ok, false);
+    assert.equal(r.code, "unsupported");
+  });
+
+  it("MCP auth_login_begin accepts login_mode and rejects unknown values or keys; empty input stays valid", () => {
+    const t = buildTools().find((x) => x.name === "auth_login_begin")!;
+    assert.equal(t.inputSchema.safeParse({}).success, true);
+    assert.equal(t.inputSchema.safeParse({ login_mode: "bot" }).success, true);
+    assert.equal(t.inputSchema.safeParse({ login_mode: "cli" }).success, true);
+    assert.equal(t.inputSchema.safeParse({ login_mode: "sand" }).success, false);
+    assert.equal(t.inputSchema.safeParse({ login_mode: "bot", extra: 1 }).success, false);
+  });
+
+  it("bot-mode poll persist / cancel still use the existing poll path (no team header, no invented team id)", async () => {
+    const access = jwt(Math.floor(Date.now() / 1000) + 3600);
+    const f = fakeFetch((u) => {
+      assert.equal(u.origin + u.pathname, `${API}/auth/poll`);
+      assert.equal([...u.searchParams.keys()].sort().join(","), "uuid,verifier");
+      return Response.json({ accessToken: access, refreshToken: "R1" });
+    });
+    const a = createAuthProvider({ kind: "cursor", backend: API, http: f.http, sleep: noSleep, loginMode: "bot", clientId: "PUBLIC_ID" });
+    await a.beginLogin();
+    const r = await a.pollLogin();
+    assert.equal(r.status, "completed");
+    const c = new FileCredentialStore().load("cursor", API)!;
+    assert.equal(c.login_kind, "browser_deep_control");
+    assert.equal((c as { team_id?: unknown }).team_id, undefined);
+    assert.ok(!JSON.stringify(f.calls[0]!.init?.headers ?? {}).toLowerCase().includes("x-cursor-team"));
+    assert.equal(new FileCredentialStore().loadPending("cursor", API), undefined);
+    const pendingAuth = createAuthProvider({ kind: "cursor", backend: API, loginMode: "bot" });
+    await pendingAuth.beginLogin();
+    assert.ok(new FileCredentialStore().loadPending("cursor", API));
+    const canceled = await pendingAuth.cancelLogin();
+    assert.equal(canceled.had_pending, true);
+    assert.equal(new FileCredentialStore().loadPending("cursor", API), undefined);
   });
 });
 

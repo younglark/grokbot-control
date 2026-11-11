@@ -1,7 +1,7 @@
 export const HELP = `gbc — Grok Bot control CLI (programmable App-equivalent control plane)
 
 USAGE:
-  gbc [--json|--plain] [--mock] [--allow-writes] [--dry-run] [--base-url URL] [--auth-kind cursor|xai] <noun> <verb> [flags]
+  gbc [--json|--plain] [--mock] [--allow-writes] [--dry-run] [--base-url URL] [--auth-kind cursor|xai] [--login-mode cli|bot] <noun> <verb> [flags]
 
 EXAMPLES:
   gbc --mock --json bot create --name demo --description "test"
@@ -20,8 +20,10 @@ EXAMPLES:
   gbc --mock --json --allow-writes sidebar move --agent-id <id> --section-id <sid>
   gbc --mock --json auth whoami
   gbc --json auth login-begin            # prints authorization_url; open it in a browser
+  gbc --json auth login-begin --login-mode bot  # optional App-style URL (sand + supportsSelectedTeamLogin)
   gbc --json auth complete --timeout 300 # polls until signed in (exit 8 auth_pending on timeout)
   gbc --json auth login --timeout 300    # begin+complete; URL as stderr {"event":"open_browser"}
+  gbc --json auth login --login-mode bot --timeout 300
   gbc --json auth whoami
   gbc --json auth poll
   gbc --json auth cancel
@@ -80,8 +82,15 @@ NOTES:
     exit 10 (unknown, retryable=false): reconcile before retrying.
   - Sidebar writes are read back; a semantic mismatch exits 10 with code sidebar_unverified.
   - GBT_TRUST_BACKEND / --trust-backend: only the exact value "1" trusts a custom --base-url.
-  - Auth: independent Cursor browser login (static-RE protocol, not official API). Verifier only in a
-    0600 pending file (15 min); credentials in $GBT_CREDENTIALS_DIR (default ~/.gbc, 0600). Tokens and
+  - Auth: independent Cursor browser login (static-RE protocol, not official API). Default login
+    mode is cli (redirectTarget=cli, no team-login param; live-verified 2026-11-07). Optional
+    --login-mode=bot or GBT_LOGIN_MODE=bot uses the App URL shape (redirectTarget=sand and
+    supportsSelectedTeamLogin=true). This does not change the default, does not read official App
+    credentials or keychain, and does not invent a team id or send x-cursor-team-id / App headers.
+    Bot-mode poll completion, selected-team binding, and refresh are not live-verified.
+    GBT_LOGIN_REDIRECT_TARGET still overrides only the redirectTarget token and stays compatible
+    with old configs (e.g. sand without the team-login param). Verifier only in a 0600 pending
+    file (15 min); credentials in $GBT_CREDENTIALS_DIR (default ~/.gbc, 0600). Tokens and
     verifier are never printed. xai kind: unsupported. Refresh needs GBT_OAUTH_CLIENT_ID or a
     login-persisted client_id binding (never hardcoded / never guessed from JWT). auth refresh
     without --force may report already_fresh (no network); --force always attempts refresh.

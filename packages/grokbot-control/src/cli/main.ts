@@ -39,10 +39,20 @@ async function main(): Promise<number> {
     let code = 0;
     if (noun === "auth") {
       const ops = plane.authOps;
+      const loginOpts = () => {
+        const loginMode = flag(rest, "--login-mode");
+        if (loginMode !== undefined && globals.loginMode && loginMode.trim() !== globals.loginMode) {
+          usageExit(
+            "conflicting --login-mode values",
+            "pass --login-mode once (cli or bot)",
+          );
+        }
+        return { loginMode: loginMode ?? globals.loginMode };
+      };
       if (verb === "whoami" || verb === "status") {
         code = emitResult(await ops.whoami(), mode);
       } else if (verb === "login-begin") {
-        code = emitResult(await ops.begin(), mode);
+        code = emitResult(await ops.begin(loginOpts()), mode);
       } else if (verb === "poll") {
         code = emitResult(await ops.poll(), mode);
       } else if (verb === "complete" || verb === "login") {
@@ -53,7 +63,7 @@ async function main(): Promise<number> {
             "--timeout=300",
           );
         if (verb === "login") {
-          const begin = await ops.begin();
+          const begin = await ops.begin(loginOpts());
           if (!begin.ok) {
             code = emitResult(begin, mode);
             persistMockState();
