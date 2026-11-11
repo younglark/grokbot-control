@@ -164,7 +164,7 @@ GBT_MCP_READONLY=1 npx -y --package=github:younglark/grokbot-control#npm-v0.2.1 
 
 独立 Cursor 浏览器登录（静态逆向协议，非官方公开 API）。仅支持 Cursor token；xAI identity 返回 `unsupported`。
 
-默认登录模式是 `cli`（`redirectTarget=cli`，不含 `supportsSelectedTeamLogin`；2026-11-07 曾 live 验证）。可选 `bot` 模式只改变登录 URL，使其与官方 App 一致（`redirectTarget=sand` + `supportsSelectedTeamLogin=true`）。每次都会新生成 uuid / challenge / verifier。凭据仍只写在 `~/.gbc`，不读取官方 App 的 `sand-secrets.json` 或钥匙串，不猜测 team id，也不发送 `x-cursor-team-id` 或其它官方头。bot 模式的轮询收束、选中团队如何返回/绑定、以及该模式之后的刷新都**尚未 live 验证**。
+默认登录模式是 `cli`（`redirectTarget=cli`，不含 `supportsSelectedTeamLogin`；2026-11-07 曾 live 验证）。可选 `bot` 模式只改变登录 URL，使其与官方 App 一致（`redirectTarget=sand` + `supportsSelectedTeamLogin=true`）。每次都会新生成 uuid / challenge / verifier。凭据仍只写在 `~/.gbc`，不读取官方 App 的 `sand-secrets.json` 或钥匙串，不猜测 team id，也不发送 `x-cursor-team-id` 或其它官方头。bot 模式的登录轮询收束已于 2026-11-11 live 验证（Cursor token，backend api2）。选中团队如何返回/绑定、以及该模式之后的刷新仍**尚未 live 验证**。
 
 | 命令 | 作用 |
 |---|---|

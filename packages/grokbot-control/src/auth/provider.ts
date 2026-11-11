@@ -967,7 +967,7 @@ export function createAuthProvider(opts: AuthProviderOptions): AuthProvider {
       store.savePending(pending);
       const note =
         login.loginMode === "bot"
-          ? "Open the URL in a browser and sign in, then run `gbc auth complete`. Bot mode uses the App URL shape (redirectTarget=sand, supportsSelectedTeamLogin=true); it does not read official App credentials, invent a team id, or send team/App headers. Poll completion, team binding, and refresh after this mode are not live-verified. The verifier is stored only in a 0600 pending file and is never printed."
+          ? "Open the URL in a browser and sign in, then run `gbc auth complete`. Bot mode uses the App URL shape (redirectTarget=sand, supportsSelectedTeamLogin=true); it does not read official App credentials, invent a team id, or send team/App headers. Team binding and refresh after this mode are not live-verified. The verifier is stored only in a 0600 pending file and is never printed."
           : "Open the URL in a browser and sign in, then run `gbc auth complete`. The verifier is stored only in a 0600 pending file and is never printed.";
       return {
         authorization_url: buildLoginUrl(website, {

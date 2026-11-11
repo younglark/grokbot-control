@@ -14,14 +14,16 @@
 
 ## live 验证范围（2026-11-07，隔离测试 bot，结束后已删除）
 
-- 通过：浏览器登录（`redirectTarget=cli`）→ `/auth/poll`；只读 `ListGrokBotAgents`、`GetGrokBotUserRuntimeSettings`、`ListGrokBotAgentStatuses`（只带 Bearer）。这三个当时用的是旧 0.78.4 vendor。可选 bot 登录模式（`redirectTarget=sand` + `supportsSelectedTeamLogin=true`）**未** live 验证。
+- 通过：浏览器登录（`redirectTarget=cli`）→ `/auth/poll`；只读 `ListGrokBotAgents`、`GetGrokBotUserRuntimeSettings`、`ListGrokBotAgentStatuses`（只带 Bearer）。这三个当时用的是旧 0.78.4 vendor。
 - 通过：create 临时 bot → send 一条固定测试消息 → 默认会话分页拉取 → send-message 附件下载（中文文件名、条件 GET 304）→ CLI status/render、MCP 只读 `sync_status` → 删除临时 bot（前后 bot 集合一致）。
 - 未触发：omitted / blob 正文补读（真实服务没有返回这类条目），命名 session。
+
+2026-11-11：可选 bot 登录（`--login-mode bot`，`redirectTarget=sand` + `supportsSelectedTeamLogin=true`）→ `/auth/poll` 收束，得到 Cursor token（kind `cursor`，backend api2）。未验证选中团队如何返回/是否需要 `x-cursor-team-id`，以及该模式之后的 OAuth 刷新。
 
 ## 未验证 / 未实现（不得扩大声称）
 
 - OAuth 刷新从未 live 执行；所有写 RPC 的边界语义（`id` vs `agent_id`、sidebar 冲突错误码、写是否需要 App 头）未 live 验证，清单见 [compat-matrix.md](../protocol/compat-matrix.md)。
-- 可选 bot 登录模式的回调（`redirectTarget=sand` 是否由本工具的 `/auth/poll` 收束、选中团队如何返回/是否需要 `x-cursor-team-id`、该模式下的刷新）未 live 验证；静态证据只覆盖 URL 参数，不能推断团队已绑定。
+- 可选 bot 登录的选中团队如何返回/是否需要 `x-cursor-team-id`、以及该模式下的刷新仍未 live 验证；不能推断团队已绑定。
 - user-attachment 上传、URL 403/过期、下载超限、代际切换未 live 执行。
 - 未实现：Watch / deletes / cursorTooOld 实时补偿、chunk 读取兜底、artifact / 外链下载。
 - 同步的 completeness 永远是 `unknown`；账户身份是操作者声明（`operator_asserted_unverified`），不是服务端验证。

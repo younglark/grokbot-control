@@ -39,16 +39,7 @@ async function main(): Promise<number> {
     let code = 0;
     if (noun === "auth") {
       const ops = plane.authOps;
-      const loginOpts = () => {
-        const loginMode = flag(rest, "--login-mode");
-        if (loginMode !== undefined && globals.loginMode && loginMode.trim() !== globals.loginMode) {
-          usageExit(
-            "conflicting --login-mode values",
-            "pass --login-mode once (cli or bot)",
-          );
-        }
-        return { loginMode: loginMode ?? globals.loginMode };
-      };
+      const loginOpts = () => ({ loginMode: globals.loginMode });
       if (verb === "whoami" || verb === "status") {
         code = emitResult(await ops.whoami(), mode);
       } else if (verb === "login-begin") {

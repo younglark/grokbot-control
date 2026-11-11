@@ -100,14 +100,15 @@ read-only unary may refresh+retry once. Credentials carry provenance (client_id 
 ### Live status (2026-11-07, one manual run)
 - Verified live: browser login (`loginDeepControl`, `redirectTarget=cli`) → `GET /auth/poll` → Cursor token (kind `cursor`, backend api2);
   read-only RPCs `ListGrokBotAgents`, `GetGrokBotUserRuntimeSettings` (sidebar), `ListGrokBotAgentStatuses` succeeded with only `authorization: Bearer`.
+- 2026-11-11: bot-mode login (`--login-mode bot`, `redirectTarget=sand` + `supportsSelectedTeamLogin=true`) → `GET /auth/poll` completed with a Cursor token (kind `cursor`, backend api2).
 - NOT verified live: token refresh (`GBT_OAUTH_CLIENT_ID` still must be configured), all write RPCs, history/session/todos/tasks,
-  bot-mode login (`redirectTarget=sand` + `supportsSelectedTeamLogin=true`), selected-team callback / binding, refresh after bot-mode login.
+  selected-team callback / binding, refresh after bot-mode login.
 
 ### Auth items still unverified live
 - Whether `supportsSelectedTeamLogin` / team selection (`x-cursor-team-id`) is needed for Grok Bot RPCs.
   Optional bot mode adds the URL parameter from static evidence; it does **not** infer that a team was bound,
   guess a team id, or send `x-cursor-team-id`.
-- Whether `redirectTarget=sand` completes through this tool's `/auth/poll` loop, or instead deep-links into the official App.
+- Whether a `redirectTarget=sand` login also deep-links into the official App in addition to completing this tool's `/auth/poll` loop (poll completion itself was live-verified 2026-11-11).
 - Whether write RPCs need App headers (`x-cursor-client-type`, version, `x-ghost-mode`, …); reads worked with Bearer only.
 - Which public client_id is appropriate for a third-party tool; refresh is off until configured.
 - Login/refresh device-policy header `x-cursor-mdm-signin-policy` is not sent (not forged).

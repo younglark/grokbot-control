@@ -98,7 +98,7 @@ describe("login challenge + URL (evidence A:38644-38657)", () => {
 const SAMPLE_CHALLENGE = "pgmrnwX4rQfa7_ezRy4RJOwR0-n7CihbVaayRzHptE8";
 const SAMPLE_UUID = "dc6b22f6-8738-4726-84bc-17e752e6d25d";
 
-describe("optional bot login mode (static URL shape only; not live-verified)", () => {
+describe("optional bot login mode (URL shape; poll completion live-verified 2026-11-11)", () => {
   it("resolveLoginParams defaults to cli; bot preset is sand + supportsSelectedTeamLogin", () => {
     const cli = resolveLoginParams({ env: {} });
     assert.deepEqual(cli, { loginMode: "cli", redirectTarget: "cli", supportsSelectedTeamLogin: false });

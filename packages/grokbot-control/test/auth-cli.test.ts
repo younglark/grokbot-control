@@ -163,6 +163,36 @@ describe("CLI cross-process auth (local fake backend)", () => {
     assert.match(xai.err, /unsupported/);
   });
 
+  it("--login-mode overrides GBT_LOGIN_MODE; conflicting flags exit 2; repeated same value is ok", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gbc-cli-auth-"));
+    const env = {
+      GBT_CREDENTIALS_DIR: dir,
+      GBT_TRUST_BACKEND: "1",
+      GBT_WEBSITE_URL: "http://127.0.0.1:9",
+      GBT_BASE_URL: base,
+      GBT_LOGIN_MODE: "bot",
+    };
+    const override = await run(["auth", "login-begin", "--login-mode=cli"], env);
+    assert.equal(override.code, 0, override.err);
+    const overrideUrl = new URL(JSON.parse(override.out).data.authorization_url);
+    assert.equal(JSON.parse(override.out).data.login_mode, "cli");
+    assert.equal(overrideUrl.searchParams.get("redirectTarget"), "cli");
+    assert.equal(overrideUrl.searchParams.get("supportsSelectedTeamLogin"), null);
+
+    const globalOverride = await run(["--login-mode", "cli", "auth", "login-begin"], env);
+    assert.equal(globalOverride.code, 0, globalOverride.err);
+    assert.equal(JSON.parse(globalOverride.out).data.login_mode, "cli");
+
+    const conflict = await run(["--login-mode=bot", "auth", "login-begin", "--login-mode=cli"], env);
+    assert.equal(conflict.code, 2, conflict.err);
+    assert.match(conflict.err, /conflicting --login-mode values/);
+
+    const repeated = await run(["--login-mode=bot", "auth", "login-begin", "--login-mode=bot"], env);
+    assert.equal(repeated.code, 0, repeated.err);
+    assert.equal(JSON.parse(repeated.out).data.login_mode, "bot");
+    assert.equal(new URL(JSON.parse(repeated.out).data.authorization_url).searchParams.get("redirectTarget"), "sand");
+  });
+
   it("--mock refuses login (no accidental simulated auth); GBT_TRUST_BACKEND=0 refuses local backend", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gbc-cli-auth-"));
     const m = await run(["--mock", "auth", "login-begin"], { GBT_CREDENTIALS_DIR: dir, GBT_MOCK_STATE: path.join(dir, "m.json") });

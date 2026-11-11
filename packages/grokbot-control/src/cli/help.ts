@@ -87,7 +87,9 @@ NOTES:
     --login-mode=bot or GBT_LOGIN_MODE=bot uses the App URL shape (redirectTarget=sand and
     supportsSelectedTeamLogin=true). This does not change the default, does not read official App
     credentials or keychain, and does not invent a team id or send x-cursor-team-id / App headers.
-    Bot-mode poll completion, selected-team binding, and refresh are not live-verified.
+    Bot-mode login poll completion was live-verified 2026-11-11 (Cursor token, api2).
+    Selected-team binding and refresh after this mode are not live-verified.
+    A --login-mode flag overrides GBT_LOGIN_MODE; two conflicting flags exit 2.
     GBT_LOGIN_REDIRECT_TARGET still overrides only the redirectTarget token and stays compatible
     with old configs (e.g. sand without the team-login param). Verifier only in a 0600 pending
     file (15 min); credentials in $GBT_CREDENTIALS_DIR (default ~/.gbc, 0600). Tokens and

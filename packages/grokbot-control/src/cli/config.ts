@@ -33,6 +33,7 @@ export function parseGlobals(argv: string[]): { globals: CliGlobal; rest: string
     trustBackend: process.env.GBT_TRUST_BACKEND === "1",
   };
   const rest: string[] = [];
+  let loginModeFromFlag: LoginMode | undefined;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     if (a === "--json") globals.json = true;
@@ -45,9 +46,18 @@ export function parseGlobals(argv: string[]): { globals: CliGlobal; rest: string
     else if (a.startsWith("--base-url=")) globals.baseUrl = a.slice("--base-url=".length);
     else if (a === "--auth-kind") globals.authKind = (argv[++i] as AuthKind) || "cursor";
     else if (a.startsWith("--auth-kind=")) globals.authKind = a.slice("--auth-kind=".length) as AuthKind;
-    else if (a === "--login-mode") globals.loginMode = requiredLoginMode(argv[++i], "--login-mode");
-    else if (a.startsWith("--login-mode=")) globals.loginMode = requiredLoginMode(a.slice("--login-mode=".length), "--login-mode");
-    else rest.push(a);
+    else if (a === "--login-mode" || a.startsWith("--login-mode=")) {
+      const raw = a === "--login-mode" ? argv[++i] : a.slice("--login-mode=".length);
+      const parsed = requiredLoginMode(raw, "--login-mode");
+      if (loginModeFromFlag !== undefined && loginModeFromFlag !== parsed) {
+        throw new GbcError("usage", "conflicting --login-mode values", {
+          exitCode: 2,
+          hint: "pass --login-mode once (cli or bot); the flag overrides GBT_LOGIN_MODE",
+        });
+      }
+      loginModeFromFlag = parsed;
+      globals.loginMode = parsed;
+    } else rest.push(a);
   }
   if (globals.json && globals.plain) {
     throw new GbcError("usage", "use either --json or --plain, not both", {
