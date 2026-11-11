@@ -2,6 +2,12 @@
 
 本文件记录公开包 `grokbot-control` 的用户可见变更。版本号遵循 SemVer。从 0.2.0 起通过 GitHub tag `npm-v<version>` 分发，不再发布到 npmjs。npmjs 上的 **0.1.3 已停止更新**。
 
+## Unreleased
+
+### 协议
+
+- **`vendor/proto-gen` 改由 App 0.79.4 schema 生成**（新冻结目录 `schema-0.79.4` / `schema-0.79.4-daemon-exec`；0.79.3 目录保留）。0.79.4 只多了两个 optional 字段：`CompleteMcpOAuthRequest.oauth_error`（3）和 `CompleteMcpOAuthResponse.continue_authorization_url`（6），都不在本包用到的 RPC/消息里。已用面 0.79.3 → 0.79.4 完全相同，0 breaking；登录/poll/刷新等鉴权锚点与 0.79.3 相同，`src/auth/` 未改。CLI、MCP、SDK 行为不变。只做了离线验证，没有 live 检查。详见 [docs/protocol/app-0.79.4-delta.md](https://github.com/younglark/grokbot-control/blob/main/docs/protocol/app-0.79.4-delta.md)。
+
 ## 0.2.1 — 2026-11-10（通过 GitHub tag `npm-v0.2.1` 分发，不发到 npmjs）
 
 源码 tag `v0.2.0` 已推送，但发版工作流在 `npm test` 处因后台 shell 测试挂起被取消，**没有生成 `npm-v0.2.0`**。请不要删除或改写已推送的 `v0.2.0`。0.2.1 是第一个应由 Actions 生成的 GitHub 安装 tag。

@@ -264,7 +264,7 @@ npm run gbc -- --mock --json bot list
 npm run mcp                   # 或：GBT_MOCK=1 node packages/grokbot-control/dist/mcp/main.js
 ```
 
-源码布局概览：`src/auth`、`src/connect`、`src/ops`、`src/sync`、`src/cli`、`src/mcp`；唯一冻结 `.proto` 在 `packages/protocol/baselines/schema-0.79.3/`，本公开包携带本地 `vendor/proto-gen/` 生成制品，不依赖私有 workspace。
+源码布局概览：`src/auth`、`src/connect`、`src/ops`、`src/sync`、`src/cli`、`src/mcp`；当前冻结 `.proto` 在 `packages/protocol/baselines/schema-0.79.4/`（App 0.79.4；0.79.3 目录保留为历史），本公开包携带本地 `vendor/proto-gen/` 生成制品，不依赖私有 workspace。
 
 ## Publish / Release
 
@@ -288,5 +288,5 @@ npm run mcp                   # 或：GBT_MOCK=1 node packages/grokbot-control/d
 
 ## 本地执行端子包：local-exec-daemon
 
-同仓库的私有子包 [`packages/local-exec-daemon`](https://github.com/younglark/grokbot-control/tree/main/packages/local-exec-daemon)，目标是与 App 0.79.3 原版 local-exec-daemon 行为一致。它不随本包发布，与 SDK、`gbc`、`gbc-mcp` 分开构建；目前只做过离线合成环境的验证，不是完整 drop-in。说明见 [docs/local-exec/](https://github.com/younglark/grokbot-control/blob/main/docs/local-exec/README.md)。
+同仓库的私有子包 [`packages/local-exec-daemon`](https://github.com/younglark/grokbot-control/tree/main/packages/local-exec-daemon)，目标是与 App 原版 local-exec-daemon 行为一致（按 0.79.3 逐函数移植，已同步 0.79.4 的唯一 daemon 变化）。它不随本包发布，与 SDK、`gbc`、`gbc-mcp` 分开构建；目前只做过离线合成环境的验证，不是完整 drop-in。说明见 [docs/local-exec/](https://github.com/younglark/grokbot-control/blob/main/docs/local-exec/README.md)。
 

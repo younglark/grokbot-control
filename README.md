@@ -1,13 +1,13 @@
 # grokbot-control
 
-围绕 Grok Bot 桌面 App（目标版本 **0.79.3**）的非官方工程仓库。协议与行为全部来自对官方 App 的**静态**逆向，不是公开 API。
+围绕 Grok Bot 桌面 App（目标版本 **0.79.4**；协议于 2026-11-11 从 0.79.3 升级，见 [docs/protocol/app-0.79.4-delta.md](docs/protocol/app-0.79.4-delta.md)）的非官方工程仓库。协议与行为全部来自对官方 App 的**静态**逆向，不是公开 API。
 
 ## 三个目标
 
 | # | 目标 | 代码 | 状态 |
 |---|---|---|---|
 | 1 | **控制面**：SDK + CLI `gbc` + MCP `gbc-mcp`，让 agent 用原生 Connect RPC 驱动 Bot | [packages/grokbot-control](packages/grokbot-control/README.md) | 通过 GitHub tag `npm-v0.2.1` 安装（`npx -y --package=github:younglark/grokbot-control#npm-v0.2.1 gbc`）；npmjs 上的 `grokbot-control@0.1.3` 已停止更新。部分只读 RPC 做过 live 验证 |
-| 2 | **`local-exec-daemon` 兼容替代**：与 App 0.79.3 托管的官方 daemon 行为一致（包名/bin 就叫 `local-exec-daemon`，不加 `-compat`） | [packages/local-exec-daemon](packages/local-exec-daemon/README.md) | private；Linux 可达路径已按原版移植并通过合成验收；**不是**无条件 drop-in |
+| 2 | **`local-exec-daemon` 兼容替代**：与 App 托管的官方 daemon 行为一致（按 0.79.3 移植，已同步 0.79.4）（包名/bin 就叫 `local-exec-daemon`，不加 `-compat`） | [packages/local-exec-daemon](packages/local-exec-daemon/README.md) | private；Linux 可达路径已按原版移植并通过合成验收；**不是**无条件 drop-in |
 | 3 | **无头注册**本地电脑 / Docker | [docs/headless](docs/headless/README.md) | 仅设计，未实现（下一阶段） |
 
 接手请先读 **[docs/HANDOFF.md](docs/HANDOFF.md)**（现状、未完成项、风险、工作约定、下一步）。
