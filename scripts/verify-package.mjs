@@ -5,16 +5,13 @@ import {join,resolve,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
 import assert from 'node:assert/strict';
+import {lastJsonValue} from './npm-pack-json.mjs';
 const repo=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const sandbox=mkdtempSync(join(tmpdir(),'gbc-independent-consumer-'));
 const npm=process.env.npm_execpath;
 assert.ok(npm,'Run this check through npm run verify:package');
 const runNpm=(args,cwd=repo,env=process.env)=>execFileSync(process.execPath,[npm,...args],{cwd,env,encoding:'utf8',timeout:180000,maxBuffer:8*1024*1024});
 // prepack may print tsc/vite logs on stdout before npm pack --json.
-const lastJsonValue=text=>{
- const start=text.lastIndexOf('\n[');
- return JSON.parse(start>=0?text.slice(start+1):text.trim());
-};
 const packed=lastJsonValue(runNpm(['pack','-w','grokbot-control','--json','--pack-destination',sandbox]))[0];
 const expected=JSON.parse(readFileSync(join(repo,'packages/grokbot-control/package.json'),'utf8'));
 assert.equal(packed.name,'grokbot-control');assert.equal(packed.version,expected.version);
