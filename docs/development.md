@@ -26,7 +26,7 @@
 
 **每次跑测试前都先 `export UC_SKIP_OFFICIAL=1`。**
 
-本地 `gbc dashboard` 的 UI 测试使用 Playwright，针对 `packages/grokbot-control/dist/dashboard/` 打包结果（先 `npm run build`），不走 Vite 开发服务器，也不打 live 上游 RPC。若未安装浏览器，相关用例会跳过。CI 与本地可执行：`npx playwright install --with-deps chromium`。
+本地 `gbc dashboard` 的默认测试只检查 `packages/grokbot-control/dist/dashboard/` 打包树是否存在（先 `npm run build`），不启动浏览器，也不打 live 上游 RPC。默认套件不再依赖 Playwright / Chromium；CI 与发版工作流也不会安装浏览器。
 
 ## 测试分层
 

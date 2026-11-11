@@ -4,6 +4,10 @@
 
 ## Unreleased
 
+### 修复
+
+- **默认 `npm test` 不再跑依赖 Playwright Chromium 的 dashboard UI 验收。** `packages/grokbot-control/test/dashboard-ui.test.ts` 只保留打包树存在性与 `resolveDashboardUiRoot` 等轻量检查。Workspace regression 不再执行 `npx playwright install --with-deps chromium`，也从 devDependencies 移除 playwright。未安装浏览器时，发版工作流不应再因「Chromium required…」失败。
+
 ## 0.4.0 — 2026-11-11（通过 GitHub tag `npm-v0.4.0` 分发，不发到 npmjs）
 
 ### 新增

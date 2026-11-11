@@ -264,11 +264,7 @@ npm run typecheck
 npm run test:protocol-tools   # 可选：协议工具 Python 单测
 ```
 
-UI 端到端测试使用 Playwright，针对打包后的 `dist/dashboard/`，不走 Vite 开发服务器。若本机没有浏览器，相关用例会跳过。安装：
-
-```bash
-npx playwright install --with-deps chromium
-```
+默认 `npm test` 只对打包后的 `dist/dashboard/` 做存在性等轻量检查，不启动浏览器，也不要求安装 Playwright / Chromium。
 
 在仓库根目录等价的快捷命令：
 
