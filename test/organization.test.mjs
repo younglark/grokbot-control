@@ -41,7 +41,7 @@ test('frozen archive is unchanged and both consumers record exactly the same inp
  for(const [name,hash] of Object.entries(a.sha256))assert.equal(hash,inputHashes[name],name);
 });
 test('public lifecycle ships only runtime artifacts and no workflow publishes to npmjs',()=>{
- const p=json('packages/grokbot-control/package.json');assert.deepEqual(p.files,['dist','vendor/proto-gen','README.md']);
+ const p=json('packages/grokbot-control/package.json');assert.deepEqual(p.files,['dist','vendor/proto-gen','README.md','web/SHADCN-LICENSE.txt','web/REGISTRY.md']);
  assert.equal(p.scripts.prepare,undefined);assert.equal(p.scripts.install,undefined);assert.equal(p.scripts.prepack,'npm run build');
  assert.equal(existsSync(join(root,'.github/workflows/publish.yml')),false);
  const workflows=join(root,'.github/workflows');
