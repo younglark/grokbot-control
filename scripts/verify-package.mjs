@@ -10,10 +10,15 @@ const sandbox=mkdtempSync(join(tmpdir(),'gbc-independent-consumer-'));
 const npm=process.env.npm_execpath;
 assert.ok(npm,'Run this check through npm run verify:package');
 const runNpm=(args,cwd=repo,env=process.env)=>execFileSync(process.execPath,[npm,...args],{cwd,env,encoding:'utf8',timeout:180000,maxBuffer:8*1024*1024});
-const packed=JSON.parse(runNpm(['pack','-w','grokbot-control','--json','--pack-destination',sandbox]))[0];
+// prepack may print tsc/vite logs on stdout before npm pack --json.
+const lastJsonValue=text=>{
+ const start=text.lastIndexOf('\n[');
+ return JSON.parse(start>=0?text.slice(start+1):text.trim());
+};
+const packed=lastJsonValue(runNpm(['pack','-w','grokbot-control','--json','--pack-destination',sandbox]))[0];
 const expected=JSON.parse(readFileSync(join(repo,'packages/grokbot-control/package.json'),'utf8'));
 assert.equal(packed.name,'grokbot-control');assert.equal(packed.version,expected.version);
-for(const file of packed.files)assert.match(file.path,/^(dist\/|vendor\/proto-gen\/|README\.md$|package\.json$)/,`Unexpected publish file: ${file.path}`);
+for(const file of packed.files)assert.match(file.path,/^(dist\/|vendor\/proto-gen\/|README\.md$|package\.json$|web\/SHADCN-LICENSE\.txt$|web\/REGISTRY\.md$)/,`Unexpected publish file: ${file.path}`);
 const consumer=join(sandbox,'consumer');mkdirSync(consumer);
 writeFileSync(join(consumer,'package.json'),JSON.stringify({name:'independent-package-verification',private:true,type:'module'}));
 const home=join(sandbox,'home');mkdirSync(home);
