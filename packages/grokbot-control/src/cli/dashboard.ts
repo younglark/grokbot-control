@@ -29,6 +29,10 @@ export async function dashboardCommand(
   const noOpen = hasFlag(rest, "--no-open");
 
   const started = await startDashboardServer({ plane, host, port });
+  // Register SIGINT/SIGTERM before printing the ready URL so a client that
+  // disconnects immediately still gets the documented exit 0 and a clean close.
+  const exiting = waitForSignal(() => started.close());
+
   let opened = false;
   if (!noOpen) {
     const result = await openInBrowser(started.url);
@@ -55,8 +59,7 @@ export async function dashboardCommand(
     emitResult(okResult(data, { simulated: plane.simulated }), mode);
   }
 
-  const shutdown = () => started.close();
-  return await waitForSignal(shutdown);
+  return await exiting;
 }
 
 function waitForSignal(onStop: () => Promise<void>): Promise<number> {
