@@ -1,0 +1,9 @@
+# NOTICE — schema-0.79.4-daemon-exec
+
+Restored protocol messages for compatibility research.
+
+- Parent archive: packages/protocol/baselines/schema-0.79.4 (App 0.79.4 proto.cjs extract).
+- Additive Exec* closure: static text parse of App daemon compact descriptors; not executed. The 0.79.4 daemon descriptors
+  are byte-identical to 0.79.3, so the closure from schema-0.79.3-daemon-exec is re-applied unchanged.
+- Not official Google/Cursor protobuf sources; no publisher schema license claimed beyond App EULA analysis limits.
+- See SOURCE.json for descriptor anchors, the verification run and the added type list (exec-closure-meta.json).
