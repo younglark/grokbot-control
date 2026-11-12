@@ -54,6 +54,9 @@ daemon Exec 闭包：0.79.4 daemon 的紧凑描述符与 0.79.3 逐字相同（`
 
 - **已用面**：`used_surface.py` 以当前 `src`（20 个 RPC、70 个消息、24 个枚举）分别对 0.79.3 与 0.79.4 snapshot 取子集，两者完全相同，0 breaking。见 [baselines/used-surface-diff-0.79.3-to-0.79.4.md](baselines/used-surface-diff-0.79.3-to-0.79.4.md)、[baselines/used-surface-0.79.4.json](baselines/used-surface-0.79.4.json)。
   `CompleteMcpOAuth*` 不在控制面已用面内（控制面不做 MCP OAuth）。
+- **合入 main（v0.6.0，`89ab6ed`）后复核（2026-11-12）**：main 期间新增了 `svc_aiserver.v1.DashboardService.proto` 生成输入（0.79.3 与 0.79.4 daemon-exec 目录中该文件 sha256 相同，`c15d65a8…2fcb`），控制面另外调用 DashboardService 的 `GetSandUsageStatus`、`GetGrokBotUsageBreakdown`（`src/ops/usage.ts`）。
+  `used_surface.py` 只统计 `GrokBotService`：对合并后的 `src` 重新 `--write-subset`，结果仍是 20 个 RPC、70 个消息、24 个枚举，与 `baselines/used-surface-0.79.4.json` 逐项相同。两个 DashboardService RPC 不在该工具统计范围内（工具还会把 `localdash/server.ts` 的 `client.end()` 误报成 RPC `End`），改用全量 diff 核对：`baselines/full-schema-diff-0.79.3-to-0.79.4.txt` 覆盖全部 7 个 service、662 个 RPC，只有 `CompleteMcpOAuth*` 两个字段变化，所以这两个 RPC 及其消息在 0.79.3 与 0.79.4 之间不变。
+  合并后重新生成产物与合并结果逐字节相同；`verify_generated.mjs` 对 0.79.4 snapshot：2923 messages、387 enums、556 RPC（464 GrokBotService + 92 DashboardService），0 errors。main 新增代码里出现的 `0.79.3` 只有 `bot create` 不传 title 的官方证据引用（已注明 0.79.4 相同），属于历史证据，保留。
 - **鉴权**：`fingerprint.py` 在 0.79.3 与 0.79.4 的 main-app/main-core 上各输出 67 行锚点；把字节偏移和 ≤4 字符压缩名归一化后两份**完全相同**（login URL、redirectTarget、`/auth/poll`、`/auth/exchange_user_api_key`、`/oauth/token` 刷新、`sign_in_policy_violation`、默认 backend、client headers 等）。归一化 diff 中也没有任何鉴权相关改动。结论：`src/auth/` 无需修改。
 - **请求头/版本串**：控制面不发送 App 版本号或 `x-cursor-client-*` 头（`rg` 核对 `packages/grokbot-control/src`），因此没有需要改的版本串。App 自己的 0.79.4 变化是 telemetry `app_version` 字面量（main-app）和内置版本兜底（main-core / daemon）。
 - **sync**：coordinator 只改了内嵌 RPC schema 的连接器套件枚举；格式化后行号不变，`docs/control-plane/sync-format.md` 与 `transcript-body-0.79.3.md` 引用的 coordinator 证据仍成立。

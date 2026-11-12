@@ -8,6 +8,96 @@
 
 - **`vendor/proto-gen` 改由 App 0.79.4 schema 生成**（新冻结目录 `schema-0.79.4` / `schema-0.79.4-daemon-exec`；0.79.3 目录保留）。0.79.4 只多了两个 optional 字段：`CompleteMcpOAuthRequest.oauth_error`（3）和 `CompleteMcpOAuthResponse.continue_authorization_url`（6），都不在本包用到的 RPC/消息里。已用面 0.79.3 → 0.79.4 完全相同，0 breaking；登录/poll/刷新等鉴权锚点与 0.79.3 相同，`src/auth/` 未改。CLI、MCP、SDK 行为不变。只做了离线验证，没有 live 检查。详见 [docs/protocol/app-0.79.4-delta.md](https://github.com/younglark/grokbot-control/blob/main/docs/protocol/app-0.79.4-delta.md)。
 
+## 0.6.0 — 2026-11-12（通过 GitHub tag `npm-v0.6.0` 分发，不发到 npmjs）
+
+安装：`npx -y --package=github:younglark/grokbot-control#npm-v0.6.0 gbc`（`gbc-mcp` 同样要加 `--package`）。
+
+**含破坏性变更**：
+- 解析 `message send` / `message status` / `message history` 的 `--json` 输出的脚本需要调整（枚举改为名字、`session_id` 改为 `null`、history 条目形状变化）。
+- `message send` 遇到 `delivery=refused` 现在返回 `ok:false`、退出码 7（以前是 `ok:true`、退出码 0）。
+- `bot create` / `bot update` 的 `data.bot` 改为读回的值；写成功但读回失败时返回退出码 10（以前是 0）；不传 `--title` 时发送 `""`。
+
+`schema_version` 仍为 `1.0.0`（按仓库惯例它是封套版本，0.2.0 的 CLI 输出形状破坏性变更也没有升它）。
+
+### Breaking
+
+- **`message send` / `message status` 的枚举改为名字（#1）。** `delivery`、`status` 从 `"2"` 这样的数字字符串改为小写 snake 名字（如 `"accepted_temporal"`、`"accepted"`），数字移到 `delivery_code` / `status_code`。新增 `mode` / `mode_code`。名字表取自生成的冻结 schema 枚举；schema 没有的数值输出 `"unknown"` 加原始 code。
+- **`session_id` 不再用 `""` 表示默认会话。** 调用方传了就回显并带 `session_source:"caller"`；没传时为 `null`、`session_source:"default_unreported"`（发送 RPC 不返回会话号）。`message history` 也带这两个字段。
+- **`delivery=refused` 现在是失败。** 以前返回 `ok:true`、退出码 0。现在 `ok:false`、`code:"refused"`、退出码 7（与 denied 同一类：写请求被拒），错误封套在 stderr，`data` 里仍有 `refusal` 和 `workflow_id`；MCP `send_message` 返回 `isError:true`。
+- **`message status` 的可选字段缺失时为 `null`**（`rejection_code`、`accepted_at_ms`，以及新增的 `echo_entry_id`），不再省略。
+- **`message history` 条目形状变化（#2 的 history 部分）。** 以前读的是 schema 里不存在的 `plaintext` / `text` / `ciphertext`，真实数据永远没有正文，`entry_id` 也读错字段。现在与本地监视器 transcript 用同一解码器解析 `body`（UTF-8 JSON UI 条目）：条目带 `entry_id`、`seq`、`kind`、`role`、`timestamp_ms`、`decode_status`、`preview`（200 字）和 `text`（默认最多 2000 字，`--full` 取全文，被截断时有 `text_truncated` / `text_chars`）。`omitted` 只在服务端省略 body 时为 true。去掉误导性的「Ciphertext … not decrypted」说明。
+
+### 新增
+
+- `message send` 结果补上 `workflow_id`、`refusal{failure_code,message}`（缺失为 `null`）；`message status` 补上 `echo_entry_id`。
+- `message history --session-id <sid>`（MCP `list_transcript` 的 `session_id`）：只在给出时发给服务端，不猜默认值。`--full`（MCP `full: true`）返回全文。
+- 内部：`--mock` 后端的 transcript 改为 schema 形状（`body` 字节），使旧解码错误能被测试发现。
+- **`bot create` / `bot update` 支持 `--description-file <path>`**（#4）。按 UTF-8 原样读取，换行保留，与 `message send --text-file` 共用同一个读文件函数。和 `--description` 同时出现、路径缺失或文件读不到都是用法错误（退出码 2），不会发出写请求。`-` 是文件名，不表示 stdin。MCP 的 `create_bot` / `update_bot` 直接收字符串，不新增文件参数。
+- **`--help` 提示不要用 `echo` 重打印 `--json` 输出**（#4）。JSON 字符串里的换行是合法的 `\n` 转义，部分 shell 的 `echo` 会把它还原成真换行，导致解析失败。改用 `printf '%s' "$raw"` 或直接读 stdout。gbc 的 JSON 输出本身不变。
+
+### 变更（行为变化）
+
+- **`bot create` / `bot update` 写成功后从 `ListGrokBotAgents` 读回**（#3，CLI、MCP、SDK 一致）。最多读 3 次，退避 300ms / 900ms，总时长约 3 秒以内，只在列表完整但还找不到该 agent 时重试。结果新增 `requested{name,title}`（update 里未修改的字段为 `null`）、`observed{name,title}`、`renamed_by_server`、`changed_fields`、`readback.attempts`；`data.bot` 改为读回的版本，不再是写接口的回包。已观察到服务端会把 title 并进显示名（如 `Showrunner · 幕僚长`）并清空 title，这只来自 issue #3 的观察，客户端逆向里没有证据，也不保证所有账号都这样。
+- **读回失败视为结果未知**：列表请求出错、列表被截断且没找到、或重试后仍找不到时，返回 `create_unverified` / `update_unverified`，`outcome: "unknown"`，退出码 10（与 `sidebar_unverified`、`computer reset --wait` 超时一致），`error.details` 里带 `agent_id`、`requested` 和写接口回包的 name/title 供对账。之前这些情况会直接报成功。
+- **`--dry-run` 的 `note` 写明干跑无法发现服务端改名**；干跑结果也带 `requested` / `observed`（两者相同）和 `readback.attempts: 0`。
+- **不传 `--title` 时发送 `title: ""`**，与官方 App 一致（0.79.3 `dist/electron-main/main-app.cjs` 第 1117 行 `createGrokBotTemporalAgent({…,title:n.title??"",…})`，0.79.4 相同）。之前会把 `name` 当 title 发送；干跑结果里的 `bot.title` 也随之变为 `""`。
+- 每次真实 create / update 多一次（最多三次）`ListGrokBotAgents` 只读请求。
+
+## 0.5.0 — 2026-11-11（通过 GitHub tag `npm-v0.5.0` 分发，不发到 npmjs）
+
+### 新增
+
+- **`gbc account cleanup`：删除当前账号自己拥有的个人 Bot，再按现有 `computer reset` 重建共享电脑。** 这不是彻底账号重置，也不处理订阅、账号删除、Library、会话、连接器或未经证实的云端副作用。先 `--dry-run` 预览清单、数量、数据损失提示和计划指纹；真实执行必须 `--allow-writes`、`--confirm=ACCOUNT_CLEANUP` 以及与当前清单匹配的 `--plan=<fingerprint>`。清单被截断、权属不明、共享/团队/他人 Bot、或预览后列表变化时不会发出写请求。删除串行报告；任一条失败或结果未知则停止且不重建。重建前会再次只读核验，出现残留或新的可删 Bot 时不会继续删除或重置。0 个自有 Bot 在空计划匹配后仍可重建。`--hard` / `--wait` / `--timeout` 复用现有电脑重置语义。流程不是事务，已删除的 Bot 不能用本命令撤销。没有 dashboard 写入口，也不新增 MCP 工具。既有的单 Bot `bot delete` 和 `computer reset` 保持不变。
+
+安装：`npx -y --package=github:younglark/grokbot-control#npm-v0.5.0 gbc`（`gbc-mcp` 同样要加 `--package`）。
+
+## 0.4.2 — 2026-11-11（通过 GitHub tag `npm-v0.4.2` 分发，不发到 npmjs）
+
+源码 tag `v0.4.1` 已推送，但打 `npm-v` 时因 `npm pack --json` 的 stdout 被 vite 日志污染，**没有生成 `npm-v0.4.1`**。请不要删除或改写已推送的 `v0.4.1`。0.4.2 修复发版脚本解析，是该线上应由 Actions 生成的 GitHub 安装 tag。
+
+### 修复
+
+- **发版脚本能解析 `npm pack --json` 前的 vite/tsc 日志。** `prepack` 可能把带 ANSI 颜色的构建输出写到 stdout，导致 `scripts/release-github.mjs` 对整段 stdout 做 `JSON.parse` 失败。现与 `scripts/verify-package.mjs` 共用末尾 JSON 数组解析，不再因日志前缀铸不出 `npm-v*` tag。
+
+安装：`npx -y --package=github:younglark/grokbot-control#npm-v0.4.2 gbc`（`gbc-mcp` 同样要加 `--package`）。
+
+## 0.4.1 — 2026-11-11（行为变更已进入 main；`npm-v0.4.1` 未生成）
+
+源码 tag `v0.4.0` 已推送，但发版工作流在 `npm test` 处因 Playwright/Chromium dashboard UI 验收失败，**没有生成 `npm-v0.4.0`**。请不要删除或改写已推送的 `v0.4.0`。0.4.1 去掉这些重浏览器测试，是该线上应由 Actions 生成的 GitHub 安装 tag。
+
+### 修复
+
+- **默认 `npm test` 不再跑依赖 Playwright Chromium 的 dashboard UI 验收。** `packages/grokbot-control/test/dashboard-ui.test.ts` 只保留打包树存在性与 `resolveDashboardUiRoot` 等轻量检查。Workspace regression 不再执行 `npx playwright install --with-deps chromium`，也从 devDependencies 移除 playwright。未安装浏览器时，发版工作流不应再因「Chromium required…」失败。
+
+## 0.4.0 — 2026-11-11（行为变更已进入 main；`npm-v0.4.0` 未生成）
+
+### 新增
+
+- **本地只读监视器：`gbc dashboard`（亦接受 `gbc dashboard start`）。** 在回环地址启动一个近实时 Bot 监视页（本地轮询 + SSE），打印并打开带一次性路径 `/s/<随机>/` 的 URL。这是 CLI 命令，**不是**官方 protobuf `DashboardService`。不会通过 CLI、MCP 或 HTTP 暴露官方写 RPC（`Set*`、`ExecuteSandMcpTool`、`CancelSandTrial`、`SendTeamInvite` 等）。默认绑定 `127.0.0.1`，v1 拒绝非回环 `--host`。未登录时服务器仍会启动，页面提示在终端运行 `gbc auth login` 后刷新；页面不收集凭据。`--json` 输出一次含 `url` / `bind` / `opened` 的封套后保持运行；`--plain` 只打印 URL；`--no-open` 不打开浏览器。Ctrl+C / SIGTERM 退出码 0，不会中断远端 Bot。没有 v1 MCP dashboard 工具。
+- **本地监视器补充协议里已有的 Bot 信号。** 详情与总览只读展示：等待处理（审批、等待输入、桌面交接、正在重试）、当前动作（正在调用的工具/步骤与 `last_turn_settlement`）、数据新鲜度（上次成功刷新、分源失败/重试；空列表与读失败可区分）、最近动态（最后活动时间、未读、todo 创建/更新时间）、运行环境（共享电脑/沙箱是否在跑；未知或过期不会显示为绿色「运行中」）、渠道连接（Slack/Teams 是否已接上）。桌面交接指令只给收敛摘要；渠道展示不含 install/reinstall URL。不引入 Watch，也不展示资料类的创建时间、可见性或语音字段。
+- **第二期：任务区、活动时间线与用量明细。** 打开某个 Bot 详情时，约 10 秒轮询该 Bot 的 sessions / todos / tasks / subagents（多标签共享缓存 + singleflight，不会把全局 5 秒状态轮询按 Bot 放大）。用已有 history/transcript SDK 解析消息正文，展示活动时间线：运行中或等待中约 5 秒，否则 15–30 秒，仅活动列表离开视口时暂停刷新；浏览较早内容时显示「有新活动」，不强制滚到底部。`GetGrokBotUsageBreakdown` 首次调用不传 team id；若明细里带有 `bot_id`，对应 Bot 详情也会展示。todos / tasks / subagents 使用稳定 DTO；没有可靠数据时不编造待办。会话切换是本地查看成绩单的明确能力，需单独验收，不是默认关键路径；数据不足时只提供只读会话列表与当前会话，失败可见。
+
+### 说明
+
+- 「近实时」是本地轮询 + SSE，不是 `WatchGrokBotTranscripts`（该 RPC 不在已用表面，也未接线）。
+- `computer.state` 未经实时核验；未知或过期状态不会显示为绿色「运行中」，也不等同于离线。
+- `usage_percent` 按已经算好的百分比展示（例如 21.781372 显示为 21.78%），不再标注该字段「单位未核实」，也不会把 0–1 小数再乘 100。breakdown 中的 ppm 是占限额的百万分比，换算为百分比展示（例如 225439 ppm 显示为 22.54%），不再写成 225439%，也不再标注该字段「占比未核实」。金额/币种仍尚未 live 核实；包含额度为 0 时不绘制满额进度条；计费链接仅在接口返回完整 URL 时展示，不会拼接。不会猜测 team id 去取企业支出或事件。
+- 会话切换尚未作为默认关键路径验收：当前实现是本地只读查看成绩单，不是官方会话切换写操作。
+- OAuth 刷新仍未 live 核实。
+
+## 0.3.0 — 2026-11-11（通过 GitHub tag `npm-v0.3.0` 分发，不发到 npmjs）
+
+### 新增
+
+- **可选 bot 登录模式。** 默认仍是 CLI 登录（`redirectTarget=cli`，不加团队选择参数）。`--login-mode bot`、`GBT_LOGIN_MODE=bot` 或 MCP `login_mode: "bot"` 会使用与桌面 App 相同的 `loginDeepControl` URL（`redirectTarget=sand` + `supportsSelectedTeamLogin=true`）。不读取官方 App 凭据，也不发送官方客户端头。
+- **bot 模式登录轮询收束已 live 验证（2026-11-11）。** 得到 Cursor token（kind `cursor`，backend api2）。选中团队如何返回/绑定、是否需要 `x-cursor-team-id`、以及该模式之后的 OAuth 刷新仍未 live 验证。
+
+### 修复
+
+- **冲突的 `--login-mode` 不再静默后写覆盖。** 两个不一致的值以退出码 2（`usage`）失败；同一个值写两次可以通过。命令行参数覆盖 `GBT_LOGIN_MODE`。
+
+安装：`npx -y --package=github:younglark/grokbot-control#npm-v0.3.0 gbc`（`gbc-mcp` 同样要加 `--package`）。
+
 ## 0.2.1 — 2026-11-10（通过 GitHub tag `npm-v0.2.1` 分发，不发到 npmjs）
 
 源码 tag `v0.2.0` 已推送，但发版工作流在 `npm test` 处因后台 shell 测试挂起被取消，**没有生成 `npm-v0.2.0`**。请不要删除或改写已推送的 `v0.2.0`。0.2.1 是第一个应由 Actions 生成的 GitHub 安装 tag。

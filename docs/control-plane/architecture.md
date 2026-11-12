@@ -74,7 +74,7 @@ src/
 | 4 | auth |
 | 5 | not_found |
 | 6 | conflict（含 sidebar base 冲突） |
-| 7 | denied / dry-run 外的写拒绝 |
+| 7 | denied / dry-run 外的写拒绝；服务端拒收消息（`message send` 的 `delivery=refused`，code `refused`） |
 | 8 | retryable（瞬时） |
 | 9 | known_failure |
 | 10 | unknown outcome（丢响应、证据不足） |
@@ -90,6 +90,7 @@ src/
 ## 6. Auth
 
 - 独立 bootstrap（browser URL + 内存 verifier + poll）；secure store；refresh 跨进程单飞锁  
+- 默认登录模式 `cli`（`redirectTarget=cli`）。可选 `bot` 模式（`--login-mode=bot` / `GBT_LOGIN_MODE=bot` / SDK `loginMode: "bot"` / MCP `login_mode`）使用与官方 App 相同的 URL 形态（`redirectTarget=sand` + `supportsSelectedTeamLogin=true`），凭据仍只写 `~/.gbc`，不读取 App 存储。bot 模式登录轮询收束已于 2026-11-11 live 验证；选中团队如何返回/绑定、以及该模式之后的刷新仍未 live 验证。不猜测 team id、不伪造官方头  
 - account scope 与 `GBT_BASE_URL`（或配置 backend）绑定；自定义 backend 需显式信任确认，防 token 打到错误域（RFC9700 / 鉴权报告）  
 - Cursor vs xAI kind 分离；logout 只清本工具凭据  
 - 无 auto-approve；不读桌面 sand-secrets  

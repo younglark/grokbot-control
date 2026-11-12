@@ -6,6 +6,7 @@
 import { createRouterTransport } from "@connectrpc/connect";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { GrokBotService } from "#proto-gen/GrokBotService";
+import { DashboardService } from "#proto-gen/DashboardService";
 import type { SidebarSection } from "../dto/types.js";
 
 export type MockSandboxState = {
@@ -18,8 +19,45 @@ export type MockSandboxState = {
   migrationPhases?: Array<{ phase: number; detail?: string }>;
 };
 
+export type MockUsageFixture =
+  | "normal"
+  | "near_exhausted"
+  | "exhausted"
+  | "unlimited"
+  | "enterprise_shared"
+  | "failure";
+
+export type MockBreakdownFixture =
+  | "cents_by_source"
+  | "cents_by_bot"
+  | "ppm_weekly"
+  | "ppm_billing"
+  | "empty"
+  | "failure";
+
+export type MockCallCounts = {
+  listGrokBotAgents: number;
+  listGrokBotAgentStatuses: number;
+  getSandBoxRunState: number;
+  getGrokBotUserRuntimeSettings: number;
+  getSandUsageStatus: number;
+  getGrokBotUsageBreakdown: number;
+  listGrokBotAgentTodos: number;
+  listGrokBotAgentTasks: number;
+  listGrokBotSubagents: number;
+  listGrokBotAgentSessions: number;
+  listGrokBotTranscriptEntries: number;
+};
+
 export type MockState = {
   bots: Array<Record<string, unknown>>;
+  /** Official GetSandUsageStatus fixture for the local `gbc dashboard` monitor. */
+  usageFixture?: MockUsageFixture;
+  /** Official GetGrokBotUsageBreakdown fixture. */
+  breakdownFixture?: MockBreakdownFixture;
+  /** Last GetGrokBotUsageBreakdown request (to assert no team id). */
+  lastUsageBreakdownRequest?: unknown;
+  callCounts?: MockCallCounts;
   sections: SidebarSection[];
   /** Force next sidebar update to conflict. */
   forceSidebarConflict?: boolean;
@@ -33,7 +71,67 @@ export type MockState = {
   subagents: unknown[];
   transcript: unknown[];
   sandbox: MockSandboxState;
+  slackConnections?: Array<Record<string, unknown>>;
+  teamsConnections?: Array<Record<string, unknown>>;
+  /** Test hook: next transcript reads throw. */
+  failTranscript?: boolean;
+  /** Test hooks: force the named read RPC to fail. */
+  failListAgents?: boolean;
+  failStatuses?: boolean;
+  failSandbox?: boolean;
+  failTodos?: boolean;
+  failTasks?: boolean;
+  failSessions?: boolean;
+  /** Test hook: SendGrokBotUserMessage response (e.g. { dispatched: false, delivery: 4, refusal }). */
+  sendResponse?: Record<string, unknown>;
+  /** Test hook: GetGrokBotSendStatus response. */
+  sendStatusResponse?: Record<string, unknown>;
+  /** Last ListGrokBotTranscriptEntries request as seen by the server (after wire decode). */
+  lastTranscriptRequest?: { agentId: string; sessionId: string; limit: number };
+  /** Test hook: override the synthetic generation. */
+  transcriptGeneration?: number;
+  /** When true, ListGrokBotAgents returns truncated=true (incomplete inventory). */
+  listTruncated?: boolean;
+  /** Recorded write RPCs (delete / recreate / force-recreate). */
+  writeCalls?: Array<{ method: string; req: unknown }>;
+  /** Per-server-id delete hook: throw instead of removing the bot. */
+  deleteErrorById?: Record<string, "permission" | "unknown">;
+  /** Delete RPC succeeds but the bot is left in the list (residual). */
+  retainAfterDeleteIds?: string[];
+  /** Owned bots appended to later lists after at least one delete write. */
+  afterDeleteInjectBots?: Array<Record<string, unknown>>;
+  /**
+   * Simulate the server behaviour observed in issue #3: on create/update with a
+   * non-empty title, store name as "<name> · <title>" and clear title.
+   */
+  mergeTitleIntoName?: boolean;
+  /**
+   * Simulate read-after-write lag: a newly created agent is hidden from the next
+   * N ListGrokBotAgents calls. Use Infinity to keep it hidden forever.
+   */
+  createVisibilityDelayLists?: number;
+  /** Per-agent remaining hidden list reads (managed by the mock). */
+  hiddenAgentLists?: Record<string, number>;
+  /** Fail ListGrokBotAgents only after this many more successful calls (then fail until cleared). */
+  failListAgentsAfter?: number;
 };
+
+/**
+ * Transcript bodies are proto `bytes`. Accept the shapes a persisted mock state can
+ * hold after a JSON round trip (base64 string, Buffer JSON, index-keyed object).
+ */
+function mockBytes(v: unknown): Uint8Array | undefined {
+  if (v == null) return undefined;
+  if (v instanceof Uint8Array) return v;
+  if (typeof v === "string") return new Uint8Array(Buffer.from(v, "base64"));
+  if (Array.isArray(v)) return Uint8Array.from(v);
+  if (typeof v === "object") {
+    const o = v as Record<string, unknown>;
+    if (Array.isArray(o.data)) return Uint8Array.from(o.data as number[]);
+    return Uint8Array.from(Object.values(o) as number[]);
+  }
+  return undefined;
+}
 
 function defaultSandbox(): MockSandboxState {
   return {
@@ -60,7 +158,165 @@ export function createEmptyMockState(): MockState {
     tasks: [],
     subagents: [],
     transcript: [],
+    usageFixture: "normal",
+    breakdownFixture: "cents_by_source",
+    callCounts: emptyCallCounts(),
+    writeCalls: [],
   };
+}
+
+export function emptyCallCounts(): MockCallCounts {
+  return {
+    listGrokBotAgents: 0,
+    listGrokBotAgentStatuses: 0,
+    getSandBoxRunState: 0,
+    getGrokBotUserRuntimeSettings: 0,
+    getSandUsageStatus: 0,
+    getGrokBotUsageBreakdown: 0,
+    listGrokBotAgentTodos: 0,
+    listGrokBotAgentTasks: 0,
+    listGrokBotSubagents: 0,
+    listGrokBotAgentSessions: 0,
+    listGrokBotTranscriptEntries: 0,
+  };
+}
+
+function counts(state: MockState): MockCallCounts {
+  return (state.callCounts ??= emptyCallCounts());
+}
+
+function recordWrite(state: MockState, method: string, req: unknown): void {
+  (state.writeCalls ??= []).push({ method, req });
+}
+
+/** Issue #3 simulation: server folds a non-empty title into the display name. */
+function mergeTitle(state: MockState, name: string, title: string | undefined): { name: string; title: string } {
+  if (state.mergeTitleIntoName && title) return { name: `${name} · ${title}`, title: "" };
+  return { name, title: title ?? "" };
+}
+
+function ts(offsetSec = 0): { seconds: bigint; nanos: number } {
+  return { seconds: BigInt(Math.floor(Date.now() / 1000) + offsetSec), nanos: 0 };
+}
+
+/** Synthetic GetSandUsageStatus responses. Numbers are fixtures, not live data. */
+export function usageFixtureResponse(name: MockUsageFixture): Record<string, unknown> {
+  const base = {
+    currentPeriodStart: ts(-20 * 24 * 3600),
+    nextResetTimestampUtc: ts(10 * 24 * 3600),
+    availableBankedResetCount: 0n,
+    usesPooledEnterpriseAllowance: false,
+    sandTrialCancelable: false,
+    isTeamSeat: false,
+    isUnified: false,
+    billingBrand: 1,
+    accountMergePausingBots: false,
+  };
+  switch (name) {
+    case "near_exhausted":
+      return {
+        ...base,
+        usagePercent: 92,
+        includedLimitZero: false,
+        hasAvailableUsage: true,
+        hasNonZeroIncludedLimit: true,
+        cursorPlanName: "Pro",
+        grokPlanLabel: "SuperGrok",
+        availableBankedResetCount: 1n,
+      };
+    case "exhausted":
+      return {
+        ...base,
+        usagePercent: 100,
+        includedLimitZero: false,
+        hasAvailableUsage: false,
+        hasNonZeroIncludedLimit: true,
+        cursorPlanName: "Pro",
+        grokPlanLabel: "SuperGrok",
+      };
+    case "unlimited":
+      return {
+        ...base,
+        includedLimitZero: true,
+        hasAvailableUsage: true,
+        hasNonZeroIncludedLimit: false,
+        cursorPlanName: "Ultra",
+        // usagePercent omitted — do not invent a number when there is no included limit
+      };
+    case "enterprise_shared":
+      return {
+        ...base,
+        usagePercent: 41,
+        includedLimitZero: false,
+        hasAvailableUsage: true,
+        hasNonZeroIncludedLimit: true,
+        usesPooledEnterpriseAllowance: true,
+        isTeamSeat: true,
+        cursorPlanName: "Enterprise",
+      };
+    case "normal":
+    default:
+      return {
+        ...base,
+        usagePercent: 37,
+        includedLimitZero: false,
+        hasAvailableUsage: true,
+        hasNonZeroIncludedLimit: true,
+        cursorPlanName: "Pro",
+        grokPlanLabel: "SuperGrok",
+      };
+  }
+}
+
+
+const dayMs = 1_700_000_000_000n;
+
+/** Connect/protobuf-es oneof shape accepted by the DashboardService router transport. */
+function breakdownOneof(caseName: "billedCents" | "weeklyLimitPpm" | "billingCyclePpm", value: Record<string, unknown>): Record<string, unknown> {
+  return { breakdown: { case: caseName, value } };
+}
+
+/** Synthetic GetGrokBotUsageBreakdown responses. Numbers are fixtures, not live data. */
+export function usageBreakdownFixtureResponse(name: MockBreakdownFixture): Record<string, unknown> {
+  switch (name) {
+    case "cents_by_bot":
+      return breakdownOneof("billedCents", {
+        periodStartMs: dayMs,
+        periodEndMs: dayMs + 86_400_000n,
+        bySource: [],
+        byBot: [
+          { dayMs, botId: "agent-1", cents: 800n },
+          { dayMs, botId: "agent-2", cents: 200n },
+        ],
+      });
+    case "ppm_weekly":
+      return breakdownOneof("weeklyLimitPpm", {
+        periodStartMs: dayMs,
+        periodEndMs: dayMs + 86_400_000n,
+        bySource: [{ dayMs, source: 1, ppm: 225439 }],
+        byBot: [{ dayMs, botId: "agent-1", ppm: 225439 }],
+      });
+    case "ppm_billing":
+      return breakdownOneof("billingCyclePpm", {
+        periodStartMs: dayMs,
+        periodEndMs: dayMs + 86_400_000n,
+        bySource: [{ dayMs, source: 3, ppm: 100000 }],
+        byBot: [{ dayMs, botId: "agent-1", ppm: 80000 }],
+      });
+    case "empty":
+      return {};
+    case "cents_by_source":
+    default:
+      return breakdownOneof("billedCents", {
+        periodStartMs: dayMs,
+        periodEndMs: dayMs + 86_400_000n,
+        bySource: [
+          { dayMs, source: 1, cents: 1234n },
+          { dayMs, source: 2, cents: 50n },
+        ],
+        byBot: [{ dayMs, botId: "agent-1", cents: 900n }],
+      });
+  }
 }
 
 export function createMockTransport(state: MockState) {
@@ -84,6 +340,10 @@ export function createMockTransport(state: MockState) {
     };
     service(GrokBotService, {
       async getSandBoxRunState() {
+        counts(state).getSandBoxRunState += 1;
+        if (state.failSandbox) {
+          throw new ConnectError("simulated sandbox failure", Code.Unavailable);
+        }
         const s = sandbox();
         return {
           state: s.state,
@@ -91,10 +351,12 @@ export function createMockTransport(state: MockState) {
           image: s.image,
         };
       },
-      async recreateSandBox() {
+      async recreateSandBox(req) {
+        recordWrite(state, "RecreateSandBox", req ?? {});
         return startReset();
       },
-      async forceRecreateSandBox() {
+      async forceRecreateSandBox(req) {
+        recordWrite(state, "ForceRecreateSandBox", req ?? {});
         return startReset();
       },
       async *watchSandBoxMigration(req) {
@@ -114,19 +376,43 @@ export function createMockTransport(state: MockState) {
         }
       },
       async listGrokBotAgents() {
-        return { agents: state.bots, truncated: false, slackConnections: [], teamsConnections: [] };
+        counts(state).listGrokBotAgents += 1;
+        if (state.failListAgentsAfter !== undefined) {
+          if (state.failListAgentsAfter <= 0) state.failListAgents = true;
+          else state.failListAgentsAfter -= 1;
+        }
+        if (state.failListAgents) {
+          throw new ConnectError("simulated list failure", Code.Unavailable);
+        }
+        const hidden = state.hiddenAgentLists ?? {};
+        const agents = state.bots.filter((b) => {
+          const left = hidden[String(b.agentId ?? "")];
+          if (left === undefined || left <= 0) return true;
+          hidden[String(b.agentId ?? "")] = left - 1;
+          return false;
+        });
+        if ((state.writeCalls ?? []).some((c) => c.method === "DeleteGrokBotAgent") && state.afterDeleteInjectBots) {
+          agents.push(...state.afterDeleteInjectBots);
+        }
+        return {
+          agents,
+          truncated: Boolean(state.listTruncated),
+          slackConnections: state.slackConnections ?? [],
+          teamsConnections: state.teamsConnections ?? [],
+        };
       },
       async createGrokBotTemporalAgent(req) {
         if (state.dropNextWrite) {
           state.dropNextWrite = false;
           throw new ConnectError("simulated drop", Code.DeadlineExceeded);
         }
+        const merged = mergeTitle(state, req.name, req.title);
         const agent = {
           id: req.agentId,
           agentId: req.agentId,
-          name: req.name,
+          name: merged.name,
           description: req.description,
-          title: req.title,
+          title: merged.title,
           harness: "TEMPORAL",
           role: "agent",
           kind: 1,
@@ -143,6 +429,9 @@ export function createMockTransport(state: MockState) {
           people: [],
         };
         state.bots.push(agent);
+        if (state.createVisibilityDelayLists) {
+          (state.hiddenAgentLists ??= {})[req.agentId] = state.createVisibilityDelayLists;
+        }
         state.sessions.push({
           agentId: req.agentId,
           sessionId: `sess-${req.agentId}`,
@@ -166,15 +455,36 @@ export function createMockTransport(state: MockState) {
         if (req.name != null) b.name = req.name;
         if (req.description != null) b.description = req.description;
         if (req.title != null) b.title = req.title;
+        if (req.title != null && req.title !== "") {
+          const merged = mergeTitle(state, String(b.name ?? ""), req.title);
+          b.name = merged.name;
+          b.title = merged.title;
+        }
         return { agent: b };
       },
       async deleteGrokBotAgent(req) {
+        recordWrite(state, "DeleteGrokBotAgent", req ?? {});
         if (state.dropNextWrite) {
           state.dropNextWrite = false;
           throw new ConnectError("simulated drop", Code.DeadlineExceeded);
         }
+        const id = String(req.id ?? "");
+        const fail = state.deleteErrorById?.[id];
+        if (fail === "permission") {
+          throw new ConnectError("simulated permission denied", Code.PermissionDenied);
+        }
+        if (fail === "unknown") {
+          throw new ConnectError("simulated drop", Code.DeadlineExceeded);
+        }
+        const retain = new Set(state.retainAfterDeleteIds ?? []);
+        const match = (b: Record<string, unknown>) => String(b.agentId ?? "") !== id && String(b.id ?? "") !== id;
         const before = state.bots.length;
-        state.bots = state.bots.filter((b) => b.agentId !== req.id && b.id !== req.id);
+        if (retain.has(id)) {
+          const exists = state.bots.some((b) => !match(b));
+          if (!exists) throw new ConnectError("not found", Code.NotFound);
+          return {};
+        }
+        state.bots = state.bots.filter((b) => match(b));
         if (state.bots.length === before) throw new ConnectError("not found", Code.NotFound);
         return {};
       },
@@ -184,47 +494,116 @@ export function createMockTransport(state: MockState) {
           throw new ConnectError("simulated drop", Code.DeadlineExceeded);
         }
         state.messages.push({ ...req });
-        state.transcript.push({
-          id: `tr-${req.messageId}`,
-          kind: "user",
-          plaintext: req.text,
-        });
-        return { dispatched: true, delivery: 1 };
+        const override = state.sendResponse;
+        const refused = override?.delivery === 4;
+        if (!refused) {
+          // Schema-shaped row (GrokBotTranscriptEntry): UTF-8 JSON UI entry in `body` bytes.
+          // agentId/sessionId are mock-only filter keys; the wire drops them.
+          state.transcript.push({
+            entryId: `tr-${req.messageId}`,
+            seq: BigInt(state.transcript.length + 1),
+            entryKind: "message",
+            bodyOmitted: false,
+            body: new TextEncoder().encode(
+              JSON.stringify({
+                id: `tr-${req.messageId}`,
+                kind: "message",
+                role: "user",
+                content: req.text,
+                timestampMs: Number(req.sentAtMs ?? 0n),
+              }),
+            ),
+            agentId: req.agentId,
+            ...(req.sessionId ? { sessionId: req.sessionId } : {}),
+          });
+        }
+        return override ?? { dispatched: true, delivery: 1 };
       },
       async getGrokBotSendStatus(req) {
+        if (state.sendStatusResponse) return state.sendStatusResponse;
         const found = state.messages.find((m) => m.messageId === req.messageId);
         return {
-          status: found ? 2 : 0,
+          status: found ? 2 : 1,
           acceptedAtMs: found ? BigInt(Date.now()) : undefined,
         };
       },
-      async listGrokBotTranscriptEntries() {
-        return { entries: state.transcript, generation: 1 };
+      async listGrokBotTranscriptEntries(req) {
+        counts(state).listGrokBotTranscriptEntries += 1;
+        if (state.failTranscript) {
+          throw new ConnectError("simulated transcript failure", Code.Unavailable);
+        }
+        state.lastTranscriptRequest = {
+          agentId: req.agentId,
+          sessionId: req.sessionId,
+          limit: req.limit,
+        };
+        const entries = state.transcript
+          .filter((e) => {
+            const row = e;
+            if (row.agentId && row.agentId !== req.agentId) return false;
+            if (req.sessionId && row.sessionId && row.sessionId !== req.sessionId) return false;
+            return true;
+          })
+          .map((e) => (e && e.body != null ? { ...e, body: mockBytes(e.body) } : e));
+        return { entries, generation: state.transcriptGeneration ?? 1 };
       },
       async listGrokBotAgentSessions(req) {
+        counts(state).listGrokBotAgentSessions += 1;
+        if (state.failSessions) {
+          throw new ConnectError("simulated sessions failure", Code.Unavailable);
+        }
         return {
           sessions: state.sessions.filter((s) => s.agentId === req.agentId),
         };
       },
       async listGrokBotAgentStatuses(req) {
+        counts(state).listGrokBotAgentStatuses += 1;
+        if (state.failStatuses) {
+          throw new ConnectError("simulated status failure", Code.Unavailable);
+        }
         const ids = new Set(req.agentIds);
         return {
           statuses: state.statuses.filter((s) => ids.has(String(s.agentId))),
         };
       },
-      async listGrokBotAgentTodos() {
-        return { todos: state.todos };
+      async listGrokBotAgentTodos(req) {
+        counts(state).listGrokBotAgentTodos += 1;
+        if (state.failTodos) {
+          throw new ConnectError("simulated todos failure", Code.Unavailable);
+        }
+        return {
+          todos: state.todos.filter((t) => {
+            const row = t;
+            return !row.agentId || row.agentId === req.agentId;
+          }),
+        };
       },
-      async listGrokBotAgentTasks() {
-        return { tasks: state.tasks };
+      async listGrokBotAgentTasks(req) {
+        counts(state).listGrokBotAgentTasks += 1;
+        if (state.failTasks) {
+          throw new ConnectError("simulated tasks failure", Code.Unavailable);
+        }
+        return {
+          tasks: state.tasks.filter((x) => {
+            const row = x;
+            return !row.agentId || row.agentId === req.agentId;
+          }),
+        };
       },
-      async listGrokBotSubagents() {
-        return { subagents: state.subagents };
+      async listGrokBotSubagents(req) {
+        counts(state).listGrokBotSubagents += 1;
+        return {
+          subagents: state.subagents.filter((s) => {
+            const row = s;
+            return !row.agentId || row.agentId === req.agentId;
+          }),
+        };
       },
       async interruptGrokBotAgentRun() {
         return { hadActiveRun: true };
       },
       async getGrokBotUserRuntimeSettings() {
+        counts(state).getGrokBotUserRuntimeSettings += 1;
         return {
           settings: {
             sidebarSections: {
@@ -286,6 +665,26 @@ export function createMockTransport(state: MockState) {
             xToolAccess: 0,
           },
         };
+      },
+    });
+    // Official DashboardService read fixture only. No write RPCs are implemented.
+    service(DashboardService, {
+      async getSandUsageStatus() {
+        counts(state).getSandUsageStatus += 1;
+        const fixture = state.usageFixture ?? "normal";
+        if (fixture === "failure") {
+          throw new ConnectError("simulated usage failure", Code.Unavailable);
+        }
+        return usageFixtureResponse(fixture);
+      },
+      async getGrokBotUsageBreakdown(req) {
+        counts(state).getGrokBotUsageBreakdown += 1;
+        state.lastUsageBreakdownRequest = req ?? {};
+        const fixture = state.breakdownFixture ?? "cents_by_source";
+        if (fixture === "failure") {
+          throw new ConnectError("simulated breakdown failure", Code.Unavailable);
+        }
+        return usageBreakdownFixtureResponse(fixture);
       },
     });
   });

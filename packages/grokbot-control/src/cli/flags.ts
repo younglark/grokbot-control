@@ -10,10 +10,10 @@ export const COMMAND_FLAGS: Record<string, Record<string, FlagSpec>> = {
   auth: {
     whoami: { values: [], switches: [] },
     status: { values: [], switches: [] },
-    "login-begin": { values: [], switches: [] },
+    "login-begin": { values: ["--login-mode"], switches: [] },
     poll: { values: [], switches: [] },
     complete: { values: ["--timeout"], switches: [] },
-    login: { values: ["--timeout"], switches: [] },
+    login: { values: ["--timeout", "--login-mode"], switches: [] },
     cancel: { values: [], switches: [] },
     refresh: { values: [], switches: ["--force"] },
     logout: { values: [], switches: [] },
@@ -22,14 +22,20 @@ export const COMMAND_FLAGS: Record<string, Record<string, FlagSpec>> = {
     state: { values: [], switches: [] },
     reset: { values: ["--confirm", "--timeout"], switches: ["--hard", "--wait"] },
   },
+  account: {
+    cleanup: { values: ["--confirm", "--plan", "--timeout"], switches: ["--hard", "--wait"] },
+  },
   bot: {
     list: { values: ["--limit", "--offset"], switches: [] },
     get: { values: ["--agent-id"], switches: [] },
     create: {
-      values: ["--name", "--description", "--title", "--agent-id", "--language"],
+      values: ["--name", "--description", "--description-file", "--title", "--agent-id", "--language"],
       switches: ["--kickstart"],
     },
-    update: { values: ["--agent-id", "--name", "--description", "--title"], switches: [] },
+    update: {
+      values: ["--agent-id", "--name", "--description", "--description-file", "--title"],
+      switches: [],
+    },
     delete: { values: ["--agent-id", "--confirm"], switches: [] },
     status: { values: ["--agent-id"], switches: [] },
     todos: { values: ["--agent-id"], switches: [] },
@@ -46,10 +52,13 @@ export const COMMAND_FLAGS: Record<string, Record<string, FlagSpec>> = {
       switches: ["--text-stdin"],
     },
     status: { values: ["--agent-id", "--session-id", "--message-id"], switches: [] },
-    history: { values: ["--agent-id", "--limit", "--offset"], switches: [] },
+    history: { values: ["--agent-id", "--session-id", "--limit", "--offset"], switches: ["--full"] },
   },
   session: {
     list: { values: ["--agent-id", "--limit", "--offset"], switches: [] },
+  },
+  dashboard: {
+    start: { values: ["--port", "--host"], switches: ["--no-open"] },
   },
   sidebar: {
     list: { values: ["--limit", "--offset"], switches: [] },
@@ -69,6 +78,7 @@ export const GLOBAL_FLAGS = [
   "--trust-backend",
   "--base-url",
   "--auth-kind",
+  "--login-mode",
   "--help",
   "-h",
 ];

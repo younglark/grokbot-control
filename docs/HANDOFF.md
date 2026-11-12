@@ -4,8 +4,8 @@
 
 ## 1. 一句话现状
 
-- **控制面**（`grokbot-control`）：已实现。从 0.2.1 起通过 GitHub tag `npm-v0.2.1` 分发（`npx -y --package=github:younglark/grokbot-control#npm-v0.2.1 gbc`），由推送 `v0.2.1` 后的 Actions 生成该 tag，不再向 npmjs 发布。已推送的 `v0.2.0` 不要改写；其发版任务因测试挂起被取消，没有生成 `npm-v0.2.0`。npmjs 上的 `grokbot-control@0.1.3` 已停止更新。离线测试覆盖完整；live 只验证过登录和三个只读 RPC，以及一次隔离的同步验收。详见 packages/grokbot-control/CHANGELOG.md 与 [development.md](development.md) 的发版一节。
-- **协议**：2026-11-11 在分支 `protocol/0.79.4` 上升级到 App 0.79.4（新冻结目录 `schema-0.79.4` / `schema-0.79.4-daemon-exec`；schema 只多 2 个 optional 字段，控制面已用面与鉴权锚点不变）。结论见 [protocol/app-0.79.4-delta.md](protocol/app-0.79.4-delta.md)。
+- **控制面**（`grokbot-control`）：已实现。当前通过 GitHub tag `npm-v0.6.0` 分发（`npx -y --package=github:younglark/grokbot-control#npm-v0.6.0 gbc`），由推送 `v0.6.0` 后的 Actions 生成该 tag，不再向 npmjs 发布。已推送的 `v0.2.0` / `v0.2.1` / `v0.3.0` / `v0.4.0` / `v0.4.1` / `v0.4.2` 不要改写；`v0.2.0` 的发版任务因测试挂起被取消，没有生成 `npm-v0.2.0`；`v0.4.0` 的发版工作流在 `npm test` 处因 Playwright/Chromium 失败，没有生成 `npm-v0.4.0`；`v0.4.1` 打 `npm-v` 时因 `npm pack --json` 被 vite 日志污染而失败，没有生成 `npm-v0.4.1`。npmjs 上的 `grokbot-control@0.1.3` 已停止更新。离线测试覆盖完整；live 验证过 CLI 登录、2026-11-11 的 bot 模式轮询收束、三个只读 RPC，以及一次隔离的同步验收。选中团队绑定与 OAuth 刷新仍未 live 验证。详见 packages/grokbot-control/CHANGELOG.md 与 [development.md](development.md) 的发版一节。
+- **协议**：2026-11-11 升级到 App 0.79.4（经分支 `protocol/0.79.4` 合入）（新冻结目录 `schema-0.79.4` / `schema-0.79.4-daemon-exec`；schema 只多 2 个 optional 字段，控制面已用面与鉴权锚点不变）。结论见 [protocol/app-0.79.4-delta.md](protocol/app-0.79.4-delta.md)。
 - **local-exec-daemon**：按 App 0.79.3 原版 daemon 逐函数移植；0.79.4 daemon 只改了 LAt 内置版本（D:78971），已同步。Linux 上可达、可观测的路径已对齐，有 D: 行号证据和测试；通过了合成后端的门控验收（48 步矩阵：41 步一致、7 步发现差异已修复；另有 2 项 Linux 不可达）。**完整替换验收没有做**，不能说是无条件 drop-in。
 - **无头注册 / Docker**：只有设计边界，没有代码。
 
@@ -14,7 +14,7 @@
 | 领域 | 内容 | 入口文档 |
 |---|---|---|
 | 协议 | 0.79.4 schema 冻结（`schema-0.79.4` + 增补 Exec 闭包的 `schema-0.79.4-daemon-exec`；0.79.3 两个目录保留），一个生成器同时产出 control ESM 和 daemon TS | [protocol/](protocol/README.md) |
-| 控制面 | bot / message / session / sidebar / progress / computer / auth / sync，CLI 与 MCP 语义一致；原生跨进程刷新锁 | [control-plane/](control-plane/README.md) |
+| 控制面 | bot / message / session / sidebar / progress / computer / auth / sync，CLI 与 MCP 语义一致；原生跨进程刷新锁；本地 `gbc dashboard` 只读监视器（轮询 + SSE，不是官方 DashboardService） | [control-plane/](control-plane/README.md) |
 | daemon 启动 | IPC / Electron parentPort 交接、crash guard、启动 env 与 fd 清理、代理 env、discovery、ownership | [local-exec/overview.md](local-exec/overview.md) |
 | daemon 通道 | Box（SSE + POST）、UC（Watch/Poll/Submit/Withdraw）、连接交换、续订、unauthorized、network-change、backendReturn、outage ledger、多账号 | 同上 |
 | daemon 执行器 | 原版 Tft 只注册 4 个：shellStream、backgroundShell、read、ls；denylist（tree-sitter）、sandboxPolicy、spawnWorkload（Md/CE/cgroup/FUSE/oom） | [local-exec/remaining-diffs.md](local-exec/remaining-diffs.md) |

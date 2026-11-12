@@ -9,7 +9,7 @@ commands: [protocol-map.md](protocol-map.md) (section Auth). This page records
 | Step | Behaviour | Stable anchor (search the extracted bundle) | 0.79.2 location (A=main-app.cjs) | Level |
 |---|---|---|---|---|
 | Challenge | verifier = base64url(32 random bytes); challenge = base64url(sha256(verifier)); uuid | `randomBytes(32)` next to `"/loginDeepControl"` | fn `Rdn` (prettified A:38644) | S, O |
-| Login URL | `{website}/loginDeepControl?challenge&uuid&mode=login&redirectTarget=<t>[&supportsSelectedTeamLogin=true]`; website default `https://cursor.com` | `"/loginDeepControl"`, `"redirectTarget"` | `Rdn`; library default target `cli` (A:38845) | S, O, **L** (`cli`, 2026-11-07) |
+| Login URL | `{website}/loginDeepControl?challenge&uuid&mode=login&redirectTarget=<t>[&supportsSelectedTeamLogin=true]`; website default `https://cursor.com`. Default login mode `cli` uses `redirectTarget=cli` and omits the team-login param (**L**, 2026-11-07). Optional mode `bot` uses `redirectTarget=sand` (A:49834) and `supportsSelectedTeamLogin=true` (Rdn); URL + `/auth/poll` completion **L** 2026-11-11. | `"/loginDeepControl"`, `"redirectTarget"`, `"supportsSelectedTeamLogin"` | `Rdn`; library default target `cli` (A:38845); App target `sand` (A:49834) | S, O, **L** (`cli` 2026-11-07; `bot` poll 2026-11-11) |
 | Poll | `GET {api}/auth/poll?uuid=&verifier=`; 404 = pending; 1 s×1.2^i ≤ 10 s; ≤ 150 tries; 3 consecutive non-404 → stop | `` `${n}/auth/poll` `` | fns `Aze`, `xdn`, `Odn` | S, O, **L** |
 | Policy denial | 403 `{error:"sign_in_policy_violation"}` | `sign_in_policy_violation` | constant `Nh` | S, O |
 | Result | `{accessToken, refreshToken}`; xAI identity `{xaiAccessToken, …}` → unsupported here | `xaiAccessToken` | fns `Cdn`, `mze` | S, O, **L** (cursor kind) |
@@ -24,6 +24,14 @@ Boundaries:
   `"delivered"` result, near offset ~1.14 MB). Not analysed; check it first on the next version bump.
 - Device policy header `x-cursor-mdm-signin-policy` and App client headers are not sent/forged.
 - App credential storage (`sand-secrets.json` under Electron userData) is documented only so it is NOT reused.
+- Optional **bot** login mode only changes the `loginDeepControl` query string to the App URL shape. It does not
+  reuse official App sessions, read the keychain, or guess a team id. Login poll completion with
+  `redirectTarget=sand` was live-verified on 2026-11-11 (Cursor token, api2). Whether the URL also
+  deep-links into the official App, whether a selected team is returned by `/auth/poll`, whether that
+  team must be stored or sent as `x-cursor-team-id`, and whether refresh after a bot-mode login works,
+  are **not live-verified**.
+  Static evidence covers the URL parameters (`sand` at A:49834; optional `supportsSelectedTeamLogin=true` in
+  Rdn) but not those callbacks. `GBT_LOGIN_REDIRECT_TARGET` remains a compatible redirect-only override.
 
 
 ## Token auto-refresh state machine

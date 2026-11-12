@@ -3,6 +3,7 @@ import { createConnectTransport } from "@connectrpc/connect-node";
 import { Code, ConnectError } from "@connectrpc/connect";
 import type { Interceptor, Transport, UnaryRequest } from "@connectrpc/connect";
 import { GrokBotService } from "#proto-gen/GrokBotService";
+import { DashboardService } from "#proto-gen/DashboardService";
 import type { AuthProvider } from "../auth/types.js";
 import { GbcError } from "../errors.js";
 
@@ -39,6 +40,10 @@ export const READ_ONLY_UNARY_METHODS = new Set([
   "GetSandBoxRunState",
   "ResolveGrokBotAttachmentReads",
   "PresignSandBoxStoreReads",
+  "GetSandUsageStatus",
+  // Local `gbc dashboard` calls this official read RPC without enterprise_team_id.
+  // Eligible for one 401 refresh+retry. Never invent a team id.
+  "GetGrokBotUsageBreakdown",
 ]);
 
 function isUnauthenticated(err: unknown): boolean {
@@ -162,19 +167,42 @@ export function createAuthInterceptor(auth: AuthProvider): Interceptor {
   };
 }
 
-export function createGrokBotClient(cfg: ConnectConfig): GrokBotClient {
+/**
+ * Shared Connect transport for GrokBotService and the official DashboardService
+ * stub. Callers should construct this once and pass the same `transport` into
+ * both clients so interceptors (auth / 401 retry) are not duplicated.
+ */
+export function createPlaneTransport(cfg: ConnectConfig): Transport {
+  if (cfg.transport) return cfg.transport;
   const interceptors: Interceptor[] = [];
   if (cfg.auth) interceptors.push(createAuthInterceptor(cfg.auth));
-  const transport =
-    cfg.transport ??
-    createConnectTransport({
-      baseUrl: cfg.baseUrl.replace(/\/$/, ""),
-      httpVersion: "1.1",
-      readMaxBytes: cfg.readMaxBytes,
-      interceptors,
-    });
+  return createConnectTransport({
+    baseUrl: cfg.baseUrl.replace(/\/$/, ""),
+    httpVersion: "1.1",
+    readMaxBytes: cfg.readMaxBytes,
+    interceptors,
+  });
+}
+
+export function createGrokBotClient(cfg: ConnectConfig): GrokBotClient {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return createClient(GrokBotService as any, transport);
+  return createClient(GrokBotService as any, createPlaneTransport(cfg));
+}
+
+/**
+ * Official `aiserver.v1.DashboardService` Connect client (generated stub).
+ * This is not the local CLI command `gbc dashboard`. The official service has
+ * many write RPCs (Set*, ExecuteSandMcpTool, CancelSandTrial, SendTeamInvite,
+ * etc.). Callers must wrap only explicitly approved read RPCs and must never
+ * expose official write RPCs via CLI, MCP, or HTTP — even if the process was
+ * started with `--allow-writes`.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type DashboardServiceClient = any;
+
+export function createDashboardServiceClient(cfg: ConnectConfig): DashboardServiceClient {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return createClient(DashboardService as any, createPlaneTransport(cfg));
 }
 
 /**

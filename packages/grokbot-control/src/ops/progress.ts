@@ -1,9 +1,9 @@
 import type { GrokBotClient } from "../connect/client.js";
 import { mapConnectError } from "../connect/client.js";
 import { failResult, newRequestId, okResult, type ResultEnvelope } from "../dto/result.js";
-import type { ProgressStatus } from "../dto/types.js";
+import type { AgentTaskView, ProgressStatus, SubagentView, TodoItemView } from "../dto/types.js";
 import { GbcError } from "../errors.js";
-import { mapStatus } from "./map.js";
+import { mapStatus, mapSubagents, mapTasks, mapTodos } from "./map.js";
 
 export class ProgressOps {
   constructor(
@@ -26,31 +26,31 @@ export class ProgressOps {
     }
   }
 
-  async todos(agentId: string): Promise<ResultEnvelope<{ todos: unknown[] }>> {
+  async todos(agentId: string): Promise<ResultEnvelope<{ todos: TodoItemView[] }>> {
     const request_id = newRequestId();
     try {
       const res = await this.client.listGrokBotAgentTodos({ agentId });
-      return this.sim(okResult({ todos: res.todos ?? [] }, { request_id }));
+      return this.sim(okResult({ todos: mapTodos(res.todos ?? []) }, { request_id }));
     } catch (e) {
       return this.fromErr(e, request_id);
     }
   }
 
-  async tasks(agentId: string): Promise<ResultEnvelope<{ tasks: unknown[] }>> {
+  async tasks(agentId: string): Promise<ResultEnvelope<{ tasks: AgentTaskView[] }>> {
     const request_id = newRequestId();
     try {
       const res = await this.client.listGrokBotAgentTasks({ agentId });
-      return this.sim(okResult({ tasks: res.tasks ?? [] }, { request_id }));
+      return this.sim(okResult({ tasks: mapTasks(res.tasks ?? []) }, { request_id }));
     } catch (e) {
       return this.fromErr(e, request_id);
     }
   }
 
-  async subagents(agentId: string): Promise<ResultEnvelope<{ subagents: unknown[] }>> {
+  async subagents(agentId: string): Promise<ResultEnvelope<{ subagents: SubagentView[] }>> {
     const request_id = newRequestId();
     try {
       const res = await this.client.listGrokBotSubagents({ agentId });
-      return this.sim(okResult({ subagents: res.subagents ?? [] }, { request_id }));
+      return this.sim(okResult({ subagents: mapSubagents(res.subagents ?? []) }, { request_id }));
     } catch (e) {
       return this.fromErr(e, request_id);
     }

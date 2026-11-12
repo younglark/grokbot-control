@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import { lastJsonValue } from './npm-pack-json.mjs';
 
 export const EXIT = Object.freeze({
   ok: 0,
@@ -426,7 +427,7 @@ export async function releaseGithub(repo, opts, env = process.env) {
   const sandbox = mkdtempSync(join(tmpdir(), 'gbc-release-github-'));
   try {
     log(`packing grokbot-control@${version}`);
-    const packed = JSON.parse(runNpm(repo, ['pack', '-w', 'grokbot-control', '--json', '--pack-destination', sandbox], 180_000))[0];
+    const packed = lastJsonValue(runNpm(repo, ['pack', '-w', 'grokbot-control', '--json', '--pack-destination', sandbox], 180_000))[0];
     const tarball = join(sandbox, packed.filename);
     extractTarball(tarball, sandbox);
     const workTree = join(sandbox, 'package');

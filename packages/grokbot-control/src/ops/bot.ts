@@ -7,10 +7,53 @@ import {
   okResult,
   type ResultEnvelope,
 } from "../dto/result.js";
-import type { BotSummary } from "../dto/types.js";
+import type { BotSummary, ChannelConnectionView } from "../dto/types.js";
 import { GbcError } from "../errors.js";
-import { mapBot } from "./map.js";
+import { mapBot, mapChannelConnections } from "./map.js";
 import { paginate, validateLimit, validateOffset } from "./limits.js";
+
+/** Name/title pair as sent to (requested) or read back from (observed) the server. */
+export type BotNameTitle = { name: string; title: string };
+
+/**
+ * Read-back comparison after a successful create/update.
+ * `requested` fields are null on update when that field was not part of the patch.
+ */
+export type BotReadback = {
+  requested: { name: string | null; title: string | null };
+  observed: BotNameTitle;
+  /** True when any requested field differs from the read-back (e.g. title merged into name). */
+  renamed_by_server: boolean;
+  /** Fields whose read-back differs from the request. */
+  changed_fields: Array<"name" | "title">;
+  readback: { source: "ListGrokBotAgents"; attempts: number };
+};
+
+export type BotCreateData = BotReadback & {
+  /** The bot as read back from ListGrokBotAgents (authoritative display name). */
+  bot: BotSummary;
+  agent_id: string;
+  note?: string;
+};
+
+export type BotUpdateData = BotReadback & { bot: BotSummary; note?: string };
+
+export type BotOpsOptions = {
+  simulated?: boolean;
+  /**
+   * Delays (ms) before read-back retries. Default [300, 900]: at most 3 list
+   * reads, ~1.2s of sleeping, and never past READBACK_BUDGET_MS. Only "agent not
+   * in a complete list" is retried; a found agent is final.
+   */
+  readbackDelaysMs?: number[];
+};
+
+export const READBACK_DELAYS_MS = [300, 900] as const;
+export const READBACK_BUDGET_MS = 3000;
+
+/** Observed (issue #3), not proven by client reverse engineering. */
+export const TITLE_MERGE_NOTE =
+  "The server has been observed to merge title into the display name (e.g. \"Showrunner · 幕僚长\") and clear title; not guaranteed for every account. No client-side evidence for this in the App bundle.";
 
 export type WriteOpts = {
   dryRun?: boolean;
@@ -36,8 +79,42 @@ function requireWrite(opts: WriteOpts | undefined, action: string) {
 export class BotOps {
   constructor(
     private client: GrokBotClient,
-    private flags: { simulated?: boolean } = {},
+    private flags: BotOpsOptions = {},
   ) {}
+
+  /**
+   * Read one agent back from ListGrokBotAgents with short retries while it is
+   * absent from a complete list. Returns found bot or the reason it was not
+   * verified. Never throws.
+   */
+  private async readBack(agentId: string): Promise<
+    | { found: true; bot: BotSummary; attempts: number }
+    | { found: false; reason: "list_failed" | "truncated" | "not_found"; attempts: number; error?: string }
+  > {
+    const delays = this.flags.readbackDelaysMs ?? [...READBACK_DELAYS_MS];
+    const started = Date.now();
+    let attempts = 0;
+    for (;;) {
+      attempts += 1;
+      let res: Awaited<ReturnType<GrokBotClient["listGrokBotAgents"]>>;
+      try {
+        res = await this.client.listGrokBotAgents({});
+      } catch (e) {
+        const err = e instanceof GbcError ? e : mapConnectError(e, "");
+        return { found: false, reason: "list_failed", attempts, error: err.message };
+      }
+      const bot = (res.agents ?? [])
+        .map(mapBot)
+        .find((b: BotSummary) => b.agent_id === agentId);
+      if (bot) return { found: true, bot, attempts };
+      if (res.truncated) return { found: false, reason: "truncated", attempts };
+      const delay = delays[attempts - 1];
+      if (delay === undefined || Date.now() - started + delay > READBACK_BUDGET_MS) {
+        return { found: false, reason: "not_found", attempts };
+      }
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
 
   private wrapSim<T>(r: ResultEnvelope<T>): ResultEnvelope<T> {
     if (this.flags.simulated) r.simulated = true;
@@ -70,6 +147,7 @@ export class BotOps {
       truncated: boolean;
       next?: string;
       hint?: string;
+      channels: ChannelConnectionView[];
     }>
   > {
     const request_id = newRequestId();
@@ -85,6 +163,7 @@ export class BotOps {
         ?? (serverTruncated
           ? "Server reported a truncated agent list; this page may be incomplete."
           : undefined);
+      const channels: ChannelConnectionView[] = mapChannelConnections(res);
       return this.wrapSim(
         okResult(
           {
@@ -92,6 +171,7 @@ export class BotOps {
             truncated,
             next: page.next,
             hint,
+            channels,
           },
           { request_id },
         ),
@@ -149,39 +229,53 @@ export class BotOps {
       kickstart?: boolean;
     },
     write?: WriteOpts,
-  ): Promise<ResultEnvelope<{ bot: BotSummary; agent_id: string }>> {
+  ): Promise<ResultEnvelope<BotCreateData>> {
     const request_id = newRequestId();
+    // Align with the App: 0.79.3 dist/electron-main/main-app.cjs (sha256 d54cc236…a268209,
+    // line 1117) calls createGrokBotTemporalAgent({..., title: n.title ?? "", ...}); 0.79.4 is
+    // the same. The App never substitutes name for a missing title (gbc did before 0.6.0).
+    const title = input.title ?? "";
+    const requested = { name: input.name, title };
     if (write?.dryRun) {
+      const agent_id = input.agentId || "(dry-run-nonce)";
       return this.wrapSim(
         okResult(
           {
             bot: {
-              agent_id: input.agentId || "(dry-run-nonce)",
+              agent_id,
               id: "",
               name: input.name,
               description: input.description || "",
-              title: input.title || input.name,
+              title,
               harness: "TEMPORAL",
               role: "",
               kind: "",
               viewer_session_id: "",
             },
-            agent_id: input.agentId || "(dry-run-nonce)",
+            agent_id,
+            requested,
+            observed: { ...requested },
+            renamed_by_server: false,
+            changed_fields: [],
+            readback: { source: "ListGrokBotAgents", attempts: 0 },
+            note: `dry-run: no RPC sent; observed equals requested and cannot reveal a server-side rename. ${TITLE_MERGE_NOTE}`,
           },
           { request_id, code: "dry_run" },
         ),
       );
     }
+    let agentId: string;
+    let created: BotSummary;
     try {
       requireWrite(write, "bot.create");
-      const agentId = input.agentId || crypto.randomUUID();
+      agentId = input.agentId || crypto.randomUUID();
       // App Temporal path: CreateGrokBotTemporalAgent with CreateGrokBotAgentRequest fields.
       // Drift (visibility/teamId/botBuilderRequested) intentionally NOT sent — not in 0.78.4 Request.
       const res = await this.client.createGrokBotTemporalAgent({
         agentId,
         name: input.name,
         description: input.description ?? "",
-        title: input.title ?? input.name,
+        title,
         avatarShape: "circle",
         avatarColor: "#888888",
         harness: GrokBotAgentHarnessKind.TEMPORAL,
@@ -189,21 +283,53 @@ export class BotOps {
         introductionSuppressed: !(input.kickstart ?? false),
         language: input.language,
       });
-      const bot = mapBot(res.agent);
-      return this.wrapSim(
-        okResult({ bot, agent_id: bot.agent_id || agentId }, { request_id }),
-      );
+      created = mapBot(res.agent);
+      agentId = created.agent_id || agentId;
     } catch (e) {
       return this.fromErr(e, request_id, true);
     }
+    const rb = await this.readBack(agentId);
+    if (!rb.found) {
+      return this.wrapSim(
+        failResult(
+          "create_unverified",
+          `CreateGrokBotTemporalAgent succeeded but read-back ${readbackReason(rb.reason)}; display name unknown`,
+          {
+            request_id,
+            outcome: "unknown",
+            hint: `The bot was probably created. Reconcile with \`gbc bot get --agent-id ${agentId}\` before retrying; do not assume the requested name is the display name.`,
+            details: {
+              agent_id: agentId,
+              write_sent: true,
+              requested,
+              create_response: { name: created.name, title: created.title },
+              readback: { source: "ListGrokBotAgents", attempts: rb.attempts, reason: rb.reason, error: rb.error },
+            },
+          },
+        ),
+      );
+    }
+    const cmp = compareReadback(requested, rb.bot, rb.attempts);
+    return this.wrapSim(
+      okResult(
+        {
+          bot: rb.bot,
+          agent_id: agentId,
+          ...cmp,
+          note: cmp.renamed_by_server ? TITLE_MERGE_NOTE : undefined,
+        },
+        { request_id },
+      ),
+    );
   }
 
   async update(
     agentId: string,
     patch: { name?: string; description?: string; title?: string },
     write?: WriteOpts,
-  ): Promise<ResultEnvelope<{ bot: BotSummary }>> {
+  ): Promise<ResultEnvelope<BotUpdateData>> {
     const request_id = newRequestId();
+    const requested = { name: patch.name ?? null, title: patch.title ?? null };
     if (write?.dryRun) {
       return this.wrapSim(
         okResult(
@@ -219,11 +345,19 @@ export class BotOps {
               kind: "",
               viewer_session_id: "",
             },
+            requested,
+            observed: { name: patch.name ?? "", title: patch.title ?? "" },
+            renamed_by_server: false,
+            changed_fields: [],
+            readback: { source: "ListGrokBotAgents", attempts: 0 },
+            note: `dry-run: no RPC sent; cannot reveal a server-side rename. ${TITLE_MERGE_NOTE}`,
           },
           { request_id, code: "dry_run" },
         ),
       );
     }
+    let resolvedAgentId = agentId;
+    let updated: BotSummary;
     try {
       requireWrite(write, "bot.update");
       const res = await this.client.updateGrokBotAgent({
@@ -233,10 +367,40 @@ export class BotOps {
         title: patch.title,
         partialUpdate: true,
       });
-      return this.wrapSim(okResult({ bot: mapBot(res.agent) }, { request_id }));
+      updated = mapBot(res.agent);
+      // Numeric server id input: the response carries the agent_id used for read-back.
+      if (/^\d+$/.test(agentId) && updated.agent_id) resolvedAgentId = updated.agent_id;
     } catch (e) {
       return this.fromErr(e, request_id, true);
     }
+    const rb = await this.readBack(resolvedAgentId);
+    if (!rb.found) {
+      return this.wrapSim(
+        failResult(
+          "update_unverified",
+          `UpdateGrokBotAgent succeeded but read-back ${readbackReason(rb.reason)}; current name/title unknown`,
+          {
+            request_id,
+            outcome: "unknown",
+            hint: `Reconcile with \`gbc bot get --agent-id ${resolvedAgentId}\` before retrying.`,
+            details: {
+              agent_id: resolvedAgentId,
+              write_sent: true,
+              requested,
+              update_response: { name: updated.name, title: updated.title },
+              readback: { source: "ListGrokBotAgents", attempts: rb.attempts, reason: rb.reason, error: rb.error },
+            },
+          },
+        ),
+      );
+    }
+    const cmp = compareReadback(requested, rb.bot, rb.attempts);
+    return this.wrapSim(
+      okResult(
+        { bot: rb.bot, ...cmp, note: cmp.renamed_by_server ? TITLE_MERGE_NOTE : undefined },
+        { request_id },
+      ),
+    );
   }
 
   async delete(
@@ -327,4 +491,33 @@ export class BotOps {
       }),
     );
   }
+}
+
+function readbackReason(reason: "list_failed" | "truncated" | "not_found"): string {
+  switch (reason) {
+    case "list_failed":
+      return "failed (ListGrokBotAgents error)";
+    case "truncated":
+      return "was inconclusive (agent not in a truncated ListGrokBotAgents page)";
+    default:
+      return "did not find the agent after retries";
+  }
+}
+
+export function compareReadback(
+  requested: { name: string | null; title: string | null },
+  bot: BotSummary,
+  attempts: number,
+): BotReadback {
+  const observed = { name: bot.name, title: bot.title };
+  const changed_fields: Array<"name" | "title"> = [];
+  if (requested.name !== null && requested.name !== observed.name) changed_fields.push("name");
+  if (requested.title !== null && requested.title !== observed.title) changed_fields.push("title");
+  return {
+    requested,
+    observed,
+    renamed_by_server: changed_fields.length > 0,
+    changed_fields,
+    readback: { source: "ListGrokBotAgents", attempts },
+  };
 }

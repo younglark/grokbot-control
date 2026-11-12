@@ -103,7 +103,8 @@ export function buildTools(opts?: {
     },
     {
       name: "create_bot",
-      description: "Create temporal harness bot (CreateGrokBotTemporalAgent)",
+      description:
+        "Create temporal harness bot (CreateGrokBotTemporalAgent), then read it back from ListGrokBotAgents. Result has requested{name,title}, observed{name,title}, renamed_by_server; use observed.name. The server has been observed to merge title into name and clear title (not guaranteed). Read-back failure returns code create_unverified, outcome unknown, with error.details.agent_id. Omitted title is sent as \"\" (App behaviour). dry_run cannot detect a server rename.",
       inputSchema: input({
         name: z.string().min(1),
         description: z.string().optional(),
@@ -128,7 +129,8 @@ export function buildTools(opts?: {
     },
     {
       name: "update_bot",
-      description: "Partial update bot (UpdateGrokBotAgent)",
+      description:
+        "Partial update bot (UpdateGrokBotAgent), then read it back from ListGrokBotAgents. Result has requested (null = not patched), observed, renamed_by_server. Read-back failure returns code update_unverified, outcome unknown.",
       inputSchema: input({
         agent_id: agentId,
         name: z.string().optional(),
@@ -195,7 +197,9 @@ export function buildTools(opts?: {
     {
       name: "send_message",
       description:
-        "Send user message directly (SendGrokBotUserMessage). No task_id required. Delivery ≠ success.",
+        "Send user message directly (SendGrokBotUserMessage). No task_id required. Delivery ≠ success. " +
+        "Returns delivery/mode as names plus *_code, workflow_id and refusal; session_id is null with " +
+        "session_source=default_unreported when omitted. delivery=refused is an error (code refused).",
       inputSchema: input({
         agent_id: agentId,
         session_id: z.string().optional(),
@@ -206,7 +210,7 @@ export function buildTools(opts?: {
       handler: (p, a) =>
         p.message.send({
           agentId: String(a.agent_id),
-          sessionId: (a.session_id as string | undefined) ?? "",
+          sessionId: (a.session_id as string | undefined) || undefined,
           text: String(a.text),
           messageId: a.message_id as string | undefined,
           dryRun: Boolean(a.dry_run),
@@ -215,7 +219,9 @@ export function buildTools(opts?: {
     },
     {
       name: "get_send_status",
-      description: "Get message send status (delivery path)",
+      description:
+        "Get message send status (delivery path). status is a name (e.g. accepted) plus status_code; " +
+        "includes echo_entry_id, rejection_code and accepted_at_ms (null when absent).",
       readOnly: true,
       inputSchema: input({
         agent_id: agentId,
@@ -225,18 +231,28 @@ export function buildTools(opts?: {
       handler: (p, a) =>
         p.message.status({
           agentId: String(a.agent_id),
-          sessionId: (a.session_id as string | undefined) ?? "",
+          sessionId: (a.session_id as string | undefined) || undefined,
           messageId: String(a.message_id),
         }),
     },
     {
       name: "list_transcript",
-      description: "List transcript entries; ciphertext not decrypted",
+      description:
+        "List transcript entries with decoded text (same decoder as message history / dashboard). " +
+        "text is capped at 2000 chars unless full=true; session_id is sent only when given. Nothing is decrypted.",
       readOnly: true,
-      inputSchema: input({ agent_id: agentId, limit: limitSchema, offset: offsetSchema }),
+      inputSchema: input({
+        agent_id: agentId,
+        session_id: z.string().min(1).optional(),
+        limit: limitSchema,
+        offset: offsetSchema,
+        full: z.boolean().optional(),
+      }),
       handler: (p, a) =>
         p.message.history({
           agentId: String(a.agent_id),
+          sessionId: a.session_id as string | undefined,
+          full: Boolean(a.full),
           limit: a.limit as number | undefined,
           offset: a.offset as number | undefined,
         }),
@@ -374,11 +390,18 @@ export function buildTools(opts?: {
     {
       name: "auth_login_begin",
       description:
-        "Start independent Cursor browser login. Returns authorization_url for the user to open; verifier stays in a 0600 pending file.",
+        "Start independent Cursor browser login. Returns authorization_url for the user to open; verifier stays in a 0600 pending file. Optional login_mode=bot uses the App URL shape (redirectTarget=sand, supportsSelectedTeamLogin=true) without reading official App credentials or inventing a team id. Default is cli.",
       readOnly: true,
       authTool: true,
-      inputSchema: input({}),
-      handler: (p) => p.authOps.begin(),
+      inputSchema: input({
+        login_mode: z
+          .enum(["cli", "bot"])
+          .optional()
+          .describe(
+            "Login URL preset. cli (default) uses redirectTarget=cli. bot uses redirectTarget=sand and supportsSelectedTeamLogin=true. Does not read App secrets or set team headers.",
+          ),
+      }),
+      handler: (p, a) => p.authOps.begin({ loginMode: a.login_mode as "cli" | "bot" | undefined }),
     },
     {
       name: "auth_login_complete",

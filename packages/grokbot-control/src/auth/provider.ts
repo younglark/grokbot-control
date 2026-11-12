@@ -8,12 +8,14 @@ import type {
   AuthProvider,
   CredentialSource,
   LoginKind,
+  LoginMode,
   PendingLogin,
   RefreshReason,
   RefreshResult,
   StoredCredential,
   WhoamiLocal,
 } from "./types.js";
+import { LOGIN_MODES } from "./types.js";
 
 /**
  * Independent Cursor browser login (product-custom challenge + poll; NOT RFC 8628).
@@ -24,6 +26,11 @@ import type {
  *  - A:38644-38657 Rdn: verifier = base64url(32 random bytes); challenge =
  *    base64url(SHA256(verifier string)); uuid = randomUUID();
  *    `${website}/loginDeepControl?challenge&uuid&mode=login&redirectTarget[&supportsSelectedTeamLogin=true]`
+ *    Library default redirectTarget is `cli` (A:38845; live-verified 2026-11-07). App uses `sand`
+ *    (A:49834). Optional loginMode=bot applies the App URL shape (sand + supportsSelectedTeamLogin=true).
+ *    Default remains cli and omits the team-login param. Team selection callback, team binding, and
+ *    whether x-cursor-team-id is required are NOT live-verified; this tool never invents a team id
+ *    or forges App / team headers.
  *  - A:38720-38816 Aze/Odn: GET `${api}/auth/poll?uuid=..&verifier=..`; 404 = pending;
  *    max 150 tries, 1s * 1.2^i capped 10s; 3 consecutive non-404 failures stop;
  *    403 {error:"sign_in_policy_violation"} = policy denial.
@@ -66,7 +73,9 @@ export type AuthProviderOptions = {
   trustCustomBackend?: boolean;
   /** Public OAuth client_id for refresh. Default: GBT_OAUTH_CLIENT_ID (no built-in value). */
   clientId?: string;
-  /** redirectTarget login param. Default GBT_LOGIN_REDIRECT_TARGET || "cli" (library default, A:38644 / A:38845; App uses "sand", A:49834). */
+  /** Login URL preset: `cli` (default) or `bot` (App-style). Default GBT_LOGIN_MODE || "cli". */
+  loginMode?: LoginMode;
+  /** redirectTarget login param. Default: GBT_LOGIN_REDIRECT_TARGET, else the selected loginMode preset (cli→cli, bot→sand). */
   redirectTarget?: string;
   /** Test hooks. */
   now?: () => number;
@@ -85,12 +94,81 @@ export function generateLoginChallenge(): { verifier: string; challenge: string;
   return { verifier, challenge, uuid: crypto.randomUUID() };
 }
 
-export function buildLoginUrl(website: string, p: { challenge: string; uuid: string; redirectTarget: string }): string {
+export const LOGIN_MODE_PRESETS: Record<LoginMode, { redirectTarget: string; supportsSelectedTeamLogin: boolean }> = {
+  cli: { redirectTarget: "cli", supportsSelectedTeamLogin: false },
+  bot: { redirectTarget: "sand", supportsSelectedTeamLogin: true },
+};
+
+const REDIRECT_TARGET_RE = /^[A-Za-z0-9._-]+$/;
+
+/** Parse a login mode value. Empty / undefined is unset (caller applies default). */
+export function parseLoginMode(raw: string | undefined): LoginMode | undefined {
+  if (raw === undefined) return undefined;
+  const v = raw.trim();
+  if (!v) return undefined;
+  if ((LOGIN_MODES as readonly string[]).includes(v)) return v as LoginMode;
+  throw new GbcError("invalid_argument", `invalid login mode ${JSON.stringify(raw)}`, {
+    exitCode: 2,
+    hint: "Allowed values: cli (default, library redirectTarget=cli) or bot (App-style: redirectTarget=sand and supportsSelectedTeamLogin=true).",
+  });
+}
+
+/** Parse a redirectTarget token. Empty / undefined is unset. */
+export function parseRedirectTarget(raw: string | undefined): string | undefined {
+  if (raw === undefined) return undefined;
+  const v = raw.trim();
+  if (!v) return undefined;
+  if (!REDIRECT_TARGET_RE.test(v)) {
+    throw new GbcError("invalid_argument", `invalid redirectTarget ${JSON.stringify(raw)}`, {
+      exitCode: 2,
+      hint: "redirectTarget must be a non-empty token of letters, digits, '.', '_' or '-'.",
+    });
+  }
+  return v;
+}
+
+export type ResolvedLoginParams = {
+  loginMode: LoginMode;
+  redirectTarget: string;
+  supportsSelectedTeamLogin: boolean;
+};
+
+/**
+ * Resolve login URL params. Precedence: explicit args, then env (GBT_LOGIN_MODE /
+ * GBT_LOGIN_REDIRECT_TARGET), then the selected mode's preset. An explicit redirect
+ * target (arg or env) is kept across mode changes; a mode-default target is not.
+ * supportsSelectedTeamLogin follows the selected mode only (cli omits it, bot sets true).
+ */
+export function resolveLoginParams(input: {
+  loginMode?: string;
+  redirectTarget?: string;
+  explicitRedirectTarget?: string;
+  env?: { GBT_LOGIN_MODE?: string; GBT_LOGIN_REDIRECT_TARGET?: string };
+} = {}): ResolvedLoginParams {
+  const env = input.env ?? process.env;
+  const loginMode = parseLoginMode(input.loginMode) ?? parseLoginMode(env.GBT_LOGIN_MODE) ?? "cli";
+  const redirectTarget =
+    parseRedirectTarget(input.redirectTarget) ??
+    parseRedirectTarget(input.explicitRedirectTarget) ??
+    parseRedirectTarget(input.redirectTarget === undefined ? env.GBT_LOGIN_REDIRECT_TARGET : undefined) ??
+    LOGIN_MODE_PRESETS[loginMode].redirectTarget;
+  return {
+    loginMode,
+    redirectTarget,
+    supportsSelectedTeamLogin: LOGIN_MODE_PRESETS[loginMode].supportsSelectedTeamLogin,
+  };
+}
+
+export function buildLoginUrl(
+  website: string,
+  p: { challenge: string; uuid: string; redirectTarget: string; supportsSelectedTeamLogin?: boolean },
+): string {
   const u = new URL("/loginDeepControl", website);
   u.searchParams.set("challenge", p.challenge);
   u.searchParams.set("uuid", p.uuid);
   u.searchParams.set("mode", "login");
   u.searchParams.set("redirectTarget", p.redirectTarget);
+  if (p.supportsSelectedTeamLogin) u.searchParams.set("supportsSelectedTeamLogin", "true");
   return u.toString();
 }
 
@@ -187,7 +265,11 @@ export function createAuthProvider(opts: AuthProviderOptions): AuthProvider {
   const http = opts.http ?? { fetch: globalThis.fetch.bind(globalThis) };
   const now = opts.now ?? (() => Date.now());
   const sleep = opts.sleep ?? defaultSleep;
-  const redirectTarget = opts.redirectTarget ?? process.env.GBT_LOGIN_REDIRECT_TARGET ?? "cli";
+  const explicitRedirectTarget = parseRedirectTarget(opts.redirectTarget) ?? parseRedirectTarget(process.env.GBT_LOGIN_REDIRECT_TARGET);
+  const defaultLogin = resolveLoginParams({
+    loginMode: opts.loginMode,
+    redirectTarget: opts.redirectTarget,
+  });
   const refreshUrl = refreshEndpointFor(backend);
   const lockKey = `${kind}|${backend}`;
   const refreshDeadlineMs = Math.min(opts.refreshDeadlineMs ?? REFRESH_DEADLINE_MS, REFRESH_DEADLINE_MS);
@@ -859,8 +941,14 @@ export function createAuthProvider(opts: AuthProviderOptions): AuthProvider {
         throw e;
       }
     },
-    async beginLogin(): Promise<AuthBeginResult> {
+    async beginLogin(call?: { loginMode?: LoginMode; redirectTarget?: string }): Promise<AuthBeginResult> {
       requireCursor("login");
+      const login = resolveLoginParams({
+        loginMode: call?.loginMode ?? defaultLogin.loginMode,
+        redirectTarget: call?.redirectTarget,
+        explicitRedirectTarget: call?.redirectTarget !== undefined ? undefined : explicitRedirectTarget,
+        env: {},
+      });
       const { verifier, challenge, uuid } = generateLoginChallenge();
       const created = now();
       const pending: PendingLogin = {
@@ -870,16 +958,30 @@ export function createAuthProvider(opts: AuthProviderOptions): AuthProvider {
         website,
         uuid,
         verifier,
-        redirect_target: redirectTarget,
+        redirect_target: login.redirectTarget,
+        login_mode: login.loginMode,
+        supports_selected_team_login: login.supportsSelectedTeamLogin,
         created_at_ms: created,
         expires_at_ms: created + PENDING_TTL_MS,
       };
       store.savePending(pending);
+      const note =
+        login.loginMode === "bot"
+          ? "Open the URL in a browser and sign in, then run `gbc auth complete`. Bot mode uses the App URL shape (redirectTarget=sand, supportsSelectedTeamLogin=true); it does not read official App credentials, invent a team id, or send team/App headers. Team binding and refresh after this mode are not live-verified. The verifier is stored only in a 0600 pending file and is never printed."
+          : "Open the URL in a browser and sign in, then run `gbc auth complete`. The verifier is stored only in a 0600 pending file and is never printed.";
       return {
-        authorization_url: buildLoginUrl(website, { challenge, uuid, redirectTarget }),
+        authorization_url: buildLoginUrl(website, {
+          challenge,
+          uuid,
+          redirectTarget: login.redirectTarget,
+          supportsSelectedTeamLogin: login.supportsSelectedTeamLogin,
+        }),
         uuid,
         expires_at_ms: pending.expires_at_ms,
-        note: "Open the URL in a browser and sign in, then run `gbc auth complete`. The verifier is stored only in a 0600 pending file and is never printed.",
+        login_mode: login.loginMode,
+        redirect_target: login.redirectTarget,
+        supports_selected_team_login: login.supportsSelectedTeamLogin,
+        note,
       };
     },
     async pollLogin(): Promise<AuthCompleteResult> {
