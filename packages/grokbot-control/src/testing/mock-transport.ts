@@ -17,7 +17,34 @@ export type MockSandboxState = {
   recreateReason?: string;
   operationId?: string;
   migrationPhases?: Array<{ phase: number; detail?: string }>;
+  /** EnsureSandBox (wake): keep the computer hibernated (wake not honoured). */
+  wakeStaysHibernated?: boolean;
+  /** EnsureSandBox (wake): GetSandBoxRunState reads that still report starting (default 1). */
+  wakeReadsUntilRunning?: number;
+  /** Internal: remaining starting reads after a simulated wake. */
+  wakePendingReads?: number;
 };
+
+/**
+ * Fake credential values returned by the mock EnsureSandBox. Tests assert none of
+ * these ever reach stdout, stderr, MCP results, or error details.
+ */
+export const MOCK_ENSURE_SECRETS = {
+  networkToken: "FAKE-network-token-6f1c",
+  execDaemonAuthToken: "FAKE-exec-daemon-auth-token-91ab",
+  execDaemonUrl: "https://exec-daemon.fake-secret.invalid/x",
+  vncUrl: "https://vnc.fake-secret.invalid/?token=FAKE-vnc",
+  gatewayUrl: "https://gateway.fake-secret.invalid/",
+  gatewayToken: "FAKE-gateway-token-3d2e",
+  forkVncBaseUrl: "https://fork-vnc.fake-secret.invalid/",
+  gatewayPortToken: "FAKE-gateway-port-token-77",
+  egressTunnelPortToken: "FAKE-egress-port-token-88",
+  forkVncPortToken: "FAKE-fork-vnc-port-token-99",
+  cluster: "fake-cluster-secret",
+  tenantId: "fake-tenant-secret",
+  podId: "fake-pod-secret",
+  terminalsFolder: "/fake/terminals-secret",
+} as const;
 
 export type MockUsageFixture =
   | "normal"
@@ -86,13 +113,25 @@ export type MockState = {
   sendResponse?: Record<string, unknown>;
   /** Test hook: GetGrokBotSendStatus response. */
   sendStatusResponse?: Record<string, unknown>;
+  /**
+   * Test hook for `message wait`: GetGrokBotSendStatus responses served in order; the last
+   * one repeats. Wins over sendStatusResponse.
+   */
+  sendStatusSequence?: Array<Record<string, unknown>>;
+  /**
+   * Test hook for `message wait`: per-agent ListGrokBotAgentStatuses rows served in order
+   * (simulate running → settled, lastTurnSettlement, hasRunningSubagents…); the last repeats.
+   */
+  statusSequence?: Record<string, Array<Record<string, unknown>>>;
   /** Last ListGrokBotTranscriptEntries request as seen by the server (after wire decode). */
   lastTranscriptRequest?: { agentId: string; sessionId: string; limit: number };
   /** Test hook: override the synthetic generation. */
   transcriptGeneration?: number;
   /** When true, ListGrokBotAgents returns truncated=true (incomplete inventory). */
   listTruncated?: boolean;
-  /** Recorded write RPCs (delete / recreate / force-recreate). */
+  /** Last EnsureSandBox request and headers seen by the mock server. */
+  lastEnsureRequest?: { req: unknown; parkHeader: string | null };
+  /** Recorded write RPCs (delete / recreate / force-recreate / ensure). */
   writeCalls?: Array<{ method: string; req: unknown }>;
   /** Per-server-id delete hook: throw instead of removing the bot. */
   deleteErrorById?: Record<string, "permission" | "unknown">;
@@ -349,8 +388,39 @@ export function createMockTransport(state: MockState) {
           throw new ConnectError("simulated sandbox failure", Code.Unavailable);
         }
         const s = sandbox();
+        if (s.wakePendingReads !== undefined) {
+          if (s.wakePendingReads <= 0) {
+            s.state = 3;
+            delete s.wakePendingReads;
+          } else {
+            s.wakePendingReads -= 1;
+          }
+        }
         return {
           state: s.state,
+          imageUpdateAvailable: s.imageUpdateAvailable,
+          image: s.image,
+        };
+      },
+      async ensureSandBox(req, ctx) {
+        recordWrite(state, "EnsureSandBox", req ?? {});
+        state.lastEnsureRequest = {
+          req: {
+            ...(req?.wake === undefined ? {} : { wake: req.wake }),
+            ...(req?.supportsAsleepBox === undefined
+              ? {}
+              : { supportsAsleepBox: req.supportsAsleepBox }),
+          },
+          parkHeader: ctx?.requestHeader?.get?.("x-sand-box-park") ?? null,
+        };
+        const s = sandbox();
+        if (s.state === 2 && !s.wakeStaysHibernated && req?.wake !== false && req?.supportsAsleepBox !== true) {
+          s.state = 4;
+          s.wakePendingReads = s.wakeReadsUntilRunning ?? 1;
+        }
+        return {
+          ...MOCK_ENSURE_SECRETS,
+          runState: s.state,
           imageUpdateAvailable: s.imageUpdateAvailable,
           image: s.image,
         };
@@ -525,11 +595,15 @@ export function createMockTransport(state: MockState) {
         return override ?? { dispatched: true, delivery: 1 };
       },
       async getGrokBotSendStatus(req) {
+        const seq = state.sendStatusSequence;
+        if (seq && seq.length > 0) return seq.length > 1 ? seq.shift() : seq[0];
         if (state.sendStatusResponse) return state.sendStatusResponse;
         const found = state.messages.find((m) => m.messageId === req.messageId);
         return {
           status: found ? 2 : 1,
           acceptedAtMs: found ? BigInt(Date.now()) : undefined,
+          // Matches the transcript echo row written by sendGrokBotUserMessage.
+          ...(found ? { echoEntryId: `tr-${req.messageId}` } : {}),
         };
       },
       async listGrokBotTranscriptEntries(req) {
@@ -567,6 +641,13 @@ export function createMockTransport(state: MockState) {
           throw new ConnectError("simulated status failure", Code.Unavailable);
         }
         const ids = new Set(req.agentIds);
+        for (const id of ids) {
+          const seq = state.statusSequence?.[String(id)];
+          if (!seq || seq.length === 0) continue;
+          const next = seq.length > 1 ? seq.shift() : seq[0];
+          state.statuses = state.statuses.filter((s) => String(s.agentId) !== String(id));
+          state.statuses.push({ agentId: id, ...next });
+        }
         return {
           statuses: state.statuses.filter((s) => ids.has(String(s.agentId))),
         };

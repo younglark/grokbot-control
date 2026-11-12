@@ -6,8 +6,26 @@ export type {
   ComputerResetOpts,
   ComputerResetData,
   ComputerResetWait,
+  ComputerWakeOpts,
+  ComputerWakeData,
+  ComputerWakeAction,
+  ComputerWakeRunState,
 } from "./ops/computer.js";
 export { createGrokBotClient, mapConnectError } from "./connect/client.js";
+export {
+  WAIT_DEFAULT_TIMEOUT_SECONDS,
+  WAIT_MAX_TIMEOUT_SECONDS,
+  WAIT_MCP_MAX_SECONDS,
+} from "./ops/message-wait.js";
+export type {
+  MessageWaitInput,
+  MessageWaitData,
+  WaitOutcome,
+  CompletionBasis,
+  RepliesBasis,
+  WaitLiveSnapshot,
+  WaitSendStatus,
+} from "./ops/message-wait.js";
 export {
   createAuthProvider,
   staticTokenProvider,

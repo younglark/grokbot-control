@@ -11,6 +11,8 @@
 - Refresh: needs a user-approved public `GBT_OAUTH_CLIENT_ID`; never tested live.
 - All write RPCs untested live: `id` vs `agent_id` for Delete/Update; `source`/`initiator`/`send_source` = 0 on send;
   sidebar base-conflict error code; whether writes need App client headers.
+- `computer wake` (`EnsureSandBox` with an empty request, no `x-sand-box-park` header) is a static inference
+  ([computer-wake-0.79.4.md](computer-wake-0.79.4.md)): never sent live; whether it wakes, how long it takes, and billing are unknown.
 - `viewer_session_id` came back empty for at least one bot; default session for `message send` must come from `session list`.
 - Transcript `limit=0` semantics; streaming RPCs not used.
 - Second login implementation present in 0.79.2/0.79.3 bundles (not analysed).

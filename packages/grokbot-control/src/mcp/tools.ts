@@ -201,6 +201,28 @@ export function buildTools(opts?: {
       },
     },
     {
+      name: "wake_computer",
+      description:
+        "Wake the hibernated shared Grok Bot computer (non-destructive; not a reset, no confirm word). " +
+        "Sends EnsureSandBox with an empty request only when the run state is hibernated; running returns " +
+        "already_running with no write. Static inference from the official App, NOT live-verified; waking may " +
+        "incur compute charges. dry_run reads state only. wait_seconds (0..30) polls GetSandBoxRunState until " +
+        "running; still hibernated or timeout returns wake_unverified with outcome unknown. Never returns tokens or URLs.",
+      inputSchema: input({
+        wait_seconds: z.number().int().min(0).max(30).optional(),
+        ...writeFlags,
+      }),
+      handler: (p, a) => {
+        const waitSeconds = (a.wait_seconds as number | undefined) ?? 0;
+        return p.computer.wake({
+          wait: waitSeconds > 0,
+          timeoutSeconds: waitSeconds > 0 ? waitSeconds : undefined,
+          dryRun: Boolean(a.dry_run),
+          allowWrite: Boolean(a.allow_writes),
+        });
+      },
+    },
+    {
       name: "send_message",
       description:
         "Send user message directly (SendGrokBotUserMessage). No task_id required. Delivery ≠ success. " +
@@ -239,6 +261,38 @@ export function buildTools(opts?: {
           agentId: String(a.agent_id),
           sessionId: (a.session_id as string | undefined) || undefined,
           messageId: String(a.message_id),
+        }),
+    },
+    {
+      name: "wait_for_message",
+      description:
+        "Wait (up to wait_seconds, max 30, default 0 = check once) for the turn started by send_message to settle. " +
+        "Done when ListGrokBotAgentStatuses live.last_turn_settlement.turn_id == message_id (completion_basis turn_settlement, " +
+        "outcome success|cancelled|error) — mapping from static analysis of the official App, not live-verified. " +
+        "Fallback completion_basis running_transition (send accepted, bot seen running, now idle; outcome unknown). " +
+        "Not done yet: ok=true, code pending, data.state=pending — call again with the same message_id and pass back " +
+        "observed_running from the previous result. On settle, replies are transcript entries after echo_entry_id " +
+        "(2000-char text unless full=true); subagents are reported (has_running_subagents, working_task_ids), not awaited. " +
+        "Send status rejected → code message_rejected; not_found → message_not_found.",
+      readOnly: true,
+      inputSchema: input({
+        agent_id: agentId,
+        message_id: z.string().min(1),
+        session_id: z.string().min(1).optional(),
+        wait_seconds: z.number().int().min(0).max(30).optional(),
+        observed_running: z.boolean().optional(),
+        full: z.boolean().optional(),
+      }),
+      handler: (p, a) =>
+        p.message.wait({
+          agentId: String(a.agent_id),
+          messageId: String(a.message_id),
+          sessionId: (a.session_id as string | undefined) || undefined,
+          timeoutSeconds: (a.wait_seconds as number | undefined) ?? 0,
+          intervalSeconds: 2,
+          observedRunning: Boolean(a.observed_running),
+          full: Boolean(a.full),
+          onTimeout: "pending",
         }),
     },
     {

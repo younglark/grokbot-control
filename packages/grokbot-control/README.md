@@ -97,6 +97,8 @@ gbc --json auth login --timeout 300
 gbc --json auth whoami          # 离线本地状态，不打印 token
 gbc --json bot list --limit 20  # 只读
 gbc --json computer state       # 只读
+gbc --json --dry-run computer wake              # 只读：报告当前 run_state 和将要做什么，不发写
+gbc --json --allow-writes computer wake --wait  # 唤醒休眠电脑（静态推断，未 live 验证；可能产生费用）
 gbc --mock --json account cleanup --dry-run   # 只读预览：清单、数量、计划指纹；不发写
 # 真实执行（会删除已确认的自有 Bot 并重建电脑，不可撤销）：
 #   gbc --json --allow-writes account cleanup --confirm=ACCOUNT_CLEANUP --plan=<fingerprint>
@@ -114,7 +116,7 @@ Token 刷新需自行配置公开的 `GBT_OAUTH_CLIENT_ID`（本工具**不内�
 
 stdio；**stdout 仅协议帧**，不要把 CLI 日志打到 stdout。
 
-**默认只读。** `gbc-mcp` 只注册只读业务工具和 `auth_*`（以便登录）。写工具（`create_bot`、`delete_bot`、`send_message`、`reset_computer`、`interrupt_run`、sidebar 写等）不会出现在 `tools/list` 里，除非宿主显式开启写权限。
+**默认只读。** `gbc-mcp` 只注册只读业务工具和 `auth_*`（以便登录）。写工具（`create_bot`、`delete_bot`、`send_message`、`reset_computer`、`wake_computer`、`interrupt_run`、sidebar 写等）不会出现在 `tools/list` 里，除非宿主显式开启写权限。
 
 从 0.1.x 迁移：以前只要在工具参数里传 `allow_writes=true` 就能写。0.2.0 起必须在 MCP 配置里设置 `GBT_ALLOW_WRITES=1` 或给进程加 `--allow-writes`，写工具才会出现。单靠工具参数不能再自我授权。`GBT_MCP_READONLY=1` 仍然更严（连 login/logout/refresh 也隐藏），并且优先于 `GBT_ALLOW_WRITES`。
 
@@ -175,7 +177,7 @@ CLI 输出：成功结果在 TTY 和管道下都是同一套 `schema_version` �
 GBT_MCP_READONLY=1 npx -y --package=github:younglark/grokbot-control#npm-v0.6.1 gbc-mcp
 ```
 
-主要工具：`list_bots`、`get_bot`、`create_bot`、`update_bot`、`delete_bot`、`get_computer_state`、`reset_computer`、`send_message`、`get_send_status`、`list_transcript`、`list_sessions`、`get_bot_status`、`list_agent_todos`、`list_agent_tasks`、`list_agent_subagents`、`interrupt_run`、sidebar 系列、`auth_*`、可选 `sync_*`。完整契约见 [docs/protocol/protocol-map.md](https://github.com/younglark/grokbot-control/blob/main/docs/protocol/protocol-map.md)。
+主要工具：`list_bots`、`get_bot`、`create_bot`、`update_bot`、`delete_bot`、`get_computer_state`、`wake_computer`、`reset_computer`、`send_message`、`get_send_status`、`wait_for_message`、`list_transcript`、`list_sessions`、`get_bot_status`、`list_agent_todos`、`list_agent_tasks`、`list_agent_subagents`、`interrupt_run`、sidebar 系列、`auth_*`、可选 `sync_*`。完整契约见 [docs/protocol/protocol-map.md](https://github.com/younglark/grokbot-control/blob/main/docs/protocol/protocol-map.md)。
 
 ## Auth
 
@@ -220,7 +222,7 @@ gbc dashboard [--port 8787] [--host 127.0.0.1] [--no-open]
 | `dashboard` | （可省略 `start`）本地只读监视器；`--port` / `--host` / `--no-open`。不是官方 DashboardService。详情含任务区、活动时间线、用量明细，以及等待处理 / 当前动作 / 新鲜度 / 最近动态 / 沙箱状态 / 渠道连接 |
 | `sync` | `pull` / `status` / `render` / `attachments` |
 
-危险写操作（`bot delete`、`sidebar delete`、`interrupt` 等）需要 `--confirm=<resource-id>` 精确匹配。`computer reset` 使用固定 token `--confirm=RESET_COMPUTER`，会重建共享电脑且启动后不可取消；`--hard` 走 `ForceRecreateSandBox`。`account cleanup` 先 `--dry-run` 给出可删清单与计划指纹；真实执行必须 `--allow-writes`、`--confirm=ACCOUNT_CLEANUP` 以及与当前清单匹配的 `--plan`。它只删除确定为当前账号自有、可删除的个人 Bot，再按现有 `computer reset` 重建共享电脑，不是彻底账号重置，也不处理订阅、账号删除、Library、会话或连接器。列表截断、权属不明、共享/团队 Bot，或预览后清单变化时不会发出写请求。删除中途失败或重建前核验发现残留/新 Bot 时不会重建。流程不是事务，已删除的 Bot 不能用本命令撤销。远端写需要 `--allow-writes` 或 `GBT_ALLOW_WRITES=1`；`sync` 的本地归档写由命令本身授权，不要求远端 `--allow-writes`。
+危险写操作（`bot delete`、`sidebar delete`、`interrupt` 等）需要 `--confirm=<resource-id>` 精确匹配。`computer reset` 使用固定 token `--confirm=RESET_COMPUTER`，会重建共享电脑且启动后不可取消；`--hard` 走 `ForceRecreateSandBox`。`computer wake` 与 reset 完全分开，不需要确认词：只在 `computer state` 为 hibernated 时发一次 `EnsureSandBox`（请求为空，`wake`/`supports_asleep_box` 都不设，不带额外请求头），之后用 `GetSandBoxRunState` 读回；`--wait` 轮询到 running（`--timeout` 默认 120 秒）。已在运行返回 `already_running`、不发写；absent 拒绝（不会借唤醒新建电脑）；仍是 hibernated、超时或读回失败报 `wake_unverified`、outcome unknown、退出码 10。**这是对官方 App 的静态推断，未 live 验证；唤醒可能产生费用。** 输出只有 run_state 名字与 code、`image_update_available`、镜像信息，响应里的 token 和 URL 一律不输出；不会顺手升级镜像或 reset。证据见 [docs/protocol/computer-wake-0.79.4.md](https://github.com/younglark/grokbot-control/blob/main/docs/protocol/computer-wake-0.79.4.md)。`account cleanup` 先 `--dry-run` 给出可删清单与计划指纹；真实执行必须 `--allow-writes`、`--confirm=ACCOUNT_CLEANUP` 以及与当前清单匹配的 `--plan`。它只删除确定为当前账号自有、可删除的个人 Bot，再按现有 `computer reset` 重建共享电脑，不是彻底账号重置，也不处理订阅、账号删除、Library、会话或连接器。列表截断、权属不明、共享/团队 Bot，或预览后清单变化时不会发出写请求。删除中途失败或重建前核验发现残留/新 Bot 时不会重建。流程不是事务，已删除的 Bot 不能用本命令撤销。远端写需要 `--allow-writes` 或 `GBT_ALLOW_WRITES=1`；`sync` 的本地归档写由命令本身授权，不要求远端 `--allow-writes`。
 
 ### 消息输出（`message send` / `status` / `history`）
 
@@ -245,6 +247,27 @@ gbc dashboard [--port 8787] [--host 127.0.0.1] [--no-open]
 - `workflow_id` / `refusal` / `echo_entry_id` / `rejection_code` / `accepted_at_ms` 缺失时显式为 `null`。
 - `delivery=refused` 算失败：`ok:false`、`code:"refused"`、退出码 7，错误封套写到 stderr，`data` 里仍带 `refusal{failure_code,message}` 和 `workflow_id`。MCP 返回 `isError:true` 和同一封套。`duplicate` 仍是成功（服务端认出同一 `message_id`）。
 - `message history` 用和本地监视器 transcript 同一套解码器解析 body（UTF-8 JSON UI 条目）：每条有 `decode_status`、`role`、`preview`（200 字）和 `text`（默认最多 2000 字，`--full` 取全文；被截断时带 `text_truncated` / `text_chars`）。省略或解不开的 body 保持占位，不解密。`--session-id` 只在传了时发给服务端，不会猜一个默认值。
+
+### 等一条消息做完（`message wait`）
+
+```jsonc
+// gbc --json message wait --agent-id <id> --message-id <mid> --timeout 600   （字段值仅为示例）
+{"schema_version":"1.0.0","ok":true,"code":"ok", …,
+ "data":{"agent_id":"…","message_id":"…","completed":true,"state":"settled",
+  "completion_basis":"turn_settlement","outcome":"success","settled_at_ms":"1794454600000","turn_id":"…",
+  "has_running_subagents":false,"working_task_ids":[],
+  "session_id":"…","session_source":"live_state",
+  "send_status":{"status":"accepted","status_code":2,"echo_entry_id":"…","rejection_code":null,"accepted_at_ms":"…"},
+  "observed_running":true,"polls":12,"waited_ms":35012,
+  "replies":[{"entry_id":"…","seq":"42","role":"assistant","text":"…","decode_status":"decoded","untrusted":true, …}],
+  "replies_basis":"after_echo_entry","text_limit":2000,"last_live":{…},"note":"…"}}
+```
+
+- 完成判定：`live.last_turn_settlement.turn_id == message_id`。**这个对应关系来自对官方 App 的静态分析，未经 live 验证。** 兜底是「发送已 accepted + 受理后见过 running + 现在不 running」（`completion_basis:"running_transition"`，`outcome:"unknown"`）；只看到 `is_running=false` 不算完成。
+- 「做完」只指这一轮回合 settle，子任务不等，看 `has_running_subagents` / `working_task_ids`。
+- `replies` 是 echo 之后的条目（按 `seq`），解码和 `message history` 一样；定位不到 echo 或会话时为空，并用 `replies_basis` / `replies_note` 说明。
+- 超时退出码 10（`code:"wait_timeout"`，带 `last_live`）；发送被拒 7（`message_rejected`）；查不到这条消息 5（`message_not_found`）。进度是 stderr 上的 JSON 行。
+- MCP `wait_for_message`：`wait_seconds` 最多 30，没结束返回 `code:"pending"`，再调一次即可（带上 `observed_running`）。
 
 ### 中途失败后重跑同一脚本（`--if-exists=reuse`）
 

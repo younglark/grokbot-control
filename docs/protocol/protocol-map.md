@@ -16,11 +16,13 @@ App 行为旁证：Linux **0.79.2** `main-app.pretty.cjs`（静态，未登录�
 | 发消息 | UserMessage | `message.send` | `gbc message send --agent-id --session-id --text` | `send_message` | `SendGrokBotUserMessage` | 写；直接 RPC，**无强制 task**；`delivery`/`mode` 输出枚举名 + `*_code`，带 `workflow_id`、`refusal`；`delivery=refused` → `ok:false` code `refused` 退出 7 |
 | 发送状态 | SendStatus | `message.status` | `gbc message status` | `get_send_status` | `GetGrokBotSendStatus` | 只读；`status` 枚举名 + `status_code`，带 `echo_entry_id`/`rejection_code`/`accepted_at_ms` |
 | 历史 | Transcript | `message.history` | `gbc message history` | `list_transcript` | `ListGrokBotTranscriptEntries` | 只读；body 按 UI 条目 JSON 解码（与 transcript 同一解码器），省略/不透明保持占位、不解密；`session_id` 仅在调用方给出时发送 |
+| 等回合结束 | Wait | `message.wait` | `gbc message wait` | `wait_for_message` | `ListGrokBotAgentStatuses`（轮询）+ `GetGrokBotSendStatus` + `ListGrokBotTranscriptEntries` | 只读；`last_turn_settlement.turn_id == message_id` 判完成（静态证据：App `sendPrompt` messageId=clientNonce、coordinator turnId→clientNonce，**未 live 验证**）；兜底 accepted+running→idle；超时 `wait_timeout` 退出码 10；MCP `wait_seconds`≤30，未完成返回 `pending` |
 | 会话列表 | Session | `session.list` | `gbc session list` | `list_sessions` | `ListGrokBotAgentSessions` | 只读 |
 | 运行进展 | LiveState | `progress.status` | `gbc bot status` | `get_bot_status` | `ListGrokBotAgentStatuses` | 只读 |
 | todos/tasks/subagents | 原生对象 | `progress.todos` 等 | `gbc bot todos`… | `list_agent_todos`… | `ListGrokBotAgentTodos` / `Tasks` / `Subagents` | 只读；≠自建 bridge_task |
 | 中断 | Run | `progress.interrupt` | `gbc bot interrupt --confirm` | `interrupt_run` | `InterruptGrokBotAgentRun` | 写；作用域 agent(+session?) 待验 |
 | 电脑状态 | SandBox | `computer.state` | `gbc computer state` | `get_computer_state` | `GetSandBoxRunState` | 只读；粗粒度 |
+| 唤醒电脑 | SandBox | `computer.wake` | `gbc computer wake --allow-writes [--wait]` | `wake_computer` | `EnsureSandBox`（空请求）+ `GetSandBoxRunState` 读回 | 写；非破坏性；仅 hibernated 时发；**静态推断，未 live**；凭据不输出（见 [computer-wake-0.79.4.md](computer-wake-0.79.4.md)） |
 | 重置电脑 | SandBox | `computer.reset` | `gbc computer reset --confirm=RESET_COMPUTER` | `reset_computer` | `RecreateSandBox`（`preserve_data:false`）/`ForceRecreateSandBox` | 写；不可取消；`--wait` 订阅 `WatchSandBoxMigration` |
 | **侧边栏分组读** | SidebarSections | `sidebar.get` | `gbc sidebar list` | `get_sidebar_sections` | `GetGrokBotUserRuntimeSettings` | 只读 |
 | **侧边栏分组写** | SidebarSections | `sidebar.set/patch` | `gbc sidebar …` | `update_sidebar_sections` | `UpdateGrokBotUserRuntimeSettings`（仅 sections±base） | 写；冲突 best-effort；**删组≠删 bot** |

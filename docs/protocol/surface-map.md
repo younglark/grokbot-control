@@ -1,6 +1,6 @@
 # Used protocol surface → SDK / CLI / MCP
 
-Service `aiserver.v1.GrokBotService`. Field-level detail: [baselines/used-surface-0.79.4.json](baselines/used-surface-0.79.4.json) (vendor = 0.79.4; identical to the 0.79.3 subset, see [used-surface-diff-0.79.3-to-0.79.4.md](baselines/used-surface-diff-0.79.3-to-0.79.4.md)).
+Service `aiserver.v1.GrokBotService`. Field-level detail: [baselines/used-surface-0.79.4.json](baselines/used-surface-0.79.4.json) (vendor = 0.79.4; identical to the 0.79.3 subset, see [used-surface-diff-0.79.3-to-0.79.4.md](baselines/used-surface-diff-0.79.3-to-0.79.4.md); `EnsureSandBox` was added to the subset for `computer wake`, #5).
 The RPC list is derived from code (`client.<rpc>(` in `src/`) by `tools/protocol/used_surface.py`.
 
 | RPC | SDK (`src/ops`) | CLI | MCP tool | Write? | Level |
@@ -12,6 +12,7 @@ The RPC list is derived from code (`client.<rpc>(` in `src/`) by `tools/protocol
 | SendGrokBotUserMessage | `message.send` | `message send` | `send_message` | yes | S + O |
 | GetGrokBotSendStatus | `message.status` | `message status` | `get_send_status` | no | S + O |
 | ListGrokBotTranscriptEntries | `message.history` | `message history` | `list_transcript` | no | S + O |
+| ListGrokBotAgentStatuses + GetGrokBotSendStatus + ListGrokBotTranscriptEntries (poll) | `message.wait` | `message wait` | `wait_for_message` | no | S + O（turn_id↔message_id 仅静态证据，未 live） |
 | ListGrokBotAgentSessions | `session.list` | `session list` | `list_sessions` | no | S + O |
 | ListGrokBotAgentStatuses | `progress.status` | `bot status` | `get_bot_status` | no | **L** (2026-11-07) |
 | ListGrokBotAgentTodos / Tasks, ListGrokBotSubagents | `progress.*` | `bot todos/tasks/subagents` | `list_agent_todos`, `list_agent_tasks`, `list_agent_subagents` | no | S + O |
@@ -19,6 +20,7 @@ The RPC list is derived from code (`client.<rpc>(` in `src/`) by `tools/protocol
 | GetGrokBotUserRuntimeSettings | `sidebar.list` | `sidebar list` | `get_sidebar_sections` | no | **L** (2026-11-07) |
 | UpdateGrokBotUserRuntimeSettings (`sidebar_sections` + `sidebar_sections_base`) | `sidebar.*` patch + read-back | `sidebar create/rename/delete/move` | `*_sidebar_section`, `move_bot_to_sidebar_section` | yes | S + O |
 | GetSandBoxRunState | `computer.state` | `computer state` | `get_computer_state` | no | S + O |
+| EnsureSandBox (empty request; see [computer-wake-0.79.4.md](computer-wake-0.79.4.md)) | `computer.wake` | `computer wake [--wait]` | `wake_computer` | yes | S (static inference, not live) |
 | RecreateSandBox (`preserve_data:false`) | `computer.reset` | `computer reset --confirm=RESET_COMPUTER` | `reset_computer` | yes | S + O |
 | ForceRecreateSandBox | `computer.reset --hard` | `computer reset --hard --confirm=RESET_COMPUTER` | `reset_computer(hard=true)` | yes | S + O |
 | WatchSandBoxMigration | `computer.reset --wait` | `computer reset --wait` | `reset_computer(wait_seconds<=30)` | no | S + O |

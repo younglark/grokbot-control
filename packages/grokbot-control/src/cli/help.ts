@@ -14,9 +14,12 @@ EXAMPLES:
   gbc --mock --json --allow-writes message send --agent-id <id> --session-id <sid> --text "hi"
   gbc --mock --json message status --agent-id <id> --session-id <sid> --message-id <mid>
   gbc --mock --json message history --agent-id <id> [--session-id <sid>] [--limit 50] [--offset 0] [--full]
+  gbc --json message wait --agent-id <id> --message-id <mid> [--session-id <sid>] [--timeout 600] [--interval 3] [--full]
   gbc --mock --json session list --agent-id <id> [--limit 50] [--offset 0]
   gbc --mock --json bot status --agent-id <id>
   gbc --mock --json computer state
+  gbc --json --dry-run computer wake        # reads run state only; no write
+  gbc --json --allow-writes computer wake --wait --timeout 120
   gbc --mock --json account cleanup --dry-run
   gbc --mock --json --allow-writes account cleanup --confirm=ACCOUNT_CLEANUP --plan=<fingerprint>
   gbc --mock --json --allow-writes computer reset --confirm=RESET_COMPUTER
@@ -103,6 +106,18 @@ NOTES:
     computer reset and keep its semantics (SIGINT stops waiting only). The flow is not
     a transaction; already-deleted bots cannot be undone. Existing \`bot delete\` and
     \`computer reset\` stay unchanged. No dashboard or MCP entry for this command.
+  - computer wake (non-destructive; separate from reset, no confirm word) sends one
+    EnsureSandBox with an empty request (wake/supports_asleep_box unset, no extra headers)
+    when \`computer state\` is hibernated. STATIC INFERENCE from the official App, NOT
+    live-verified; waking may incur compute charges. Requires --allow-writes (or
+    GBT_ALLOW_WRITES=1). running -> already_running (no write); starting -> no write;
+    absent/unspecified -> refused (exit 7, wake never provisions). --dry-run reads
+    GetSandBoxRunState only and reports the planned action. After the write, the state
+    is read back once; --wait polls GetSandBoxRunState until running (--timeout 1..3600s,
+    default 120). Still hibernated / timeout / failed read-back -> wake_unverified,
+    outcome unknown, exit 10. Output is whitelisted (run state names+codes,
+    image_update_available, image); tokens and URLs from EnsureSandBoxResponse are never
+    printed. It never upgrades the image, resets, or calls EnsureSandBoxWindow.
   - computer reset --wait follows WatchSandBoxMigration phases (backing-up, creating, moving,
     cleaning-up, wiping, done/failed) and stops waiting at --timeout (1..3600s, default 600).
     SIGINT stops waiting only; the reset may continue. No percentage is reported.
@@ -126,6 +141,20 @@ NOTES:
   - message history decodes bodies like the dashboard transcript: preview (200 chars) plus text
     (capped at 2000 chars; --full for all of it). Omitted/opaque bodies stay placeholders;
     nothing is decrypted. --session-id is sent to the server only when given.
+  - message wait polls ListGrokBotAgentStatuses (every --interval s, 1..60, default 3) until the
+    turn started by that message settles, up to --timeout (1..3600s, default 600). Done when
+    live.last_turn_settlement.turn_id == --message-id (completion_basis turn_settlement; outcome
+    success|cancelled|error, settled_at_ms). The turn_id ↔ message_id mapping comes from static
+    analysis of the official App, NOT live verification. Fallback (completion_basis
+    running_transition, outcome unknown): send status accepted, the bot was seen running after
+    acceptance, and is now idle; is_running=false alone never counts. "Done" means this turn
+    settled: has_running_subagents and working_task_ids are reported, not awaited. replies are
+    the transcript entries after echo_entry_id (by seq) in --session-id or the live session,
+    decoded like message history (2000-char text cap; --full); if the echo cannot be located,
+    replies is empty and replies_basis/replies_note say why (nothing is guessed). Progress is
+    JSON lines on stderr. Timeout: ok=false, code wait_timeout, outcome unknown, exit 10, with
+    last_live (same as computer reset --wait). Send status rejected: code message_rejected,
+    exit 7. not_found on 3 consecutive checks: code message_not_found, exit 5. SIGINT: exit 10.
   - Write errors that cannot rule out a side effect (unavailable/internal/deadline/transport)
     exit 10 (unknown, retryable=false): reconcile before retrying.
   - Sidebar writes are read back; a semantic mismatch exits 10 with code sidebar_unverified.
