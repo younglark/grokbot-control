@@ -11,7 +11,7 @@ EXAMPLES:
   gbc --mock --json --allow-writes --dry-run bot delete --agent-id <id> --confirm=<id>
   gbc --mock --json --allow-writes message send --agent-id <id> --session-id <sid> --text "hi"
   gbc --mock --json message status --agent-id <id> --session-id <sid> --message-id <mid>
-  gbc --mock --json message history --agent-id <id> [--limit 50] [--offset 0]
+  gbc --mock --json message history --agent-id <id> [--session-id <sid>] [--limit 50] [--offset 0] [--full]
   gbc --mock --json session list --agent-id <id> [--limit 50] [--offset 0]
   gbc --mock --json bot status --agent-id <id>
   gbc --mock --json computer state
@@ -112,6 +112,15 @@ NOTES:
   - --limit must be an integer 1..1000 (default 50) on bot list, message history,
     session list, and sidebar list. --offset is a 0-based resume from the next field.
     Truncation is marked with truncated, next, and hint. Invalid values exit 2.
+  - message send/status print enum names (lower snake) with the number in *_code:
+    delivery/delivery_code, mode/mode_code, status/status_code; a value the schema does not
+    define prints "unknown" plus its code. send also returns workflow_id and refusal (null when
+    absent). Without --session-id, session_id is null and session_source is
+    "default_unreported" (the RPC does not return the session it used). delivery=refused is a
+    failure: ok=false, code refused, exit 7, data still carries refusal and workflow_id.
+  - message history decodes bodies like the dashboard transcript: preview (200 chars) plus text
+    (capped at 2000 chars; --full for all of it). Omitted/opaque bodies stay placeholders;
+    nothing is decrypted. --session-id is sent to the server only when given.
   - Write errors that cannot rule out a side effect (unavailable/internal/deadline/transport)
     exit 10 (unknown, retryable=false): reconcile before retrying.
   - Sidebar writes are read back; a semantic mismatch exits 10 with code sidebar_unverified.
@@ -141,7 +150,7 @@ NOTES:
   - Room commands are not mixed into sidebar.
 
 EXIT CODES:
-  0 success | 2 usage | 4 auth | 5 not_found | 6 conflict | 7 denied
+  0 success | 2 usage | 4 auth | 5 not_found | 6 conflict | 7 denied/refused
   8 retryable | 9 known_failure | 10 unknown outcome | 1 other
 
 MCP:

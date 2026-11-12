@@ -49,7 +49,7 @@ export const COMMAND_FLAGS: Record<string, Record<string, FlagSpec>> = {
       switches: ["--text-stdin"],
     },
     status: { values: ["--agent-id", "--session-id", "--message-id"], switches: [] },
-    history: { values: ["--agent-id", "--limit", "--offset"], switches: [] },
+    history: { values: ["--agent-id", "--session-id", "--limit", "--offset"], switches: ["--full"] },
   },
   session: {
     list: { values: ["--agent-id", "--limit", "--offset"], switches: [] },

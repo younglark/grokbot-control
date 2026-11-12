@@ -5,6 +5,12 @@ declare module "#proto-gen/GrokBotService" {
 declare module "#proto-gen/aiserver" {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   export const GrokBotAgentHarnessKind: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  export const GrokBotUserMessageDelivery: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  export const GrokBotSendStatus: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  export const GrokBotTemporalHarnessMode: any;
   // Remaining exports are generated message types used via create()/fromBinary.
   const _exports: Record<string, unknown>;
   export = _exports;

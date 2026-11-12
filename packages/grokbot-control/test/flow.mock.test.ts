@@ -70,6 +70,7 @@ describe("mock vertical slice (explicit simulated)", () => {
     const hist = await p.message.history({ agentId });
     assert.equal(hist.ok, true);
     assert.ok((hist.data!.entries.length ?? 0) >= 1);
+    assert.equal(hist.data!.entries.at(-1)?.text, "hello");
 
     const prog = await p.progress.status([agentId]);
     assert.equal(prog.ok, true);

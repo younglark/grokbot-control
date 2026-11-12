@@ -13,9 +13,9 @@ App 行为旁证：Linux **0.79.2** `main-app.pretty.cjs`（静态，未登录�
 | 创建 bot | Agent | `bot.create` | `gbc bot create --name …` | `create_bot` | **优先** `CreateGrokBotTemporalAgent`（I/O=CreateGrokBotAgent*） | 写；需预分配 `agent_id`；超时→unknown，禁止盲重试 |
 | 更新 bot | Agent | `bot.update` | `gbc bot update …` | `update_bot` | `UpdateGrokBotAgent` | 写；`partial_update` |
 | 删除 bot | Agent | `bot.delete` | `gbc bot delete --confirm=<id>` | `delete_bot` | `DeleteGrokBotAgent` | 写；App：NotFound→ok；**sidebar 清理未证** |
-| 发消息 | UserMessage | `message.send` | `gbc message send --agent-id --session-id --text` | `send_message` | `SendGrokBotUserMessage` | 写；直接 RPC，**无强制 task** |
-| 发送状态 | SendStatus | `message.status` | `gbc message status` | `get_send_status` | `GetGrokBotSendStatus` | 只读 |
-| 历史 | Transcript | `message.history` | `gbc message history` | `list_transcript` | `ListGrokBotTranscriptEntries` | 只读；密文/省略不假装解密 |
+| 发消息 | UserMessage | `message.send` | `gbc message send --agent-id --session-id --text` | `send_message` | `SendGrokBotUserMessage` | 写；直接 RPC，**无强制 task**；`delivery`/`mode` 输出枚举名 + `*_code`，带 `workflow_id`、`refusal`；`delivery=refused` → `ok:false` code `refused` 退出 7 |
+| 发送状态 | SendStatus | `message.status` | `gbc message status` | `get_send_status` | `GetGrokBotSendStatus` | 只读；`status` 枚举名 + `status_code`，带 `echo_entry_id`/`rejection_code`/`accepted_at_ms` |
+| 历史 | Transcript | `message.history` | `gbc message history` | `list_transcript` | `ListGrokBotTranscriptEntries` | 只读；body 按 UI 条目 JSON 解码（与 transcript 同一解码器），省略/不透明保持占位、不解密；`session_id` 仅在调用方给出时发送 |
 | 会话列表 | Session | `session.list` | `gbc session list` | `list_sessions` | `ListGrokBotAgentSessions` | 只读 |
 | 运行进展 | LiveState | `progress.status` | `gbc bot status` | `get_bot_status` | `ListGrokBotAgentStatuses` | 只读 |
 | todos/tasks/subagents | 原生对象 | `progress.todos` 等 | `gbc bot todos`… | `list_agent_todos`… | `ListGrokBotAgentTodos` / `Tasks` / `Subagents` | 只读；≠自建 bridge_task |
