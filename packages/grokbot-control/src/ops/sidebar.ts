@@ -6,6 +6,36 @@ import { paginate, validateLimit, validateOffset } from "./limits.js";
 import { GbcError } from "../errors.js";
 import { mapSection } from "./map.js";
 
+/** Returned by a `patch` mutator when the sidebar already holds the desired state. */
+export const NO_WRITE: unique symbol = Symbol("sidebar.no_write");
+
+export type IfExists = "reuse";
+
+export type SectionWriteBase = {
+  sections: SidebarSection[];
+  verified?: boolean;
+  note: string;
+  /** Only under --dry-run. */
+  would?: "create" | "reuse" | "move" | "skip";
+};
+
+export type SectionCreateData = SectionWriteBase & {
+  section_id: string;
+  /** The section as read back (or planned under dry-run). */
+  section: SidebarSection | null;
+  /** True when an existing same-name section was reused (ifExists: "reuse"); no write sent. */
+  existing: boolean;
+};
+
+export type SectionMoveData = SectionWriteBase & {
+  agent_id: string;
+  section_id: string;
+  /** True when the agent was already in the target section before this call. */
+  existing: boolean;
+  /** True when no write was needed (already only in the target section). */
+  skipped: boolean;
+};
+
 /**
  * SidebarSections via Get/UpdateGrokBotUserRuntimeSettings.
  * Only patches sidebar_sections (+ base). Not a cross-App transaction.
@@ -74,15 +104,32 @@ export class SidebarOps {
   }
 
   async patch(
-    mutate: (sections: SidebarSection[]) => SidebarSection[],
+    mutate: (sections: SidebarSection[]) => SidebarSection[] | typeof NO_WRITE,
     write?: { dryRun?: boolean; allowWrite?: boolean; verify?: boolean },
+    /** Ids already decided by `mutate` (e.g. new section_id); merged into every failure's error.details. */
+    context: Record<string, unknown> = {},
   ): Promise<ResultEnvelope<{ sections: SidebarSection[]; verified?: boolean; note: string }>> {
     return this.locked(async () => {
       const request_id = newRequestId();
+      let mutated = false;
       try {
         const current = await this.client.getGrokBotUserRuntimeSettings({});
         const baseSections = (current.settings?.sidebarSections?.sections ?? []).map(mapSection);
-        const next = mutate(structuredClone(baseSections));
+        const planned = mutate(structuredClone(baseSections));
+        mutated = true;
+        if (planned === NO_WRITE) {
+          // Desired state already holds: no write RPC (also under --dry-run and without --allow-writes).
+          return this.sim(
+            okResult(
+              {
+                sections: baseSections,
+                note: "No write needed: the sidebar already matches; UpdateGrokBotUserRuntimeSettings not sent.",
+              },
+              { request_id, code: write?.dryRun ? "dry_run" : "ok" },
+            ),
+          );
+        }
+        const next = planned;
         if (write?.dryRun) {
           return this.sim(
             okResult(
@@ -95,7 +142,12 @@ export class SidebarOps {
           );
         }
         if (!write?.allowWrite && process.env.GBT_ALLOW_WRITES !== "1") {
-          return this.sim(failResult("denied", "need --allow-writes for sidebar write", { request_id }));
+          return this.sim(
+            failResult("denied", "need --allow-writes for sidebar write", {
+              request_id,
+              details: Object.keys(context).length ? { ...context, write_sent: false } : undefined,
+            }),
+          );
         }
         let writeSent = false;
         try {
@@ -111,10 +163,11 @@ export class SidebarOps {
               failResult("sidebar_conflict", err.message, {
                 request_id,
                 hint: "Re-list sidebar, re-apply minimal patch, write again. No strong cross-App guarantee.",
+                details: { ...context, write_sent: writeSent },
               }),
             );
           }
-          return this.fromErr(err, request_id);
+          return this.fromErr(err, request_id, { ...context, write_sent: writeSent });
         }
         if (write?.verify === false) {
           return this.sim(okResult({ sections: next, note: "Wrote sections+base; verify skipped" }, { request_id }));
@@ -130,7 +183,7 @@ export class SidebarOps {
               request_id,
               outcome: "unknown",
               hint: "Re-run `gbc sidebar list` and compare before retrying.",
-              details: { write_sent: writeSent, expected: next },
+              details: { ...context, write_sent: writeSent, expected: next },
             }),
           );
         }
@@ -141,7 +194,7 @@ export class SidebarOps {
               request_id,
               outcome: "unknown",
               hint: "Write may have been dropped or overwritten concurrently. Re-list and re-apply; do not blindly retry.",
-              details: { diff, expected: next, actual: got },
+              details: { ...context, write_sent: true, diff, expected: next, actual: got },
             }),
           );
         }
@@ -156,16 +209,61 @@ export class SidebarOps {
           ),
         );
       } catch (e) {
+        // Errors thrown by `mutate` (not_found / ambiguous_match) carry their own details.
+        if (mutated || !(e instanceof GbcError && e.details !== undefined)) {
+          return this.fromErr(e, request_id, Object.keys(context).length ? { ...context, write_sent: false } : undefined);
+        }
         return this.fromErr(e, request_id);
       }
     });
   }
 
-  createSection(name: string, write?: { dryRun?: boolean; allowWrite?: boolean }) {
-    return this.patch((sections) => {
-      sections.push({ id: crypto.randomUUID(), name, agent_ids: [] });
-      return sections;
-    }, write);
+  /**
+   * Create a section. With `ifExists: "reuse"`, an existing section with exactly the
+   * same name is returned instead (existing: true, no write); two or more same-name
+   * sections fail with ambiguous_match (exit 6). The default always creates.
+   */
+  async createSection(
+    name: string,
+    write?: { dryRun?: boolean; allowWrite?: boolean },
+    opts?: { ifExists?: IfExists },
+  ): Promise<ResultEnvelope<SectionCreateData>> {
+    const bad = checkIfExists(opts?.ifExists);
+    if (bad) return this.sim(bad);
+    const ctx: Record<string, unknown> = {};
+    let existing = false;
+    let sectionId = "";
+    const r = await this.patch(
+      (sections) => {
+        if (opts?.ifExists === "reuse") {
+          const same = matchSectionsByName(sections, name);
+          if (same.length > 1) throw ambiguousSections(name, same);
+          if (same.length === 1) {
+            existing = true;
+            sectionId = same[0]!.id;
+            return NO_WRITE;
+          }
+        }
+        sectionId = crypto.randomUUID();
+        ctx.section_id = sectionId;
+        sections.push({ id: sectionId, name, agent_ids: [] });
+        return sections;
+      },
+      write,
+      ctx,
+    );
+    if (!r.ok) return r as ResultEnvelope<never>;
+    const section = r.data!.sections.find((s) => s.id === sectionId) ?? null;
+    return {
+      ...r,
+      data: {
+        ...r.data!,
+        section_id: sectionId,
+        section,
+        existing,
+        ...(write?.dryRun ? { would: existing ? ("reuse" as const) : ("create" as const) } : {}),
+      },
+    };
   }
 
   renameSection(sectionId: string, name: string, write?: { dryRun?: boolean; allowWrite?: boolean }) {
@@ -197,26 +295,94 @@ export class SidebarOps {
     }, write);
   }
 
-  moveBot(agentId: string, toSectionId: string, write?: { dryRun?: boolean; allowWrite?: boolean }) {
-    return this.patch((sections) => {
-      for (const s of sections) {
-        s.agent_ids = s.agent_ids.filter((id) => id !== agentId);
-      }
-      const dest = sections.find((s) => s.id === toSectionId);
-      if (!dest) throw new GbcError("not_found", `section ${toSectionId} not found`, { exitCode: 5 });
-      dest.agent_ids.push(agentId);
-      return sections;
-    }, write);
+  /**
+   * Put an agent into a section. When it is already in the target section (and in no
+   * other section) nothing is written: skipped/existing true, position kept. Otherwise it
+   * is removed from other sections and appended to the target, unless already there
+   * (then its position in the target is kept). Target by id, or by exact unique name.
+   */
+  async moveBot(
+    agentId: string,
+    target: string | { sectionId?: string; sectionName?: string },
+    write?: { dryRun?: boolean; allowWrite?: boolean },
+  ): Promise<ResultEnvelope<SectionMoveData>> {
+    const t = typeof target === "string" ? { sectionId: target } : target;
+    if (!t.sectionId === !t.sectionName) {
+      return this.sim(
+        failResult("usage", "sidebar move needs exactly one of section_id / section_name", {
+          request_id: newRequestId(),
+          hint: "gbc sidebar move --agent-id <id> --section-id <sid>  or  --section-name <name>",
+        }),
+      );
+    }
+    let existing = false;
+    let skipped = false;
+    let destId = t.sectionId ?? "";
+    const ctx: Record<string, unknown> = { agent_id: agentId };
+    const r = await this.patch(
+      (sections) => {
+        let dest: SidebarSection | undefined;
+        if (t.sectionName !== undefined) {
+          const same = matchSectionsByName(sections, t.sectionName);
+          if (same.length > 1) throw ambiguousSections(t.sectionName, same);
+          dest = same[0];
+          if (!dest) {
+            throw new GbcError("not_found", `section named "${t.sectionName}" not found`, {
+              exitCode: 5,
+              details: { agent_id: agentId, section_name: t.sectionName, write_sent: false },
+            });
+          }
+        } else {
+          dest = sections.find((s) => s.id === t.sectionId);
+          if (!dest) {
+            throw new GbcError("not_found", `section ${t.sectionId} not found`, {
+              exitCode: 5,
+              details: { agent_id: agentId, section_id: t.sectionId, write_sent: false },
+            });
+          }
+        }
+        destId = dest.id;
+        ctx.section_id = dest.id;
+        existing = dest.agent_ids.includes(agentId);
+        const elsewhere = sections.some((s) => s.id !== dest!.id && s.agent_ids.includes(agentId));
+        skipped = existing && !elsewhere;
+        if (skipped) return NO_WRITE;
+        for (const s of sections) {
+          if (s.id !== dest.id) s.agent_ids = s.agent_ids.filter((id) => id !== agentId);
+        }
+        if (!existing) dest.agent_ids.push(agentId);
+        return sections;
+      },
+      write,
+      ctx,
+    );
+    if (!r.ok) return r as ResultEnvelope<never>;
+    return {
+      ...r,
+      data: {
+        ...r.data!,
+        agent_id: agentId,
+        section_id: destId,
+        existing,
+        skipped,
+        ...(write?.dryRun ? { would: skipped ? ("skip" as const) : ("move" as const) } : {}),
+      },
+    };
   }
 
-  private fromErr(e: unknown, request_id: string): ResultEnvelope<never> {
+  private fromErr(e: unknown, request_id: string, extra?: Record<string, unknown>): ResultEnvelope<never> {
     const err = e instanceof GbcError ? e : mapConnectError(e, request_id);
+    const details =
+      extra === undefined
+        ? err.details
+        : { ...(isRecord(err.details) ? err.details : err.details === undefined ? {} : { cause: err.details }), ...extra };
     return this.sim(
       failResult(err.code, err.message, {
         outcome: err.outcome,
         retryable: err.retryable,
         hint: err.hint,
         request_id,
+        details,
       }),
     );
   }
@@ -251,4 +417,33 @@ export function diffSections(expected: SidebarSection[], actual: SidebarSection[
     }
   }
   return out;
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+/** Exact, case-sensitive name match (the sidebar has no other name key). */
+export function matchSectionsByName(sections: SidebarSection[], name: string): SidebarSection[] {
+  return sections.filter((s) => s.name === name);
+}
+
+function ambiguousSections(name: string, same: SidebarSection[]): GbcError {
+  return new GbcError("ambiguous_match", `${same.length} sidebar sections are named "${name}"; refusing to guess`, {
+    exitCode: 6,
+    hint: "Pass --section-id, or rename/delete the duplicates first (gbc sidebar list).",
+    details: {
+      name,
+      write_sent: false,
+      candidates: same.map((s) => ({ section_id: s.id, name: s.name, agent_ids: s.agent_ids })),
+    },
+  });
+}
+
+export function checkIfExists(v: unknown): ResultEnvelope<never> | undefined {
+  if (v === undefined || v === "reuse") return undefined;
+  return failResult("usage", `unsupported if-exists value: ${String(v)}`, {
+    request_id: newRequestId(),
+    hint: "Only --if-exists=reuse is supported; omit it to always create.",
+  });
 }

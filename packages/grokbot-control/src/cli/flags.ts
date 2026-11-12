@@ -30,7 +30,7 @@ export const COMMAND_FLAGS: Record<string, Record<string, FlagSpec>> = {
     list: { values: ["--limit", "--offset"], switches: [] },
     get: { values: ["--agent-id"], switches: [] },
     create: {
-      values: ["--name", "--description", "--description-file", "--title", "--agent-id", "--language"],
+      values: ["--name", "--description", "--description-file", "--title", "--agent-id", "--language", "--if-exists"],
       switches: ["--kickstart"],
     },
     update: {
@@ -67,10 +67,10 @@ export const COMMAND_FLAGS: Record<string, Record<string, FlagSpec>> = {
   },
   sidebar: {
     list: { values: ["--limit", "--offset"], switches: [] },
-    create: { values: ["--name"], switches: [] },
+    create: { values: ["--name", "--if-exists"], switches: [] },
     rename: { values: ["--section-id", "--name"], switches: [] },
     delete: { values: ["--section-id", "--confirm"], switches: [] },
-    move: { values: ["--agent-id", "--section-id"], switches: [] },
+    move: { values: ["--agent-id", "--section-id", "--section-name"], switches: [] },
   },
 };
 

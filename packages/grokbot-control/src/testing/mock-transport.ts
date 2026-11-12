@@ -153,6 +153,10 @@ export type MockState = {
   hiddenAgentLists?: Record<string, number>;
   /** Fail ListGrokBotAgents only after this many more successful calls (then fail until cleared). */
   failListAgentsAfter?: number;
+  /** Number of UpdateGrokBotUserRuntimeSettings calls received (sidebar writes). */
+  sidebarWrites?: number;
+  /** Number of CreateGrokBotTemporalAgent calls received. */
+  createCalls?: number;
 };
 
 /**
@@ -472,6 +476,7 @@ export function createMockTransport(state: MockState) {
         };
       },
       async createGrokBotTemporalAgent(req) {
+        state.createCalls = (state.createCalls ?? 0) + 1;
         if (state.dropNextWrite) {
           state.dropNextWrite = false;
           throw new ConnectError("simulated drop", Code.DeadlineExceeded);
@@ -701,6 +706,7 @@ export function createMockTransport(state: MockState) {
         };
       },
       async updateGrokBotUserRuntimeSettings(req) {
+        state.sidebarWrites = (state.sidebarWrites ?? 0) + 1;
         if (state.forceSidebarConflict) {
           state.forceSidebarConflict = false;
           throw new ConnectError("SidebarSectionsSaveConflictError", Code.FailedPrecondition);

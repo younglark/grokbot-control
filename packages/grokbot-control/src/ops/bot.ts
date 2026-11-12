@@ -33,8 +33,27 @@ export type BotCreateData = BotReadback & {
   /** The bot as read back from ListGrokBotAgents (authoritative display name). */
   bot: BotSummary;
   agent_id: string;
+  /** True when ifExists: "reuse" matched an existing bot; no create was sent. */
+  existing: boolean;
+  /** How the existing bot was matched (only when existing is true). */
+  matched_by?: "agent_id" | "name" | "merged_name";
+  /** Only under --dry-run. */
+  would?: "create" | "reuse";
   note?: string;
 };
+
+export type BotIfExists = "reuse";
+
+/**
+ * Separator the server has been observed to use when it folds title into the display
+ * name (issue #3: "Showrunner · 幕僚长"). Same as the mock in src/testing/mock-transport.ts.
+ */
+export const TITLE_MERGE_SEPARATOR = " · ";
+
+/** Display names an existing bot may carry for a create request: name, or "<name> · <title>". */
+export function botNameForms(name: string, title?: string): string[] {
+  return title ? [name, `${name}${TITLE_MERGE_SEPARATOR}${title}`] : [name];
+}
 
 export type BotUpdateData = BotReadback & { bot: BotSummary; note?: string };
 
@@ -219,6 +238,95 @@ export class BotOps {
     }
   }
 
+  /**
+   * Lookup for ifExists: "reuse". ListGrokBotAgents has no name filter or idempotency
+   * key, so this lists once and matches client-side. Never writes.
+   */
+  private async findExisting(
+    input: { name: string; title: string; agentId?: string },
+    request_id: string,
+  ): Promise<
+    | { kind: "match"; bot: BotSummary; matched_by: "agent_id" | "name" | "merged_name" }
+    | { kind: "none" }
+    | { kind: "fail"; result: ResultEnvelope<never> }
+  > {
+    const requested = { name: input.name, title: input.title };
+    let res: Awaited<ReturnType<GrokBotClient["listGrokBotAgents"]>>;
+    try {
+      res = await this.client.listGrokBotAgents({});
+    } catch (e) {
+      const err = e instanceof GbcError ? e : mapConnectError(e, request_id);
+      return {
+        kind: "fail",
+        result: failResult(
+          "lookup_incomplete",
+          `cannot check for an existing bot (ListGrokBotAgents failed: ${err.message}); no create sent`,
+          {
+            request_id,
+            outcome: "unknown",
+            hint: "Whether a same-name bot exists is unknown. Retry the same command later; it does not create blindly.",
+            details: { write_sent: false, requested, agent_id: input.agentId ?? null, reason: "list_failed" },
+          },
+        ),
+      };
+    }
+    const bots: BotSummary[] = (res.agents ?? []).map(mapBot);
+    if (input.agentId) {
+      const byId = bots.find((b) => b.agent_id === input.agentId);
+      if (byId) return { kind: "match", bot: byId, matched_by: "agent_id" };
+    }
+    const forms = botNameForms(input.name, input.title);
+    const same = bots.filter((b) => forms.includes(b.name));
+    const candidates = same.map((b) => ({ agent_id: b.agent_id, name: b.name, title: b.title }));
+    if (same.length > 1) {
+      return {
+        kind: "fail",
+        result: failResult(
+          "ambiguous_match",
+          `${same.length} bots match "${input.name}"${input.title ? ` (or "${forms[1]}")` : ""}; refusing to guess`,
+          {
+            request_id,
+            hint: "Pass --agent-id of the one to reuse, or rename/delete the duplicates first.",
+            details: { write_sent: false, requested, candidates },
+          },
+        ),
+      };
+    }
+    if (input.agentId && same.length === 1) {
+      return {
+        kind: "fail",
+        result: failResult(
+          "conflict",
+          `bot "${same[0]!.name}" already exists with agent_id ${same[0]!.agent_id}, not the requested --agent-id ${input.agentId}`,
+          {
+            request_id,
+            hint: "Drop --agent-id to reuse it by name, or pass its agent_id.",
+            details: { write_sent: false, requested, agent_id: input.agentId, candidates },
+          },
+        ),
+      };
+    }
+    if (res.truncated) {
+      return {
+        kind: "fail",
+        result: failResult(
+          "lookup_incomplete",
+          "ListGrokBotAgents is truncated; cannot rule out an existing or duplicate bot; no create sent",
+          {
+            request_id,
+            outcome: "unknown",
+            hint: "Pass --agent-id of the existing bot, or create without --if-exists after checking `gbc bot list`.",
+            details: { write_sent: false, requested, agent_id: input.agentId ?? null, reason: "truncated", candidates },
+          },
+        ),
+      };
+    }
+    if (same.length === 1) {
+      return { kind: "match", bot: same[0]!, matched_by: same[0]!.name === input.name ? "name" : "merged_name" };
+    }
+    return { kind: "none" };
+  }
+
   async create(
     input: {
       name: string;
@@ -229,6 +337,7 @@ export class BotOps {
       kickstart?: boolean;
     },
     write?: WriteOpts,
+    opts?: { ifExists?: BotIfExists },
   ): Promise<ResultEnvelope<BotCreateData>> {
     const request_id = newRequestId();
     // Align with the App: 0.79.3 dist/electron-main/main-app.cjs (sha256 d54cc236…a268209,
@@ -236,6 +345,35 @@ export class BotOps {
     // the same. The App never substitutes name for a missing title (gbc did before 0.6.0).
     const title = input.title ?? "";
     const requested = { name: input.name, title };
+    if (opts?.ifExists !== undefined && opts.ifExists !== "reuse") {
+      return this.wrapSim(
+        failResult("usage", `unsupported if-exists value: ${String(opts.ifExists)}`, {
+          request_id,
+          hint: "Only --if-exists=reuse is supported; omit it to always create.",
+        }),
+      );
+    }
+    if (opts?.ifExists === "reuse") {
+      const found = await this.findExisting({ name: input.name, title, agentId: input.agentId }, request_id);
+      if (found.kind === "fail") return this.wrapSim(found.result);
+      if (found.kind === "match") {
+        const cmp = compareReadback(requested, found.bot, 1);
+        return this.wrapSim(
+          okResult(
+            {
+              bot: found.bot,
+              agent_id: found.bot.agent_id,
+              ...cmp,
+              existing: true,
+              matched_by: found.matched_by,
+              ...(write?.dryRun ? { would: "reuse" as const } : {}),
+              note: "Reused an existing bot from ListGrokBotAgents; no create sent. Description, title and language were not changed.",
+            },
+            { request_id, code: write?.dryRun ? "dry_run" : "ok" },
+          ),
+        );
+      }
+    }
     if (write?.dryRun) {
       const agent_id = input.agentId || "(dry-run-nonce)";
       return this.wrapSim(
@@ -258,17 +396,22 @@ export class BotOps {
             renamed_by_server: false,
             changed_fields: [],
             readback: { source: "ListGrokBotAgents", attempts: 0 },
-            note: `dry-run: no RPC sent; observed equals requested and cannot reveal a server-side rename. ${TITLE_MERGE_NOTE}`,
+            existing: false,
+            ...(opts?.ifExists === "reuse" ? { would: "create" as const } : {}),
+            note: `dry-run: no ${opts?.ifExists === "reuse" ? "write " : ""}RPC sent; observed equals requested and cannot reveal a server-side rename. ${TITLE_MERGE_NOTE}`,
           },
           { request_id, code: "dry_run" },
         ),
       );
     }
-    let agentId: string;
+    let agentId = input.agentId || crypto.randomUUID();
     let created: BotSummary;
     try {
       requireWrite(write, "bot.create");
-      agentId = input.agentId || crypto.randomUUID();
+    } catch (e) {
+      return this.fromErr(e, request_id, true);
+    }
+    try {
       // App Temporal path: CreateGrokBotTemporalAgent with CreateGrokBotAgentRequest fields.
       // Drift (visibility/teamId/botBuilderRequested) intentionally NOT sent — not in 0.78.4 Request.
       const res = await this.client.createGrokBotTemporalAgent({
@@ -286,7 +429,10 @@ export class BotOps {
       created = mapBot(res.agent);
       agentId = created.agent_id || agentId;
     } catch (e) {
-      return this.fromErr(e, request_id, true);
+      // agent_id is client-chosen: keep it so a rerun (--agent-id + --if-exists=reuse) can reconcile.
+      const det = e instanceof GbcError ? (e.details as Record<string, unknown> | undefined) : undefined;
+      const write_sent = det?.rpc_dispatched !== false;
+      return this.fromErr(e, request_id, true, { agent_id: agentId, write_sent, requested });
     }
     const rb = await this.readBack(agentId);
     if (!rb.found) {
@@ -316,6 +462,7 @@ export class BotOps {
           bot: rb.bot,
           agent_id: agentId,
           ...cmp,
+          existing: false,
           note: cmp.renamed_by_server ? TITLE_MERGE_NOTE : undefined,
         },
         { request_id },
@@ -478,16 +625,29 @@ export class BotOps {
     e: unknown,
     request_id: string,
     write = false,
+    extra?: Record<string, unknown>,
   ): ResultEnvelope<never> {
     const err =
       e instanceof GbcError ? e : mapConnectError(e, request_id, { write });
+    const base = err.details;
+    const details =
+      extra === undefined
+        ? base
+        : {
+            ...(typeof base === "object" && base !== null && !Array.isArray(base)
+              ? (base as Record<string, unknown>)
+              : base === undefined
+                ? {}
+                : { cause: base }),
+            ...extra,
+          };
     return this.wrapSim(
       failResult(err.code, err.message, {
         outcome: err.outcome,
         retryable: err.retryable,
         hint: err.hint,
         request_id,
-        details: err.details,
+        details,
       }),
     );
   }

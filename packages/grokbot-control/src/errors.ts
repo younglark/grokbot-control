@@ -50,6 +50,7 @@ export function mapExitCode(
       return 5;
     case "conflict":
     case "sidebar_conflict":
+    case "ambiguous_match":
       return 6;
     case "denied":
     case "refused":
