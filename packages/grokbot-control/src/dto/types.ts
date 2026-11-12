@@ -165,13 +165,32 @@ export type SendStatusView = {
   note: string;
 };
 
+/**
+ * One `message history` row. Bodies are decoded with the same UI-entry JSON decoder
+ * as the dashboard transcript (`mapTimelineEntry`); nothing is decrypted.
+ */
 export type TranscriptEntryView = {
-  /** Opaque / partial — ciphertext or omitted bodies are not decrypted. */
   entry_id?: string;
+  seq?: string;
+  updated_seq?: string;
   kind?: string;
-  omitted?: boolean;
+  role?: string;
+  timestamp_ms?: string;
+  /** True when the server omitted the body (body_omitted). */
+  omitted: boolean;
+  decode_status: "decoded" | "opaque" | "absent" | "omitted";
+  decode_reason?: string;
+  /** First 200 characters of `text`. */
   preview?: string;
-  untrusted?: boolean;
+  /** Decoded body text; capped unless the caller asked for full text. */
+  text?: string;
+  /** Present and true when `text` was cut; `text_chars` is the full length. */
+  text_truncated?: boolean;
+  text_chars?: number;
+  tool_name?: string;
+  tool_status?: string;
+  attachment_name?: string;
+  untrusted: true;
 };
 
 /** Sanitized whoami for the local `gbc dashboard` page (no tokens or paths). */

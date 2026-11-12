@@ -11,7 +11,7 @@ EXAMPLES:
   gbc --mock --json --allow-writes --dry-run bot delete --agent-id <id> --confirm=<id>
   gbc --mock --json --allow-writes message send --agent-id <id> --session-id <sid> --text "hi"
   gbc --mock --json message status --agent-id <id> --session-id <sid> --message-id <mid>
-  gbc --mock --json message history --agent-id <id> [--limit 50] [--offset 0]
+  gbc --mock --json message history --agent-id <id> [--session-id <sid>] [--limit 50] [--offset 0] [--full]
   gbc --mock --json session list --agent-id <id> [--limit 50] [--offset 0]
   gbc --mock --json bot status --agent-id <id>
   gbc --mock --json computer state
@@ -118,6 +118,9 @@ NOTES:
     absent). Without --session-id, session_id is null and session_source is
     "default_unreported" (the RPC does not return the session it used). delivery=refused is a
     failure: ok=false, code refused, exit 7, data still carries refusal and workflow_id.
+  - message history decodes bodies like the dashboard transcript: preview (200 chars) plus text
+    (capped at 2000 chars; --full for all of it). Omitted/opaque bodies stay placeholders;
+    nothing is decrypted. --session-id is sent to the server only when given.
   - Write errors that cannot rule out a side effect (unavailable/internal/deadline/transport)
     exit 10 (unknown, retryable=false): reconcile before retrying.
   - Sidebar writes are read back; a semantic mismatch exits 10 with code sidebar_unverified.

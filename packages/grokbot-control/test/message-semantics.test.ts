@@ -21,6 +21,7 @@ import {
   GrokBotUserMessageDelivery,
 } from "#proto-gen/aiserver";
 import { ControlPlane } from "../src/ops/plane.js";
+import { HISTORY_TEXT_LIMIT } from "../src/ops/message.js";
 import { DELIVERY_NAMES, HARNESS_MODE_NAMES, SEND_STATUS_NAMES } from "../src/ops/enum-names.js";
 import { mapExitCode, EXIT } from "../src/errors.js";
 import { createEmptyMockState, createMockTransport, type MockState } from "../src/testing/mock-transport.js";
@@ -179,6 +180,120 @@ describe("message status", () => {
   }
 });
 
+describe("message history decodes schema-shaped bodies", () => {
+  function seeded(): MockState {
+    const state = createEmptyMockState();
+    const long = "长".repeat(HISTORY_TEXT_LIMIT + 5);
+    state.transcript.push(
+      {
+        entryId: "u1",
+        seq: 1n,
+        entryKind: "message",
+        bodyOmitted: false,
+        body: uiBody({ id: "u1", kind: "message", role: "user", content: "开工简报", timestampMs: 1_700_000_000_000 }),
+        agentId: "a1",
+        sessionId: "s1",
+      },
+      {
+        entryId: "b1",
+        seq: 2n,
+        entryKind: "send-message",
+        bodyOmitted: false,
+        body: uiBody({ id: "b1", kind: "send-message", message: { type: "text", content: long } }),
+        agentId: "a1",
+        sessionId: "s1",
+      },
+      { entryId: "o1", seq: 3n, entryKind: "message", bodyOmitted: true, agentId: "a1", sessionId: "s1" },
+      {
+        entryId: "x1",
+        seq: 4n,
+        entryKind: "message",
+        bodyOmitted: false,
+        body: new Uint8Array([0xff, 0xfe, 0x00]),
+        agentId: "a1",
+        sessionId: "s2",
+      },
+    );
+    return state;
+  }
+
+  it("decodes text, keeps preview, caps text, keeps placeholders", async () => {
+    const state = seeded();
+    const r = await mockPlane(state).message.history({ agentId: "a1" });
+    assert.equal(r.ok, true);
+    const [u, b, o, x] = r.data!.entries;
+    assert.equal(u.entry_id, "u1");
+    assert.equal(u.seq, "1");
+    assert.equal(u.role, "user");
+    assert.equal(u.text, "开工简报");
+    assert.equal(u.preview, "开工简报");
+    assert.equal(u.decode_status, "decoded");
+    assert.equal(u.timestamp_ms, "1700000000000");
+    assert.equal(u.untrusted, true);
+    assert.equal(b.role, "assistant");
+    assert.equal(Array.from(b.preview!).length, 200);
+    assert.equal(Array.from(b.text!).length, HISTORY_TEXT_LIMIT);
+    assert.equal(b.text_truncated, true);
+    assert.equal(b.text_chars, HISTORY_TEXT_LIMIT + 5);
+    assert.equal(o.omitted, true);
+    assert.equal(o.decode_status, "omitted");
+    assert.equal(o.text, undefined);
+    assert.equal(x.decode_status, "opaque");
+    assert.equal(x.decode_reason, "not_valid_utf8_json");
+    assert.equal(x.text, undefined);
+    assert.equal(r.data!.text_limit, HISTORY_TEXT_LIMIT);
+    assert.doesNotMatch(r.data!.note, /Ciphertext/);
+  });
+
+  it("full returns the whole text", async () => {
+    const r = await mockPlane(seeded()).message.history({ agentId: "a1", full: true });
+    const b = r.data!.entries[1];
+    assert.equal(Array.from(b.text!).length, HISTORY_TEXT_LIMIT + 5);
+    assert.equal(b.text_truncated, undefined);
+    assert.equal(r.data!.text_limit, null);
+  });
+
+  it("session_id is sent only when given; limit is never sent", async () => {
+    const state = seeded();
+    const plane = mockPlane(state);
+    const all = await plane.message.history({ agentId: "a1" });
+    assert.equal(state.lastTranscriptRequest?.sessionId, "");
+    assert.equal(state.lastTranscriptRequest?.limit, 0);
+    assert.equal(all.data!.session_id, null);
+    assert.equal(all.data!.session_source, "default_unreported");
+    const s1 = await plane.message.history({ agentId: "a1", sessionId: "s1" });
+    assert.equal(state.lastTranscriptRequest?.sessionId, "s1");
+    assert.equal(s1.data!.session_id, "s1");
+    assert.equal(s1.data!.session_source, "caller");
+    assert.deepEqual(s1.data!.entries.map((e) => e.entry_id), ["u1", "b1", "o1"]);
+  });
+
+  it("legacy non-schema fields (plaintext/text/ciphertext) never surface as text", async () => {
+    const plane = fakePlane({
+      listGrokBotTranscriptEntries: () => ({
+        entries: [{ entryId: "l1", entryKind: "message", plaintext: "leak", text: "leak", ciphertext: "x" }],
+        generation: 1,
+      }),
+    });
+    const r = await plane.message.history({ agentId: "a1" });
+    const [e] = r.data!.entries;
+    assert.equal(e.text, undefined);
+    assert.equal(e.preview, undefined);
+    assert.equal(e.decode_status, "absent");
+  });
+
+  it("send then history round-trips the sent text through the mock (body bytes)", async () => {
+    const state = createEmptyMockState();
+    const plane = mockPlane(state);
+    const sent = await plane.message.send({ agentId: "a9", text: "ping 你好", allowWrite: true });
+    assert.equal(sent.ok, true);
+    const h = await plane.message.history({ agentId: "a9" });
+    assert.equal(h.data!.entries.length, 1);
+    assert.equal(h.data!.entries[0].text, "ping 你好");
+    assert.equal(h.data!.entries[0].entry_id, `tr-${sent.data!.message_id}`);
+  });
+});
+
 // ---------- process-level: CLI vs MCP stdio over the same persisted mock state ----------
 
 function seedFile(dir: string, extra: Partial<MockState>): string {
@@ -281,7 +396,7 @@ describe("CLI and MCP agree (process level, --mock)", () => {
     }
   });
 
-  it("send/status data match between CLI and MCP", async () => {
+  it("send/status/history data match between CLI and MCP", async () => {
     const d1 = fs.mkdtempSync(path.join(os.tmpdir(), "gbc-msg-"));
     const d2 = fs.mkdtempSync(path.join(os.tmpdir(), "gbc-msg-"));
     try {
@@ -298,6 +413,8 @@ describe("CLI and MCP agree (process level, --mock)", () => {
       assert.equal(cliSend.code, 0, cliSend.stderr);
       const cliStatus = await g(["message", "status", "--agent-id", "a1", "--message-id", "m-1"]);
       assert.equal(cliStatus.code, 0, cliStatus.stderr);
+      const cliHist = await g(["message", "history", "--agent-id", "a1", "--full"]);
+      assert.equal(cliHist.code, 0, cliHist.stderr);
       const sendData = JSON.parse(cliSend.stdout).data;
       assert.equal(sendData.delivery, "accepted_temporal");
       assert.equal(sendData.delivery_code, 2);
@@ -316,10 +433,33 @@ describe("CLI and MCP agree (process level, --mock)", () => {
         assert.deepEqual(stable(send.structuredContent), stable(JSON.parse(cliSend.stdout)));
         const status = await c.callTool({ name: "get_send_status", arguments: { agent_id: "a1", message_id: "m-1" } });
         assert.deepEqual(stable(status.structuredContent), stable(JSON.parse(cliStatus.stdout)));
+        const hist = await c.callTool({ name: "list_transcript", arguments: { agent_id: "a1", full: true } });
+        const histData = (hist.structuredContent as { data: { entries: Array<{ text?: string }> } }).data;
+        // CLI history ran after its send, MCP's too; both see the seeded row plus the sent one.
+        // The mock stamps the sent row with the send time, so drop timestamp_ms before comparing.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const noTs = (d: any) => ({ ...d, entries: d.entries.map(({ timestamp_ms: _t, ...e }: any) => e) });
+        assert.deepEqual(noTs(histData), noTs(JSON.parse(cliHist.stdout).data));
+        assert.deepEqual(histData.entries.map((e) => e.text), ["hello", "hi"]);
       });
     } finally {
       fs.rmSync(d1, { recursive: true, force: true });
       fs.rmSync(d2, { recursive: true, force: true });
+    }
+  });
+
+  it("history --session-id and --full are accepted flags; unknown flags still exit 2", async () => {
+    const d = fs.mkdtempSync(path.join(os.tmpdir(), "gbc-msg-"));
+    try {
+      const f = seedFile(d, { transcript } as unknown as Partial<MockState>);
+      const env = { GBT_MOCK_STATE: f, GBT_CREDENTIALS_DIR: d };
+      const ok = await runGbc(["--mock", "--json", "message", "history", "--agent-id", "a1", "--session-id", "s1", "--full"], env);
+      assert.equal(ok.code, 0, ok.stderr);
+      assert.equal(JSON.parse(ok.stdout).data.session_source, "caller");
+      const bad = await runGbc(["--mock", "--json", "message", "history", "--agent-id", "a1", "--ful"], env);
+      assert.equal(bad.code, 2);
+    } finally {
+      fs.rmSync(d, { recursive: true, force: true });
     }
   });
 });

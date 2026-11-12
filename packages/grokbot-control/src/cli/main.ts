@@ -334,10 +334,16 @@ async function main(): Promise<number> {
       );
     } else if (noun === "message" && verb === "history") {
       const agentId = flag(rest, "--agent-id");
-      if (!agentId) usageExit("message history requires --agent-id", "gbc message history --agent-id <id> [--limit 50] [--offset 0]");
+      if (!agentId)
+        usageExit(
+          "message history requires --agent-id",
+          "gbc message history --agent-id <id> [--session-id <sid>] [--limit 50] [--offset 0] [--full]",
+        );
       code = emitResult(
         await plane.message.history({
           agentId,
+          sessionId: flag(rest, "--session-id") || undefined,
+          full: hasFlag(rest, "--full"),
           limit: parseCliLimit(flag(rest, "--limit")),
           offset: parseCliOffset(flag(rest, "--offset")),
         }),

@@ -61,9 +61,9 @@ describe("shared list pagination", () => {
 
   it("message history, session list, sidebar list, and bot list share truncated/next/hint", async () => {
     const entries = Array.from({ length: 60 }, (_, i) => ({
-      id: `e${i}`,
-      entryKind: "user",
-      plaintext: `m${i}`,
+      entryId: `e${i}`,
+      entryKind: "message",
+      body: new TextEncoder().encode(JSON.stringify({ id: `e${i}`, kind: "message", role: "user", content: `m${i}` })),
     }));
     const sessions = Array.from({ length: 60 }, (_, i) => ({
       agentId: "a1",
@@ -93,6 +93,7 @@ describe("shared list pagination", () => {
     assert.equal(hist.data!.entries.length, LIMIT_DEFAULT);
     assert.equal(hist.data!.truncated, true);
     assert.equal(hist.data!.next, "50");
+    assert.equal(hist.data!.entries[0].text, "m0");
     assert.ok(hist.data!.hint);
     const hist2 = await plane.message.history({ agentId: "a1", offset: 50 });
     assert.equal(hist2.data!.entries.length, 10);

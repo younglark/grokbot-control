@@ -9,7 +9,7 @@ import type {
   TimelineEntryView,
   TranscriptEntryView,
 } from "../dto/types.js";
-import { mapTimelineEntries } from "./transcript-map.js";
+import { mapTimelineEntries, mapTimelineEntry } from "./transcript-map.js";
 import { DELIVERY_NAMES, HARNESS_MODE_NAMES, SEND_STATUS_NAMES, enumView } from "./enum-names.js";
 import { GbcError } from "../errors.js";
 import { paginate, validateLimit, validateOffset } from "./limits.js";
@@ -22,6 +22,13 @@ function requireWrite(allow: boolean | undefined, action: string) {
 
 /** GrokBotUserMessageDelivery.REFUSED (aiserver.v1, frozen schema). */
 const DELIVERY_REFUSED = 4;
+/** Default cap for `message history` text; `--full` / `full: true` lifts it. */
+export const HISTORY_TEXT_LIMIT = 2000;
+const PREVIEW_LIMIT = 200;
+const HISTORY_NOTE =
+  "Bodies decoded as UI-entry JSON (same decoder as the dashboard transcript). " +
+  "Omitted/opaque bodies stay placeholders; nothing is decrypted. Bodies are untrusted.";
+
 function optionalString(v: unknown): string | null {
   return typeof v === "string" && v.length > 0 ? v : null;
 }
@@ -36,6 +43,46 @@ function mapRefusal(raw: unknown): SendRefusal | null {
   if (raw == null || typeof raw !== "object") return null;
   const r = raw as { failureCode?: unknown; message?: unknown };
   return { failure_code: String(r.failureCode ?? ""), message: String(r.message ?? "") };
+}
+
+/** Cut by code points so a surrogate pair is never split. */
+function clip(text: string, max: number): { text: string; cut: boolean; chars: number } {
+  const cps = Array.from(text);
+  if (cps.length <= max) return { text, cut: false, chars: cps.length };
+  return { text: cps.slice(0, max).join(""), cut: true, chars: cps.length };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function historyEntry(raw: any, textLimit: number | null): TranscriptEntryView {
+  const t = mapTimelineEntry(raw);
+  const view: TranscriptEntryView = {
+    ...(t.entry_id ? { entry_id: t.entry_id } : {}),
+    ...(t.seq ? { seq: t.seq } : {}),
+    ...(t.updated_seq ? { updated_seq: t.updated_seq } : {}),
+    ...(t.kind ? { kind: t.kind } : {}),
+    ...(t.role ? { role: t.role } : {}),
+    ...(t.timestamp_ms ? { timestamp_ms: t.timestamp_ms } : {}),
+    omitted: t.decode_status === "omitted",
+    decode_status: t.decode_status,
+    ...(t.decode_reason ? { decode_reason: t.decode_reason } : {}),
+    untrusted: true,
+  };
+  if (typeof t.text === "string") {
+    view.preview = clip(t.text, PREVIEW_LIMIT).text;
+    if (textLimit == null) view.text = t.text;
+    else {
+      const c = clip(t.text, textLimit);
+      view.text = c.text;
+      if (c.cut) {
+        view.text_truncated = true;
+        view.text_chars = c.chars;
+      }
+    }
+  }
+  if (t.tool_name) view.tool_name = t.tool_name;
+  if (t.tool_status) view.tool_status = t.tool_status;
+  if (t.attachment_name) view.attachment_name = t.attachment_name;
+  return view;
 }
 
 export class MessageOps {
@@ -154,12 +201,19 @@ export class MessageOps {
 
   async history(input: {
     agentId: string;
+    /** Sent to ListGrokBotTranscriptEntries only when given; never guessed. */
+    sessionId?: string;
     limit?: number;
     offset?: number;
+    /** Return full decoded text instead of the default HISTORY_TEXT_LIMIT cap. */
+    full?: boolean;
   }): Promise<
     ResultEnvelope<{
       entries: TranscriptEntryView[];
       generation?: number;
+      session_id: string | null;
+      session_source: SessionSource;
+      text_limit: number | null;
       note: string;
       truncated: boolean;
       next?: string;
@@ -170,31 +224,23 @@ export class MessageOps {
     try {
       const limit = validateLimit(input.limit);
       const offset = validateOffset(input.offset);
-      // NOTE: server-side `limit`/`session_id` are still not sent (semantics of 0 unverified); client caps.
+      // Server-side `limit` is still not sent (semantics of 0 unverified); client caps.
+      // `session_id` is sent only when the caller gave one — never a guessed default.
       const res = await this.client.listGrokBotTranscriptEntries({
         agentId: input.agentId,
+        ...(input.sessionId ? { sessionId: input.sessionId } : {}),
       });
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const mapped = (res.entries ?? []).map((e: any) => {
-        const id = e.id || e.entryId || e.entry_id;
-        const preview =
-          e.plaintext || e.text || e.preview ||
-          (e.ciphertext || e.omitted ? undefined : undefined);
-        return {
-          entry_id: id,
-          kind: String(e.entryKind ?? e.kind ?? e.type ?? ""),
-          omitted: Boolean(e.bodyOmitted || e.omitted || e.ciphertext),
-          preview: preview ? String(preview).slice(0, 200) : undefined,
-          untrusted: true,
-        } satisfies TranscriptEntryView;
-      });
+      const textLimit = input.full ? null : HISTORY_TEXT_LIMIT;
+      const mapped = (res.entries ?? []).map((e: unknown) => historyEntry(e, textLimit));
       const page = paginate<TranscriptEntryView>(mapped, limit, offset);
       return this.sim(
         okResult(
           {
             entries: page.items,
             generation: res.generation,
-            note: "Ciphertext/omitted entries are not decrypted. Bodies marked untrusted.",
+            ...sessionView(input.sessionId),
+            text_limit: textLimit,
+            note: HISTORY_NOTE,
             truncated: page.truncated,
             next: page.next,
             hint: page.hint,

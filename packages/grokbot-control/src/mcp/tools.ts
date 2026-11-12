@@ -235,12 +235,22 @@ export function buildTools(opts?: {
     },
     {
       name: "list_transcript",
-      description: "List transcript entries; ciphertext not decrypted",
+      description:
+        "List transcript entries with decoded text (same decoder as message history / dashboard). " +
+        "text is capped at 2000 chars unless full=true; session_id is sent only when given. Nothing is decrypted.",
       readOnly: true,
-      inputSchema: input({ agent_id: agentId, limit: limitSchema, offset: offsetSchema }),
+      inputSchema: input({
+        agent_id: agentId,
+        session_id: z.string().min(1).optional(),
+        limit: limitSchema,
+        offset: offsetSchema,
+        full: z.boolean().optional(),
+      }),
       handler: (p, a) =>
         p.message.history({
           agentId: String(a.agent_id),
+          sessionId: a.session_id as string | undefined,
+          full: Boolean(a.full),
           limit: a.limit as number | undefined,
           offset: a.offset as number | undefined,
         }),
