@@ -72,6 +72,16 @@ npx -y --package=github:younglark/grokbot-control#npm-v0.5.0 gbc --mock --json -
 npx -y --package=github:younglark/grokbot-control#npm-v0.5.0 gbc --mock --json bot status --agent-id <id>
 ```
 
+多行描述用文件传入（与 `message send --text-file` 同语义，不能和 `--description` 同时用）：
+
+```bash
+gbc --json --allow-writes bot create --name Showrunner --title 幕僚长 --description-file ./showrunner.md
+```
+
+`bot create` / `bot update` 成功后会从 `ListGrokBotAgents` 读回，结果里有 `requested`、`observed`、`renamed_by_server`。已观察到服务端会把 title 并进显示名（`Showrunner · 幕僚长`）并清空 title，后续脚本请用 `observed.name`。读回失败退出码 10（`create_unverified`），`error.details.agent_id` 用于对账。
+
+不要用 `echo` 重打印 `--json` 输出：字符串里的换行是 `\n` 转义，有的 shell 的 `echo` 会把它还原成真换行，JSON 就坏了。直接管道，或 `printf '%s' "$raw" | jq .`。
+
 ### Live（真实后端）
 
 默认 backend `https://api2.cursor.sh`，网站 `https://cursor.com`。不要设置 `GBT_MOCK`。

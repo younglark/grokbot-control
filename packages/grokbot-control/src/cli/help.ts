@@ -6,6 +6,8 @@ USAGE:
 
 EXAMPLES:
   gbc --mock --json bot create --name demo --description "test"
+  gbc --json --allow-writes bot create --name Showrunner --title 幕僚长 --description-file ./showrunner.md
+  gbc --json --allow-writes bot update --agent-id <id> --description-file ./showrunner.md
   gbc --mock --json bot list
   gbc --mock --json bot get --agent-id <id>
   gbc --mock --json --allow-writes --dry-run bot delete --agent-id <id> --confirm=<id>
@@ -115,6 +117,20 @@ NOTES:
   - Write errors that cannot rule out a side effect (unavailable/internal/deadline/transport)
     exit 10 (unknown, retryable=false): reconcile before retrying.
   - Sidebar writes are read back; a semantic mismatch exits 10 with code sidebar_unverified.
+  - bot create / bot update read the bot back from ListGrokBotAgents (up to 3 reads, short
+    backoff, ~3s budget; retried only while the agent is absent). data carries
+    requested{name,title}, observed{name,title}, renamed_by_server and changed_fields; data.bot
+    is the read-back. The server has been observed to merge --title into the display name
+    ("Showrunner · 幕僚长") and clear title (issue #3; not guaranteed for every account, no
+    client-side evidence). Use observed.name, not the requested name. If the read-back fails,
+    is truncated, or never finds the agent: exit 10, code create_unverified/update_unverified,
+    outcome unknown; error.details.agent_id is kept for reconciliation. --dry-run sends no RPC
+    and cannot reveal such a rename. Without --title, create sends title "" (as the App does).
+  - --description-file <path> (bot create/update) reads UTF-8 verbatim like --text-file; it
+    is exclusive with --description (exit 2). "-" is a path, not stdin.
+  - Do not re-print --json output with echo: JSON strings keep newlines as \\n escapes and some
+    shells' echo turns them into raw newlines (invalid JSON). Pipe stdout directly, or use
+    raw=$(gbc --json ...); printf '%s' "$raw" | jq .
   - GBT_TRUST_BACKEND / --trust-backend: only the exact value "1" trusts a custom --base-url.
   - Auth: independent Cursor browser login (static-RE protocol, not official API). Default login
     mode is cli (redirectTarget=cli, no team-login param; live-verified 2026-11-07). Optional

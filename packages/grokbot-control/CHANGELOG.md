@@ -4,6 +4,21 @@
 
 ## Unreleased
 
+（随 0.6.0 发布）
+
+### 新增
+
+- **`bot create` / `bot update` 支持 `--description-file <path>`**（#4）。按 UTF-8 原样读取，换行保留，与 `message send --text-file` 共用同一个读文件函数。和 `--description` 同时出现、路径缺失或文件读不到都是用法错误（退出码 2），不会发出写请求。`-` 是文件名，不表示 stdin。MCP 的 `create_bot` / `update_bot` 直接收字符串，不新增文件参数。
+- **`--help` 提示不要用 `echo` 重打印 `--json` 输出**（#4）。JSON 字符串里的换行是合法的 `\n` 转义，部分 shell 的 `echo` 会把它还原成真换行，导致解析失败。改用 `printf '%s' "$raw"` 或直接读 stdout。gbc 的 JSON 输出本身不变。
+
+### 变更（行为变化）
+
+- **`bot create` / `bot update` 写成功后从 `ListGrokBotAgents` 读回**（#3，CLI、MCP、SDK 一致）。最多读 3 次，退避 300ms / 900ms，总时长约 3 秒以内，只在列表完整但还找不到该 agent 时重试。结果新增 `requested{name,title}`（update 里未修改的字段为 `null`）、`observed{name,title}`、`renamed_by_server`、`changed_fields`、`readback.attempts`；`data.bot` 改为读回的版本，不再是写接口的回包。已观察到服务端会把 title 并进显示名（如 `Showrunner · 幕僚长`）并清空 title，这只来自 issue #3 的观察，客户端逆向里没有证据，也不保证所有账号都这样。
+- **读回失败视为结果未知**：列表请求出错、列表被截断且没找到、或重试后仍找不到时，返回 `create_unverified` / `update_unverified`，`outcome: "unknown"`，退出码 10（与 `sidebar_unverified`、`computer reset --wait` 超时一致），`error.details` 里带 `agent_id`、`requested` 和写接口回包的 name/title 供对账。之前这些情况会直接报成功。
+- **`--dry-run` 的 `note` 写明干跑无法发现服务端改名**；干跑结果也带 `requested` / `observed`（两者相同）和 `readback.attempts: 0`。
+- **不传 `--title` 时发送 `title: ""`**，与官方 App 一致（0.79.3 `dist/electron-main/main-app.cjs` 第 1117 行 `createGrokBotTemporalAgent({…,title:n.title??"",…})`，0.79.4 相同）。之前会把 `name` 当 title 发送；干跑结果里的 `bot.title` 也随之变为 `""`。
+- 每次真实 create / update 多一次（最多三次）`ListGrokBotAgents` 只读请求。
+
 ## 0.5.0 — 2026-11-11（通过 GitHub tag `npm-v0.5.0` 分发，不发到 npmjs）
 
 ### 新增
