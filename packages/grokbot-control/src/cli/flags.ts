@@ -54,6 +54,10 @@ export const COMMAND_FLAGS: Record<string, Record<string, FlagSpec>> = {
     },
     status: { values: ["--agent-id", "--session-id", "--message-id"], switches: [] },
     history: { values: ["--agent-id", "--session-id", "--limit", "--offset"], switches: ["--full"] },
+    wait: {
+      values: ["--agent-id", "--message-id", "--session-id", "--timeout", "--interval"],
+      switches: ["--full"],
+    },
   },
   session: {
     list: { values: ["--agent-id", "--limit", "--offset"], switches: [] },

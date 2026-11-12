@@ -12,6 +12,7 @@ The RPC list is derived from code (`client.<rpc>(` in `src/`) by `tools/protocol
 | SendGrokBotUserMessage | `message.send` | `message send` | `send_message` | yes | S + O |
 | GetGrokBotSendStatus | `message.status` | `message status` | `get_send_status` | no | S + O |
 | ListGrokBotTranscriptEntries | `message.history` | `message history` | `list_transcript` | no | S + O |
+| ListGrokBotAgentStatuses + GetGrokBotSendStatus + ListGrokBotTranscriptEntries (poll) | `message.wait` | `message wait` | `wait_for_message` | no | S + O（turn_id↔message_id 仅静态证据，未 live） |
 | ListGrokBotAgentSessions | `session.list` | `session list` | `list_sessions` | no | S + O |
 | ListGrokBotAgentStatuses | `progress.status` | `bot status` | `get_bot_status` | no | **L** (2026-11-07) |
 | ListGrokBotAgentTodos / Tasks, ListGrokBotSubagents | `progress.*` | `bot todos/tasks/subagents` | `list_agent_todos`, `list_agent_tasks`, `list_agent_subagents` | no | S + O |

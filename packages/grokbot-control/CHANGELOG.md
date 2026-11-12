@@ -6,7 +6,19 @@
 
 ### 新增
 
+- **`gbc message wait`（#2）。** `gbc message wait --agent-id <id> --message-id <mid> [--session-id <sid>] [--timeout 600] [--interval 3] [--full]` 轮询 `ListGrokBotAgentStatuses`，等这条消息开启的回合结束（settle），再返回该回合 echo 之后的 transcript 条目。
+  - 完成判定优先看 `live.last_turn_settlement.turn_id == message_id`（`completion_basis:"turn_settlement"`，`outcome` 为 `success` / `cancelled` / `error`，带 `settled_at_ms`）。**turn_id 与 message_id 的对应关系来自对官方 App 0.79.4 的静态分析（`main-app.cjs` 的 `sendPrompt` 发 `messageId: clientNonce`；coordinator 把 `lastTurnSettlement.turnId` 当作 `clientNonce`），未经 live 验证。**
+  - 兜底（`completion_basis:"running_transition"`，`outcome:"unknown"`）：`GetGrokBotSendStatus` 已是 `accepted`、受理之后观察到过 running、现在不 running。只看到 `is_running=false` 不算完成。
+  - 「做完」= 这一轮回合 settle，不等子任务；结果带 `has_running_subagents` 和 `working_task_ids`。
+  - `replies` 是 `echo_entry_id` 之后（按 `seq`）的条目，解码和 `message history` 相同（默认 2000 字，`--full` 取全文）。会话取 `--session-id`，否则取 live 状态里的 `session_id`；找不到 echo 或会话时 `replies` 为空，`replies_basis` / `replies_note` 说明原因，不猜。
+  - 进度以 JSON 行写到 stderr。超时：`ok:false`、`code:"wait_timeout"`、`outcome:"unknown"`、退出码 10（与 `computer reset --wait` 一致），`error.details.last_live` 带最后一次 live 状态。发送状态 `rejected`：`code:"message_rejected"`，退出码 7；连续 3 次 `not_found`：`code:"message_not_found"`，退出码 5。SIGINT：退出码 10。
+- **MCP `wait_for_message`**（只读）：`wait_seconds` 0..30（默认 0，只查一次）。没结束时返回 `ok:true`、`code:"pending"`、`data.state:"pending"`，调用方用同一 `message_id` 再查，并把上次的 `observed_running` 传回（MCP 调用之间不保存状态）。结束时的 `data` 与 CLI 相同。
+- **SDK**：`plane.message.wait(input)`，导出 `MessageWaitInput` / `MessageWaitData` 等类型。
 - **`gbc computer wake`、MCP `wake_computer`、SDK `computer.wake()`（#5）。** 非破坏性唤醒休眠的共享电脑，与 `computer reset` 完全分开，不需要确认词，需要 `--allow-writes`。只在 run state 为 hibernated 时发一次 `EnsureSandBox`，请求为空（与官方 App `connect()` 相同，不设 `wake`/`supports_asleep_box`，不带 App 的 `x-sand-box-park` 头），然后用 `GetSandBoxRunState` 读回；`--wait` 轮询到 running（`--timeout` 1..3600，默认 120；MCP `wait_seconds` 上限 30）。running → `already_running`（不发写）；starting → 不发写；absent/unspecified → `failed_precondition`（退出 7，不会借唤醒新建电脑）；仍 hibernated / 超时 / 读回失败 → `wake_unverified`、outcome unknown、退出 10。`--dry-run` 只读当前状态并报告将要做什么。输出白名单：run state 名字与 code、`image_update_available`、镜像信息；`EnsureSandBoxResponse` 里的 token、URL、cluster/pod 等一律不输出。不升级镜像、不 reset、不调 `EnsureSandBoxWindow`。**静态推断，未 live 验证；唤醒可能产生费用。** 证据见 [docs/protocol/computer-wake-0.79.4.md](https://github.com/younglark/grokbot-control/blob/main/docs/protocol/computer-wake-0.79.4.md)。
+
+### 输出补充（只增字段）
+
+- `bot status` / `get_bot_status` 的 `live.last_turn_settlement` 增加 `turn_id`（以前被丢掉），`live` 增加 `has_running_subagents`（服务端给了才有）。
 
 ## 0.6.1 — 2026-11-12（通过 GitHub tag `npm-v0.6.1` 分发，不发到 npmjs）
 

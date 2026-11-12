@@ -177,7 +177,7 @@ CLI 输出：成功结果在 TTY 和管道下都是同一套 `schema_version` �
 GBT_MCP_READONLY=1 npx -y --package=github:younglark/grokbot-control#npm-v0.6.1 gbc-mcp
 ```
 
-主要工具：`list_bots`、`get_bot`、`create_bot`、`update_bot`、`delete_bot`、`get_computer_state`、`wake_computer`、`reset_computer`、`send_message`、`get_send_status`、`list_transcript`、`list_sessions`、`get_bot_status`、`list_agent_todos`、`list_agent_tasks`、`list_agent_subagents`、`interrupt_run`、sidebar 系列、`auth_*`、可选 `sync_*`。完整契约见 [docs/protocol/protocol-map.md](https://github.com/younglark/grokbot-control/blob/main/docs/protocol/protocol-map.md)。
+主要工具：`list_bots`、`get_bot`、`create_bot`、`update_bot`、`delete_bot`、`get_computer_state`、`wake_computer`、`reset_computer`、`send_message`、`get_send_status`、`wait_for_message`、`list_transcript`、`list_sessions`、`get_bot_status`、`list_agent_todos`、`list_agent_tasks`、`list_agent_subagents`、`interrupt_run`、sidebar 系列、`auth_*`、可选 `sync_*`。完整契约见 [docs/protocol/protocol-map.md](https://github.com/younglark/grokbot-control/blob/main/docs/protocol/protocol-map.md)。
 
 ## Auth
 
@@ -247,6 +247,27 @@ gbc dashboard [--port 8787] [--host 127.0.0.1] [--no-open]
 - `workflow_id` / `refusal` / `echo_entry_id` / `rejection_code` / `accepted_at_ms` 缺失时显式为 `null`。
 - `delivery=refused` 算失败：`ok:false`、`code:"refused"`、退出码 7，错误封套写到 stderr，`data` 里仍带 `refusal{failure_code,message}` 和 `workflow_id`。MCP 返回 `isError:true` 和同一封套。`duplicate` 仍是成功（服务端认出同一 `message_id`）。
 - `message history` 用和本地监视器 transcript 同一套解码器解析 body（UTF-8 JSON UI 条目）：每条有 `decode_status`、`role`、`preview`（200 字）和 `text`（默认最多 2000 字，`--full` 取全文；被截断时带 `text_truncated` / `text_chars`）。省略或解不开的 body 保持占位，不解密。`--session-id` 只在传了时发给服务端，不会猜一个默认值。
+
+### 等一条消息做完（`message wait`）
+
+```jsonc
+// gbc --json message wait --agent-id <id> --message-id <mid> --timeout 600   （字段值仅为示例）
+{"schema_version":"1.0.0","ok":true,"code":"ok", …,
+ "data":{"agent_id":"…","message_id":"…","completed":true,"state":"settled",
+  "completion_basis":"turn_settlement","outcome":"success","settled_at_ms":"1794454600000","turn_id":"…",
+  "has_running_subagents":false,"working_task_ids":[],
+  "session_id":"…","session_source":"live_state",
+  "send_status":{"status":"accepted","status_code":2,"echo_entry_id":"…","rejection_code":null,"accepted_at_ms":"…"},
+  "observed_running":true,"polls":12,"waited_ms":35012,
+  "replies":[{"entry_id":"…","seq":"42","role":"assistant","text":"…","decode_status":"decoded","untrusted":true, …}],
+  "replies_basis":"after_echo_entry","text_limit":2000,"last_live":{…},"note":"…"}}
+```
+
+- 完成判定：`live.last_turn_settlement.turn_id == message_id`。**这个对应关系来自对官方 App 的静态分析，未经 live 验证。** 兜底是「发送已 accepted + 受理后见过 running + 现在不 running」（`completion_basis:"running_transition"`，`outcome:"unknown"`）；只看到 `is_running=false` 不算完成。
+- 「做完」只指这一轮回合 settle，子任务不等，看 `has_running_subagents` / `working_task_ids`。
+- `replies` 是 echo 之后的条目（按 `seq`），解码和 `message history` 一样；定位不到 echo 或会话时为空，并用 `replies_basis` / `replies_note` 说明。
+- 超时退出码 10（`code:"wait_timeout"`，带 `last_live`）；发送被拒 7（`message_rejected`）；查不到这条消息 5（`message_not_found`）。进度是 stderr 上的 JSON 行。
+- MCP `wait_for_message`：`wait_seconds` 最多 30，没结束返回 `code:"pending"`，再调一次即可（带上 `observed_running`）。
 
 ### 退出码
 

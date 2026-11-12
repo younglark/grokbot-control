@@ -46,12 +46,14 @@ export function mapExitCode(
     case "auth":
       return 4;
     case "not_found":
+    case "message_not_found":
       return 5;
     case "conflict":
     case "sidebar_conflict":
       return 6;
     case "denied":
     case "refused":
+    case "message_rejected":
     case "permission_denied":
     case "failed_precondition":
       return 7;

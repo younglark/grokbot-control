@@ -386,6 +386,38 @@ async function main(): Promise<number> {
         }),
         mode,
       );
+    } else if (noun === "message" && verb === "wait") {
+      const agentId = flag(rest, "--agent-id");
+      const messageId = flag(rest, "--message-id");
+      const waitUsage =
+        "gbc message wait --agent-id <id> --message-id <mid> [--session-id <sid>] [--timeout 600] [--interval 3] [--full]";
+      if (!agentId || !messageId)
+        usageExit("message wait requires --agent-id and --message-id", waitUsage);
+      const timeoutSeconds = intFlag(rest, "--timeout", 1, 3600, "--timeout=600");
+      const intervalSeconds = intFlag(rest, "--interval", 1, 60, "--interval=3");
+      const ac = new AbortController();
+      const onSig = () => ac.abort();
+      process.once("SIGINT", onSig);
+      process.once("SIGTERM", onSig);
+      try {
+        code = emitResult(
+          await plane.message.wait({
+            agentId,
+            messageId,
+            sessionId: flag(rest, "--session-id") || undefined,
+            timeoutSeconds,
+            intervalSeconds,
+            full: hasFlag(rest, "--full"),
+            signal: ac.signal,
+            // Progress goes to stderr as JSON lines; stdout carries only the final envelope.
+            onProgress: (event) => process.stderr.write(JSON.stringify(event) + "\n"),
+          }),
+          mode,
+        );
+      } finally {
+        process.off("SIGINT", onSig);
+        process.off("SIGTERM", onSig);
+      }
     } else if (noun === "session" && verb === "list") {
       const agentId = flag(rest, "--agent-id");
       if (!agentId) usageExit("session list requires --agent-id", "gbc session list --agent-id <id> [--limit 50] [--offset 0]");
@@ -456,6 +488,21 @@ async function main(): Promise<number> {
     persistMockState();
     return catchToExit(e);
   }
+}
+
+function intFlag(
+  rest: string[],
+  name: string,
+  min: number,
+  max: number,
+  example: string,
+): number | undefined {
+  const raw = flag(rest, name);
+  if (raw === undefined) return undefined;
+  const n = Number(raw);
+  if (!/^\d+$/.test(raw) || !Number.isInteger(n) || n < min || n > max)
+    usageExit(`${name} must be an integer ${min}..${max} seconds`, example);
+  return n;
 }
 
 function readStdin(): Promise<string> {

@@ -258,6 +258,38 @@ export function buildTools(opts?: {
         }),
     },
     {
+      name: "wait_for_message",
+      description:
+        "Wait (up to wait_seconds, max 30, default 0 = check once) for the turn started by send_message to settle. " +
+        "Done when ListGrokBotAgentStatuses live.last_turn_settlement.turn_id == message_id (completion_basis turn_settlement, " +
+        "outcome success|cancelled|error) — mapping from static analysis of the official App, not live-verified. " +
+        "Fallback completion_basis running_transition (send accepted, bot seen running, now idle; outcome unknown). " +
+        "Not done yet: ok=true, code pending, data.state=pending — call again with the same message_id and pass back " +
+        "observed_running from the previous result. On settle, replies are transcript entries after echo_entry_id " +
+        "(2000-char text unless full=true); subagents are reported (has_running_subagents, working_task_ids), not awaited. " +
+        "Send status rejected → code message_rejected; not_found → message_not_found.",
+      readOnly: true,
+      inputSchema: input({
+        agent_id: agentId,
+        message_id: z.string().min(1),
+        session_id: z.string().min(1).optional(),
+        wait_seconds: z.number().int().min(0).max(30).optional(),
+        observed_running: z.boolean().optional(),
+        full: z.boolean().optional(),
+      }),
+      handler: (p, a) =>
+        p.message.wait({
+          agentId: String(a.agent_id),
+          messageId: String(a.message_id),
+          sessionId: (a.session_id as string | undefined) || undefined,
+          timeoutSeconds: (a.wait_seconds as number | undefined) ?? 0,
+          intervalSeconds: 2,
+          observedRunning: Boolean(a.observed_running),
+          full: Boolean(a.full),
+          onTimeout: "pending",
+        }),
+    },
+    {
       name: "list_transcript",
       description:
         "List transcript entries with decoded text (same decoder as message history / dashboard). " +

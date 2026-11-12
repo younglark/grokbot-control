@@ -9,7 +9,9 @@ import type {
   TimelineEntryView,
   TranscriptEntryView,
 } from "../dto/types.js";
-import { mapTimelineEntries, mapTimelineEntry } from "./transcript-map.js";
+import { mapTimelineEntries } from "./transcript-map.js";
+import { HISTORY_TEXT_LIMIT, historyEntry } from "./history-entry.js";
+import { waitForMessage, type MessageWaitData, type MessageWaitInput } from "./message-wait.js";
 import { DELIVERY_NAMES, HARNESS_MODE_NAMES, SEND_STATUS_NAMES, enumView } from "./enum-names.js";
 import { GbcError } from "../errors.js";
 import { paginate, validateLimit, validateOffset } from "./limits.js";
@@ -22,9 +24,7 @@ function requireWrite(allow: boolean | undefined, action: string) {
 
 /** GrokBotUserMessageDelivery.REFUSED (aiserver.v1, frozen schema). */
 const DELIVERY_REFUSED = 4;
-/** Default cap for `message history` text; `--full` / `full: true` lifts it. */
-export const HISTORY_TEXT_LIMIT = 2000;
-const PREVIEW_LIMIT = 200;
+export { HISTORY_TEXT_LIMIT };
 const HISTORY_NOTE =
   "Bodies decoded as UI-entry JSON (same decoder as the dashboard transcript). " +
   "Omitted/opaque bodies stay placeholders; nothing is decrypted. Bodies are untrusted.";
@@ -43,46 +43,6 @@ function mapRefusal(raw: unknown): SendRefusal | null {
   if (raw == null || typeof raw !== "object") return null;
   const r = raw as { failureCode?: unknown; message?: unknown };
   return { failure_code: String(r.failureCode ?? ""), message: String(r.message ?? "") };
-}
-
-/** Cut by code points so a surrogate pair is never split. */
-function clip(text: string, max: number): { text: string; cut: boolean; chars: number } {
-  const cps = Array.from(text);
-  if (cps.length <= max) return { text, cut: false, chars: cps.length };
-  return { text: cps.slice(0, max).join(""), cut: true, chars: cps.length };
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function historyEntry(raw: any, textLimit: number | null): TranscriptEntryView {
-  const t = mapTimelineEntry(raw);
-  const view: TranscriptEntryView = {
-    ...(t.entry_id ? { entry_id: t.entry_id } : {}),
-    ...(t.seq ? { seq: t.seq } : {}),
-    ...(t.updated_seq ? { updated_seq: t.updated_seq } : {}),
-    ...(t.kind ? { kind: t.kind } : {}),
-    ...(t.role ? { role: t.role } : {}),
-    ...(t.timestamp_ms ? { timestamp_ms: t.timestamp_ms } : {}),
-    omitted: t.decode_status === "omitted",
-    decode_status: t.decode_status,
-    ...(t.decode_reason ? { decode_reason: t.decode_reason } : {}),
-    untrusted: true,
-  };
-  if (typeof t.text === "string") {
-    view.preview = clip(t.text, PREVIEW_LIMIT).text;
-    if (textLimit == null) view.text = t.text;
-    else {
-      const c = clip(t.text, textLimit);
-      view.text = c.text;
-      if (c.cut) {
-        view.text_truncated = true;
-        view.text_chars = c.chars;
-      }
-    }
-  }
-  if (t.tool_name) view.tool_name = t.tool_name;
-  if (t.tool_status) view.tool_status = t.tool_status;
-  if (t.attachment_name) view.attachment_name = t.attachment_name;
-  return view;
 }
 
 export class MessageOps {
@@ -251,6 +211,15 @@ export class MessageOps {
     } catch (e) {
       return this.fromErr(e, request_id);
     }
+  }
+
+  /**
+   * Wait until the turn started by `message send` settles (issue #2), then return the
+   * transcript entries after its echo. See message-wait.ts for the static evidence and
+   * fallback rules; the turn_id ↔ message_id mapping is not live-verified.
+   */
+  async wait(input: MessageWaitInput): Promise<ResultEnvelope<MessageWaitData>> {
+    return waitForMessage(this.client, input, (r) => this.sim(r));
   }
 
   /**

@@ -113,6 +113,16 @@ export type MockState = {
   sendResponse?: Record<string, unknown>;
   /** Test hook: GetGrokBotSendStatus response. */
   sendStatusResponse?: Record<string, unknown>;
+  /**
+   * Test hook for `message wait`: GetGrokBotSendStatus responses served in order; the last
+   * one repeats. Wins over sendStatusResponse.
+   */
+  sendStatusSequence?: Array<Record<string, unknown>>;
+  /**
+   * Test hook for `message wait`: per-agent ListGrokBotAgentStatuses rows served in order
+   * (simulate running → settled, lastTurnSettlement, hasRunningSubagents…); the last repeats.
+   */
+  statusSequence?: Record<string, Array<Record<string, unknown>>>;
   /** Last ListGrokBotTranscriptEntries request as seen by the server (after wire decode). */
   lastTranscriptRequest?: { agentId: string; sessionId: string; limit: number };
   /** Test hook: override the synthetic generation. */
@@ -580,11 +590,15 @@ export function createMockTransport(state: MockState) {
         return override ?? { dispatched: true, delivery: 1 };
       },
       async getGrokBotSendStatus(req) {
+        const seq = state.sendStatusSequence;
+        if (seq && seq.length > 0) return seq.length > 1 ? seq.shift() : seq[0];
         if (state.sendStatusResponse) return state.sendStatusResponse;
         const found = state.messages.find((m) => m.messageId === req.messageId);
         return {
           status: found ? 2 : 1,
           acceptedAtMs: found ? BigInt(Date.now()) : undefined,
+          // Matches the transcript echo row written by sendGrokBotUserMessage.
+          ...(found ? { echoEntryId: `tr-${req.messageId}` } : {}),
         };
       },
       async listGrokBotTranscriptEntries(req) {
@@ -622,6 +636,13 @@ export function createMockTransport(state: MockState) {
           throw new ConnectError("simulated status failure", Code.Unavailable);
         }
         const ids = new Set(req.agentIds);
+        for (const id of ids) {
+          const seq = state.statusSequence?.[String(id)];
+          if (!seq || seq.length === 0) continue;
+          const next = seq.length > 1 ? seq.shift() : seq[0];
+          state.statuses = state.statuses.filter((s) => String(s.agentId) !== String(id));
+          state.statuses.push({ agentId: id, ...next });
+        }
         return {
           statuses: state.statuses.filter((s) => ids.has(String(s.agentId))),
         };
