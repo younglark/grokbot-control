@@ -13,6 +13,7 @@ import { assertCommandFlags, assertNoLeadingFlag } from "./flags.js";
 import { failResult, okResult } from "../dto/result.js";
 import { parseCliLimit, parseCliOffset } from "../ops/limits.js";
 import { dashboardCommand } from "./dashboard.js";
+import { exclusiveTextFlag, readTextFileFlag } from "./text-file.js";
 
 async function main(): Promise<number> {
   const argv = process.argv.slice(2);
@@ -214,11 +215,16 @@ async function main(): Promise<number> {
     } else if (noun === "bot" && verb === "create") {
       const name = flag(rest, "--name");
       if (!name) usageExit("bot create requires --name");
+      const description = exclusiveTextFlag(
+        rest,
+        "--description",
+        "gbc bot create --name <n> --description-file ./desc.md",
+      );
       code = emitResult(
         await plane.bot.create(
           {
             name,
-            description: flag(rest, "--description") || "",
+            description: description || "",
             title: flag(rest, "--title"),
             agentId: flag(rest, "--agent-id"),
             language: flag(rest, "--language"),
@@ -231,12 +237,17 @@ async function main(): Promise<number> {
     } else if (noun === "bot" && verb === "update") {
       const id = flag(rest, "--agent-id");
       if (!id) usageExit("bot update requires --agent-id");
+      const description = exclusiveTextFlag(
+        rest,
+        "--description",
+        "gbc bot update --agent-id <id> --description-file ./desc.md",
+      );
       code = emitResult(
         await plane.bot.update(
           id,
           {
             name: flag(rest, "--name"),
-            description: flag(rest, "--description"),
+            description,
             title: flag(rest, "--title"),
           },
           write,
@@ -285,20 +296,8 @@ async function main(): Promise<number> {
       const agentId = flag(rest, "--agent-id");
       const sessionId = flag(rest, "--session-id");
       let text = flag(rest, "--text");
-      if (hasFlag(rest, "--text-file")) {
-        const fs = await import("node:fs");
-        const file = flag(rest, "--text-file");
-        if (!file)
-          usageExit(
-            "--text-file requires a path",
-            "gbc message send ... --text-file ./msg.txt",
-          );
-        try {
-          text = fs.readFileSync(file, "utf8");
-        } catch (err) {
-          usageExit(`cannot read --text-file: ${(err as Error).message}`);
-        }
-      }
+      if (hasFlag(rest, "--text-file"))
+        text = readTextFileFlag(rest, "--text-file", "gbc message send ... --text-file ./msg.txt");
       if (hasFlag(rest, "--text-stdin")) text = await readStdin();
       if (!agentId || text == null) {
         usageExit(

@@ -103,7 +103,8 @@ export function buildTools(opts?: {
     },
     {
       name: "create_bot",
-      description: "Create temporal harness bot (CreateGrokBotTemporalAgent)",
+      description:
+        "Create temporal harness bot (CreateGrokBotTemporalAgent), then read it back from ListGrokBotAgents. Result has requested{name,title}, observed{name,title}, renamed_by_server; use observed.name. The server has been observed to merge title into name and clear title (not guaranteed). Read-back failure returns code create_unverified, outcome unknown, with error.details.agent_id. Omitted title is sent as \"\" (App behaviour). dry_run cannot detect a server rename.",
       inputSchema: input({
         name: z.string().min(1),
         description: z.string().optional(),
@@ -128,7 +129,8 @@ export function buildTools(opts?: {
     },
     {
       name: "update_bot",
-      description: "Partial update bot (UpdateGrokBotAgent)",
+      description:
+        "Partial update bot (UpdateGrokBotAgent), then read it back from ListGrokBotAgents. Result has requested (null = not patched), observed, renamed_by_server. Read-back failure returns code update_unverified, outcome unknown.",
       inputSchema: input({
         agent_id: agentId,
         name: z.string().optional(),

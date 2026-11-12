@@ -10,8 +10,8 @@ App 行为旁证：Linux **0.79.2** `main-app.pretty.cjs`（静态，未登录�
 |---|---|---|---|---|---|---|
 | 列出 bots | Agent | `bot.list` | `gbc bot list --json` | `list_bots` | `ListGrokBotAgents` | 只读；可能 `truncated` |
 | 查看 bot | Agent | `bot.get` | `gbc bot get --agent-id` | `get_bot` | **无 Get RPC**→list 筛选 | not_found |
-| 创建 bot | Agent | `bot.create` | `gbc bot create --name …` | `create_bot` | **优先** `CreateGrokBotTemporalAgent`（I/O=CreateGrokBotAgent*） | 写；需预分配 `agent_id`；超时→unknown，禁止盲重试 |
-| 更新 bot | Agent | `bot.update` | `gbc bot update …` | `update_bot` | `UpdateGrokBotAgent` | 写；`partial_update` |
+| 创建 bot | Agent | `bot.create` | `gbc bot create --name …` | `create_bot` | **优先** `CreateGrokBotTemporalAgent`（I/O=CreateGrokBotAgent*） | 写；需预分配 `agent_id`；超时→unknown，禁止盲重试；成功后 list 读回（`requested`/`observed`/`renamed_by_server`），读回失败→`create_unverified` exit 10；不传 title 发 `""`（同 App） |
+| 更新 bot | Agent | `bot.update` | `gbc bot update …` | `update_bot` | `UpdateGrokBotAgent` | 写；`partial_update`；成功后 list 读回，失败→`update_unverified` exit 10 |
 | 删除 bot | Agent | `bot.delete` | `gbc bot delete --confirm=<id>` | `delete_bot` | `DeleteGrokBotAgent` | 写；App：NotFound→ok；**sidebar 清理未证** |
 | 发消息 | UserMessage | `message.send` | `gbc message send --agent-id --session-id --text` | `send_message` | `SendGrokBotUserMessage` | 写；直接 RPC，**无强制 task**；`delivery`/`mode` 输出枚举名 + `*_code`，带 `workflow_id`、`refusal`；`delivery=refused` → `ok:false` code `refused` 退出 7 |
 | 发送状态 | SendStatus | `message.status` | `gbc message status` | `get_send_status` | `GetGrokBotSendStatus` | 只读；`status` 枚举名 + `status_code`，带 `echo_entry_id`/`rejection_code`/`accepted_at_ms` |
@@ -62,6 +62,9 @@ App 行为旁证：Linux **0.79.2** `main-app.pretty.cjs`（静态，未登录�
 - Sidebar writes are read back: section id order + names + agent membership (set) must match; in-section `agent_ids` order is not compared. Mismatch or read-back failure → `sidebar_unverified`, `outcome=unknown`, exit 10, `details.diff`.
 - `GBT_TRUST_BACKEND` / `--trust-backend`: only exact `"1"` trusts a non-allowlisted backend (SDK/CLI/MCP).
 - `limit` (bot list, message history; CLI/MCP/SDK): integer 1..1000, default 50; invalid → `invalid_argument`/`usage` exit 2, no RPC.
+- `bot create` / `bot update` (CLI/MCP/SDK): after a successful write, read the agent back from `ListGrokBotAgents` (≤3 reads, backoff 300ms/900ms, ≤~3s; retried only while the agent is absent from a complete list). `data.bot` is the read-back; `data.requested{name,title}` (update: `null` = not patched), `data.observed{name,title}`, `data.renamed_by_server`, `data.changed_fields`, `data.readback.attempts`. List error / truncated miss / still absent → `create_unverified` or `update_unverified`, `outcome=unknown`, exit 10, `error.details.agent_id` + `requested`. The server merging title into the display name (`"Showrunner · 幕僚长"`, title cleared) is observed in issue #3 only; no client-side evidence. Dry-run cannot detect it.
+- `bot create` without a title sends `title: ""`, matching the App (`dist/electron-main/main-app.cjs` 0.79.3 sha256 `d54cc236…a268209` line 1117, `createGrokBotTemporalAgent({…,title:n.title??"",…})`; same expression in 0.79.4). Before this change gbc sent the name as title.
+- `--description-file` (bot create/update): UTF-8 verbatim, same helper as `--text-file`; exclusive with `--description` → exit 2; missing/unreadable → exit 2. `-` is a path, not stdin.
 - `bot get`: match missing in a server-`truncated` list → `lookup_incomplete` (`outcome=unknown`, exit 10), not `not_found`.
 
 ### Still unverified against the live server (mock/fake passing is not live proof)

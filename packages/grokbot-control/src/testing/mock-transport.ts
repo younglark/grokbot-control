@@ -100,6 +100,20 @@ export type MockState = {
   retainAfterDeleteIds?: string[];
   /** Owned bots appended to later lists after at least one delete write. */
   afterDeleteInjectBots?: Array<Record<string, unknown>>;
+  /**
+   * Simulate the server behaviour observed in issue #3: on create/update with a
+   * non-empty title, store name as "<name> · <title>" and clear title.
+   */
+  mergeTitleIntoName?: boolean;
+  /**
+   * Simulate read-after-write lag: a newly created agent is hidden from the next
+   * N ListGrokBotAgents calls. Use Infinity to keep it hidden forever.
+   */
+  createVisibilityDelayLists?: number;
+  /** Per-agent remaining hidden list reads (managed by the mock). */
+  hiddenAgentLists?: Record<string, number>;
+  /** Fail ListGrokBotAgents only after this many more successful calls (then fail until cleared). */
+  failListAgentsAfter?: number;
 };
 
 /**
@@ -173,6 +187,12 @@ function counts(state: MockState): MockCallCounts {
 
 function recordWrite(state: MockState, method: string, req: unknown): void {
   (state.writeCalls ??= []).push({ method, req });
+}
+
+/** Issue #3 simulation: server folds a non-empty title into the display name. */
+function mergeTitle(state: MockState, name: string, title: string | undefined): { name: string; title: string } {
+  if (state.mergeTitleIntoName && title) return { name: `${name} · ${title}`, title: "" };
+  return { name, title: title ?? "" };
 }
 
 function ts(offsetSec = 0): { seconds: bigint; nanos: number } {
@@ -357,10 +377,20 @@ export function createMockTransport(state: MockState) {
       },
       async listGrokBotAgents() {
         counts(state).listGrokBotAgents += 1;
+        if (state.failListAgentsAfter !== undefined) {
+          if (state.failListAgentsAfter <= 0) state.failListAgents = true;
+          else state.failListAgentsAfter -= 1;
+        }
         if (state.failListAgents) {
           throw new ConnectError("simulated list failure", Code.Unavailable);
         }
-        const agents = [...state.bots];
+        const hidden = state.hiddenAgentLists ?? {};
+        const agents = state.bots.filter((b) => {
+          const left = hidden[String(b.agentId ?? "")];
+          if (left === undefined || left <= 0) return true;
+          hidden[String(b.agentId ?? "")] = left - 1;
+          return false;
+        });
         if ((state.writeCalls ?? []).some((c) => c.method === "DeleteGrokBotAgent") && state.afterDeleteInjectBots) {
           agents.push(...state.afterDeleteInjectBots);
         }
@@ -376,12 +406,13 @@ export function createMockTransport(state: MockState) {
           state.dropNextWrite = false;
           throw new ConnectError("simulated drop", Code.DeadlineExceeded);
         }
+        const merged = mergeTitle(state, req.name, req.title);
         const agent = {
           id: req.agentId,
           agentId: req.agentId,
-          name: req.name,
+          name: merged.name,
           description: req.description,
-          title: req.title,
+          title: merged.title,
           harness: "TEMPORAL",
           role: "agent",
           kind: 1,
@@ -398,6 +429,9 @@ export function createMockTransport(state: MockState) {
           people: [],
         };
         state.bots.push(agent);
+        if (state.createVisibilityDelayLists) {
+          (state.hiddenAgentLists ??= {})[req.agentId] = state.createVisibilityDelayLists;
+        }
         state.sessions.push({
           agentId: req.agentId,
           sessionId: `sess-${req.agentId}`,
@@ -421,6 +455,11 @@ export function createMockTransport(state: MockState) {
         if (req.name != null) b.name = req.name;
         if (req.description != null) b.description = req.description;
         if (req.title != null) b.title = req.title;
+        if (req.title != null && req.title !== "") {
+          const merged = mergeTitle(state, String(b.name ?? ""), req.title);
+          b.name = merged.name;
+          b.title = merged.title;
+        }
         return { agent: b };
       },
       async deleteGrokBotAgent(req) {
