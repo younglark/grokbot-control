@@ -808,7 +808,10 @@ it("CLI message send dryrun uses default session without reading credentials", (
     },
   );
   assert.equal(r.status, 0, r.stderr);
-  assert.equal(JSON.parse(r.stdout).data.session_id, "");
+  const data = JSON.parse(r.stdout).data;
+  // Default session: no id is known, so it is null with an explicit source (issue #1).
+  assert.equal(data.session_id, null);
+  assert.equal(data.session_source, "default_unreported");
 });
 it("rejected oversized head response does not claim head refresh", async () => {
   const f = fixture(temp(), []);

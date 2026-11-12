@@ -308,7 +308,7 @@ async function main(): Promise<number> {
       code = emitResult(
         await plane.message.send({
           agentId,
-          sessionId: sessionId ?? "",
+          sessionId: sessionId || undefined,
           text,
           messageId: flag(rest, "--message-id"),
           dryRun: write.dryRun,
@@ -327,7 +327,7 @@ async function main(): Promise<number> {
       code = emitResult(
         await plane.message.status({
           agentId,
-          sessionId: sessionId ?? "",
+          sessionId: sessionId || undefined,
           messageId,
         }),
         mode,

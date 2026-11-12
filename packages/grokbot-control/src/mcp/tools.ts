@@ -195,7 +195,9 @@ export function buildTools(opts?: {
     {
       name: "send_message",
       description:
-        "Send user message directly (SendGrokBotUserMessage). No task_id required. Delivery ≠ success.",
+        "Send user message directly (SendGrokBotUserMessage). No task_id required. Delivery ≠ success. " +
+        "Returns delivery/mode as names plus *_code, workflow_id and refusal; session_id is null with " +
+        "session_source=default_unreported when omitted. delivery=refused is an error (code refused).",
       inputSchema: input({
         agent_id: agentId,
         session_id: z.string().optional(),
@@ -206,7 +208,7 @@ export function buildTools(opts?: {
       handler: (p, a) =>
         p.message.send({
           agentId: String(a.agent_id),
-          sessionId: (a.session_id as string | undefined) ?? "",
+          sessionId: (a.session_id as string | undefined) || undefined,
           text: String(a.text),
           messageId: a.message_id as string | undefined,
           dryRun: Boolean(a.dry_run),
@@ -215,7 +217,9 @@ export function buildTools(opts?: {
     },
     {
       name: "get_send_status",
-      description: "Get message send status (delivery path)",
+      description:
+        "Get message send status (delivery path). status is a name (e.g. accepted) plus status_code; " +
+        "includes echo_entry_id, rejection_code and accepted_at_ms (null when absent).",
       readOnly: true,
       inputSchema: input({
         agent_id: agentId,
@@ -225,7 +229,7 @@ export function buildTools(opts?: {
       handler: (p, a) =>
         p.message.status({
           agentId: String(a.agent_id),
-          sessionId: (a.session_id as string | undefined) ?? "",
+          sessionId: (a.session_id as string | undefined) || undefined,
           messageId: String(a.message_id),
         }),
     },

@@ -123,12 +123,30 @@ export type SourceFreshnessView = {
   error?: string;
 };
 
+/**
+ * Where `session_id` came from. `SendGrokBotUserMessage` / `GetGrokBotSendStatus`
+ * never return a session id, so an omitted caller value stays unknown.
+ */
+export type SessionSource = "caller" | "default_unreported";
+
+/** aiserver.v1.GrokBotHarnessRefusal, as returned by SendGrokBotUserMessage. */
+export type SendRefusal = { failure_code: string; message: string };
+
 export type SendDelivery = {
   message_id: string;
   agent_id: string;
-  session_id: string;
+  /** Caller-supplied session id, or null when the default session was used. */
+  session_id: string | null;
+  session_source: SessionSource;
   dispatched?: boolean;
+  /** GrokBotUserMessageDelivery name (lower snake), e.g. "accepted_temporal"; "unknown" if not in the schema. */
   delivery?: string;
+  delivery_code?: number;
+  /** GrokBotTemporalHarnessMode name (lower snake), e.g. "live". */
+  mode?: string;
+  mode_code?: number;
+  workflow_id?: string | null;
+  refusal?: SendRefusal | null;
   /** Delivery/acceptance only — NOT task/business success. */
   note: string;
 };
@@ -136,10 +154,14 @@ export type SendDelivery = {
 export type SendStatusView = {
   agent_id: string;
   message_id: string;
-  session_id: string;
-  status?: string;
-  rejection_code?: string;
-  accepted_at_ms?: string;
+  session_id: string | null;
+  session_source: SessionSource;
+  /** GrokBotSendStatus name (lower snake), e.g. "accepted"; "unknown" if not in the schema. */
+  status: string;
+  status_code: number;
+  echo_entry_id: string | null;
+  rejection_code: string | null;
+  accepted_at_ms: string | null;
   note: string;
 };
 
@@ -151,7 +173,6 @@ export type TranscriptEntryView = {
   preview?: string;
   untrusted?: boolean;
 };
-
 
 /** Sanitized whoami for the local `gbc dashboard` page (no tokens or paths). */
 export type SanitizedWhoami = {
