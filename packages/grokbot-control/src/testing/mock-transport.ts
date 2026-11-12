@@ -82,6 +82,12 @@ export type MockState = {
   failTodos?: boolean;
   failTasks?: boolean;
   failSessions?: boolean;
+  /** Test hook: SendGrokBotUserMessage response (e.g. { dispatched: false, delivery: 4, refusal }). */
+  sendResponse?: Record<string, unknown>;
+  /** Test hook: GetGrokBotSendStatus response. */
+  sendStatusResponse?: Record<string, unknown>;
+  /** Last ListGrokBotTranscriptEntries request as seen by the server (after wire decode). */
+  lastTranscriptRequest?: { agentId: string; sessionId: string; limit: number };
   /** Test hook: override the synthetic generation. */
   transcriptGeneration?: number;
   /** When true, ListGrokBotAgents returns truncated=true (incomplete inventory). */
@@ -95,6 +101,23 @@ export type MockState = {
   /** Owned bots appended to later lists after at least one delete write. */
   afterDeleteInjectBots?: Array<Record<string, unknown>>;
 };
+
+/**
+ * Transcript bodies are proto `bytes`. Accept the shapes a persisted mock state can
+ * hold after a JSON round trip (base64 string, Buffer JSON, index-keyed object).
+ */
+function mockBytes(v: unknown): Uint8Array | undefined {
+  if (v == null) return undefined;
+  if (v instanceof Uint8Array) return v;
+  if (typeof v === "string") return new Uint8Array(Buffer.from(v, "base64"));
+  if (Array.isArray(v)) return Uint8Array.from(v);
+  if (typeof v === "object") {
+    const o = v as Record<string, unknown>;
+    if (Array.isArray(o.data)) return Uint8Array.from(o.data as number[]);
+    return Uint8Array.from(Object.values(o) as number[]);
+  }
+  return undefined;
+}
 
 function defaultSandbox(): MockSandboxState {
   return {
@@ -432,17 +455,36 @@ export function createMockTransport(state: MockState) {
           throw new ConnectError("simulated drop", Code.DeadlineExceeded);
         }
         state.messages.push({ ...req });
-        state.transcript.push({
-          id: `tr-${req.messageId}`,
-          kind: "user",
-          plaintext: req.text,
-        });
-        return { dispatched: true, delivery: 1 };
+        const override = state.sendResponse;
+        const refused = override?.delivery === 4;
+        if (!refused) {
+          // Schema-shaped row (GrokBotTranscriptEntry): UTF-8 JSON UI entry in `body` bytes.
+          // agentId/sessionId are mock-only filter keys; the wire drops them.
+          state.transcript.push({
+            entryId: `tr-${req.messageId}`,
+            seq: BigInt(state.transcript.length + 1),
+            entryKind: "message",
+            bodyOmitted: false,
+            body: new TextEncoder().encode(
+              JSON.stringify({
+                id: `tr-${req.messageId}`,
+                kind: "message",
+                role: "user",
+                content: req.text,
+                timestampMs: Number(req.sentAtMs ?? 0n),
+              }),
+            ),
+            agentId: req.agentId,
+            ...(req.sessionId ? { sessionId: req.sessionId } : {}),
+          });
+        }
+        return override ?? { dispatched: true, delivery: 1 };
       },
       async getGrokBotSendStatus(req) {
+        if (state.sendStatusResponse) return state.sendStatusResponse;
         const found = state.messages.find((m) => m.messageId === req.messageId);
         return {
-          status: found ? 2 : 0,
+          status: found ? 2 : 1,
           acceptedAtMs: found ? BigInt(Date.now()) : undefined,
         };
       },
@@ -451,12 +493,19 @@ export function createMockTransport(state: MockState) {
         if (state.failTranscript) {
           throw new ConnectError("simulated transcript failure", Code.Unavailable);
         }
-        const entries = state.transcript.filter((e) => {
-          const row = e;
-          if (row.agentId && row.agentId !== req.agentId) return false;
-          if (req.sessionId && row.sessionId && row.sessionId !== req.sessionId) return false;
-          return true;
-        });
+        state.lastTranscriptRequest = {
+          agentId: req.agentId,
+          sessionId: req.sessionId,
+          limit: req.limit,
+        };
+        const entries = state.transcript
+          .filter((e) => {
+            const row = e;
+            if (row.agentId && row.agentId !== req.agentId) return false;
+            if (req.sessionId && row.sessionId && row.sessionId !== req.sessionId) return false;
+            return true;
+          })
+          .map((e) => (e && e.body != null ? { ...e, body: mockBytes(e.body) } : e));
         return { entries, generation: state.transcriptGeneration ?? 1 };
       },
       async listGrokBotAgentSessions(req) {

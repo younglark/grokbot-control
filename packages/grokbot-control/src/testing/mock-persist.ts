@@ -13,6 +13,8 @@ function statePath(): string {
 
 function jsonReplacer(_k: string, v: unknown): unknown {
   if (typeof v === "bigint") return v.toString();
+  // Transcript bodies are bytes; keep them compact and lossless across CLI runs.
+  if (v instanceof Uint8Array && !Buffer.isBuffer(v)) return Buffer.from(v).toString("base64");
   return v;
 }
 
