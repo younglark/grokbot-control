@@ -4,7 +4,7 @@
 
 ## 1. 一句话现状
 
-- **控制面**（`grokbot-control`）：已实现。当前通过 GitHub tag `npm-v0.5.0` 分发（`npx -y --package=github:younglark/grokbot-control#npm-v0.5.0 gbc`），由推送 `v0.5.0` 后的 Actions 生成该 tag，不再向 npmjs 发布。已推送的 `v0.2.0` / `v0.2.1` / `v0.3.0` / `v0.4.0` / `v0.4.1` / `v0.4.2` 不要改写；`v0.2.0` 的发版任务因测试挂起被取消，没有生成 `npm-v0.2.0`；`v0.4.0` 的发版工作流在 `npm test` 处因 Playwright/Chromium 失败，没有生成 `npm-v0.4.0`；`v0.4.1` 打 `npm-v` 时因 `npm pack --json` 被 vite 日志污染而失败，没有生成 `npm-v0.4.1`。npmjs 上的 `grokbot-control@0.1.3` 已停止更新。离线测试覆盖完整；live 验证过 CLI 登录、2026-11-11 的 bot 模式轮询收束、三个只读 RPC，以及一次隔离的同步验收。选中团队绑定与 OAuth 刷新仍未 live 验证。详见 packages/grokbot-control/CHANGELOG.md 与 [development.md](development.md) 的发版一节。
+- **控制面**（`grokbot-control`）：已实现。当前通过 GitHub tag `npm-v0.6.0` 分发（`npx -y --package=github:younglark/grokbot-control#npm-v0.6.0 gbc`），由推送 `v0.6.0` 后的 Actions 生成该 tag，不再向 npmjs 发布。已推送的 `v0.2.0` / `v0.2.1` / `v0.3.0` / `v0.4.0` / `v0.4.1` / `v0.4.2` 不要改写；`v0.2.0` 的发版任务因测试挂起被取消，没有生成 `npm-v0.2.0`；`v0.4.0` 的发版工作流在 `npm test` 处因 Playwright/Chromium 失败，没有生成 `npm-v0.4.0`；`v0.4.1` 打 `npm-v` 时因 `npm pack --json` 被 vite 日志污染而失败，没有生成 `npm-v0.4.1`。npmjs 上的 `grokbot-control@0.1.3` 已停止更新。离线测试覆盖完整；live 验证过 CLI 登录、2026-11-11 的 bot 模式轮询收束、三个只读 RPC，以及一次隔离的同步验收。选中团队绑定与 OAuth 刷新仍未 live 验证。详见 packages/grokbot-control/CHANGELOG.md 与 [development.md](development.md) 的发版一节。
 - **local-exec-daemon**：按 App 0.79.3 原版 daemon 逐函数移植。Linux 上可达、可观测的路径已对齐，有 D: 行号证据和测试；通过了合成后端的门控验收（48 步矩阵：41 步一致、7 步发现差异已修复；另有 2 项 Linux 不可达）。**完整替换验收没有做**，不能说是无条件 drop-in。
 - **无头注册 / Docker**：只有设计边界，没有代码。
 

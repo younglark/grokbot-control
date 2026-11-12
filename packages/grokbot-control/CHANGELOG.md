@@ -4,7 +4,16 @@
 
 ## Unreleased
 
-计划随 **0.6.0** 发布（尚未升版本号）。**含破坏性变更**：解析 `message send` / `message status` / `message history` 的 `--json` 输出的脚本需要调整。`schema_version` 仍为 `1.0.0`（按仓库惯例它是封套版本，0.2.0 的 CLI 输出形状破坏性变更也没有升它）。
+## 0.6.0 — 2026-11-12（通过 GitHub tag `npm-v0.6.0` 分发，不发到 npmjs）
+
+安装：`npx -y --package=github:younglark/grokbot-control#npm-v0.6.0 gbc`（`gbc-mcp` 同样要加 `--package`）。
+
+**含破坏性变更**：
+- 解析 `message send` / `message status` / `message history` 的 `--json` 输出的脚本需要调整（枚举改为名字、`session_id` 改为 `null`、history 条目形状变化）。
+- `message send` 遇到 `delivery=refused` 现在返回 `ok:false`、退出码 7（以前是 `ok:true`、退出码 0）。
+- `bot create` / `bot update` 的 `data.bot` 改为读回的值；写成功但读回失败时返回退出码 10（以前是 0）；不传 `--title` 时发送 `""`。
+
+`schema_version` 仍为 `1.0.0`（按仓库惯例它是封套版本，0.2.0 的 CLI 输出形状破坏性变更也没有升它）。
 
 ### Breaking
 
