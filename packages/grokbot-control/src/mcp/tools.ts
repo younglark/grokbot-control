@@ -195,6 +195,28 @@ export function buildTools(opts?: {
       },
     },
     {
+      name: "wake_computer",
+      description:
+        "Wake the hibernated shared Grok Bot computer (non-destructive; not a reset, no confirm word). " +
+        "Sends EnsureSandBox with an empty request only when the run state is hibernated; running returns " +
+        "already_running with no write. Static inference from the official App, NOT live-verified; waking may " +
+        "incur compute charges. dry_run reads state only. wait_seconds (0..30) polls GetSandBoxRunState until " +
+        "running; still hibernated or timeout returns wake_unverified with outcome unknown. Never returns tokens or URLs.",
+      inputSchema: input({
+        wait_seconds: z.number().int().min(0).max(30).optional(),
+        ...writeFlags,
+      }),
+      handler: (p, a) => {
+        const waitSeconds = (a.wait_seconds as number | undefined) ?? 0;
+        return p.computer.wake({
+          wait: waitSeconds > 0,
+          timeoutSeconds: waitSeconds > 0 ? waitSeconds : undefined,
+          dryRun: Boolean(a.dry_run),
+          allowWrite: Boolean(a.allow_writes),
+        });
+      },
+    },
+    {
       name: "send_message",
       description:
         "Send user message directly (SendGrokBotUserMessage). No task_id required. Delivery ≠ success. " +

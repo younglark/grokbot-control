@@ -4,6 +4,10 @@
 
 ## Unreleased
 
+### 新增
+
+- **`gbc computer wake`、MCP `wake_computer`、SDK `computer.wake()`（#5）。** 非破坏性唤醒休眠的共享电脑，与 `computer reset` 完全分开，不需要确认词，需要 `--allow-writes`。只在 run state 为 hibernated 时发一次 `EnsureSandBox`，请求为空（与官方 App `connect()` 相同，不设 `wake`/`supports_asleep_box`，不带 App 的 `x-sand-box-park` 头），然后用 `GetSandBoxRunState` 读回；`--wait` 轮询到 running（`--timeout` 1..3600，默认 120；MCP `wait_seconds` 上限 30）。running → `already_running`（不发写）；starting → 不发写；absent/unspecified → `failed_precondition`（退出 7，不会借唤醒新建电脑）；仍 hibernated / 超时 / 读回失败 → `wake_unverified`、outcome unknown、退出 10。`--dry-run` 只读当前状态并报告将要做什么。输出白名单：run state 名字与 code、`image_update_available`、镜像信息；`EnsureSandBoxResponse` 里的 token、URL、cluster/pod 等一律不输出。不升级镜像、不 reset、不调 `EnsureSandBoxWindow`。**静态推断，未 live 验证；唤醒可能产生费用。** 证据见 [docs/protocol/computer-wake-0.79.4.md](https://github.com/younglark/grokbot-control/blob/main/docs/protocol/computer-wake-0.79.4.md)。
+
 ## 0.6.1 — 2026-11-12（通过 GitHub tag `npm-v0.6.1` 分发，不发到 npmjs）
 
 安装：`npx -y --package=github:younglark/grokbot-control#npm-v0.6.1 gbc`（`gbc-mcp` 同样要加 `--package`）。

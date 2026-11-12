@@ -6,6 +6,10 @@ export type {
   ComputerResetOpts,
   ComputerResetData,
   ComputerResetWait,
+  ComputerWakeOpts,
+  ComputerWakeData,
+  ComputerWakeAction,
+  ComputerWakeRunState,
 } from "./ops/computer.js";
 export { createGrokBotClient, mapConnectError } from "./connect/client.js";
 export {

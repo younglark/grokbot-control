@@ -21,6 +21,7 @@ export const COMMAND_FLAGS: Record<string, Record<string, FlagSpec>> = {
   computer: {
     state: { values: [], switches: [] },
     reset: { values: ["--confirm", "--timeout"], switches: ["--hard", "--wait"] },
+    wake: { values: ["--timeout"], switches: ["--wait"] },
   },
   account: {
     cleanup: { values: ["--confirm", "--plan", "--timeout"], switches: ["--hard", "--wait"] },

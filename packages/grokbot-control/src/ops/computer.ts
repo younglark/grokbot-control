@@ -34,6 +34,15 @@ const MIGRATION_IDLE_MS = 30_000;
 const MIGRATION_MAX_ATTEMPTS = 20;
 const DEFAULT_TIMEOUT_SECONDS = 600;
 const MAX_TIMEOUT_SECONDS = 3_600;
+const WAKE_DEFAULT_TIMEOUT_SECONDS = 120;
+const WAKE_POLL_MS = 3_000;
+const RUN_STATE_ABSENT = 1;
+const RUN_STATE_HIBERNATED = 2;
+const RUN_STATE_RUNNING = 3;
+const RUN_STATE_STARTING = 4;
+const WAKE_EVIDENCE = "static_inference_not_live_verified" as const;
+const WAKE_NOTE =
+  "computer wake is a static inference from the official App (EnsureSandBox with an empty request), not live-verified; waking may incur compute charges.";
 
 export type ComputerState = {
   state: string;
@@ -77,6 +86,58 @@ export type ComputerResetData = {
   preserve_data: false;
   tracking: "operation" | "untrackable";
   wait?: ComputerResetWait;
+};
+
+
+export type ComputerWakeOpts = {
+  wait?: boolean;
+  timeoutSeconds?: number;
+  dryRun?: boolean;
+  allowWrite?: boolean;
+  /** Test hook: GetSandBoxRunState poll interval while waiting (default 3000ms). */
+  pollIntervalMs?: number;
+};
+
+/**
+ * Non-secret subset of a run state. EnsureSandBoxResponse also carries
+ * credentials and endpoints (network_token, exec_daemon_auth_token,
+ * gateway_token, *_port_token, vnc_url, gateway_url, exec_daemon_url,
+ * fork_vnc_base_url, cluster/tenant/pod ids). None of those are ever copied.
+ */
+export type ComputerWakeRunState = {
+  state: string;
+  state_code: number;
+  image_update_available?: boolean;
+};
+
+export type ComputerWakeAction =
+  | "wake"
+  | "already_running"
+  | "already_starting"
+  | "would_wake"
+  | "would_skip"
+  | "would_refuse";
+
+export type ComputerWakeData = {
+  action: ComputerWakeAction;
+  /** True only when EnsureSandBox was dispatched. */
+  write_sent: boolean;
+  rpc: "EnsureSandBox";
+  /** Exact EnsureSandBoxRequest sent (or that would be sent): no fields set, no extra headers. */
+  request: Record<string, never>;
+  before: ComputerState;
+  /** run_state/image_update_available from EnsureSandBoxResponse only (whitelist). */
+  ensure_response?: ComputerWakeRunState;
+  /** Last GetSandBoxRunState read-back (absent for dry-run). */
+  after?: ComputerState;
+  running: boolean;
+  wait?: {
+    requested: true;
+    completed: boolean;
+    polls: number;
+    timeout_seconds: number;
+  };
+  evidence: "static_inference_not_live_verified";
 };
 
 type WaitOutcome =
@@ -140,8 +201,27 @@ function mapComputerState(raw: unknown): ComputerState {
   };
 }
 
-function validateTimeout(seconds: number | undefined): number {
-  if (seconds === undefined) return DEFAULT_TIMEOUT_SECONDS;
+/** Whitelist mapper for EnsureSandBoxResponse. Never spread or log the raw response. */
+function mapEnsureRunState(raw: unknown): ComputerWakeRunState {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const r = (raw ?? {}) as any;
+  const code = Number(r.runState ?? r.run_state ?? 0);
+  const stateCode = Number.isFinite(code) ? code : 0;
+  const imageUpdate = r.imageUpdateAvailable ?? r.image_update_available;
+  return {
+    state: RUN_STATE_NAMES[stateCode] ?? `unknown_${stateCode}`,
+    state_code: stateCode,
+    ...(imageUpdate === undefined
+      ? {}
+      : { image_update_available: Boolean(imageUpdate) }),
+  };
+}
+
+function validateTimeout(
+  seconds: number | undefined,
+  fallback = DEFAULT_TIMEOUT_SECONDS,
+): number {
+  if (seconds === undefined) return fallback;
   if (!Number.isInteger(seconds) || seconds < 1 || seconds > MAX_TIMEOUT_SECONDS) {
     throw new GbcError(
       "invalid_argument",
@@ -425,6 +505,205 @@ export class ComputerOps {
     } catch (e) {
       return this.fromErr(e, request_id, true);
     }
+  }
+
+
+  /**
+   * Non-destructive wake of the shared computer (issue #5).
+   *
+   * Evidence (docs/protocol/computer-wake-0.79.4.md): the official App wakes a
+   * hibernated computer through `connect()` -> `EnsureSandBox({})` with neither
+   * `wake` nor `supports_asleep_box` set; `wake:false` / `supports_asleep_box:true`
+   * are the App's non-waking probes. The App's optional `x-sand-box-park` header
+   * is driven by App feature gates and is NOT sent here. Not live-verified.
+   *
+   * Never calls RecreateSandBox / ForceRecreateSandBox / EnsureSandBoxWindow, and
+   * never copies credentials or URLs from EnsureSandBoxResponse.
+   */
+  async wake(
+    opts: ComputerWakeOpts = {},
+    signal?: AbortSignal,
+  ): Promise<ResultEnvelope<ComputerWakeData>> {
+    const request_id = newRequestId();
+    const wait = Boolean(opts.wait);
+
+    if (!opts.dryRun && !opts.allowWrite && process.env.GBT_ALLOW_WRITES !== "1") {
+      return this.sim(
+        failResult(
+          "denied",
+          "refusing computer.wake: pass --allow-writes or GBT_ALLOW_WRITES=1",
+          {
+            request_id,
+            hint: `Preview with \`gbc computer wake --dry-run\`. ${WAKE_NOTE}`,
+          },
+        ),
+      );
+    }
+
+    let timeoutSeconds: number;
+    try {
+      timeoutSeconds = validateTimeout(opts.timeoutSeconds, WAKE_DEFAULT_TIMEOUT_SECONDS);
+    } catch (e) {
+      return this.fromErr(e, request_id);
+    }
+    const pollMs = Math.max(1, opts.pollIntervalMs ?? WAKE_POLL_MS);
+
+    let before: ComputerState;
+    try {
+      before = mapComputerState(await this.client.getSandBoxRunState({}));
+    } catch (e) {
+      return this.fromErr(e, request_id);
+    }
+
+    const base = {
+      rpc: "EnsureSandBox" as const,
+      request: {} as Record<string, never>,
+      before,
+      evidence: WAKE_EVIDENCE,
+    };
+
+    const wakeable = before.state_code === RUN_STATE_HIBERNATED;
+    const skip =
+      before.state_code === RUN_STATE_RUNNING
+        ? ("already_running" as const)
+        : before.state_code === RUN_STATE_STARTING
+          ? ("already_starting" as const)
+          : undefined;
+
+    if (opts.dryRun) {
+      return this.sim(
+        okResult(
+          {
+            ...base,
+            action: wakeable
+              ? ("would_wake" as const)
+              : skip !== undefined
+                ? ("would_skip" as const)
+                : ("would_refuse" as const),
+            write_sent: false,
+            running: before.state_code === RUN_STATE_RUNNING,
+          },
+          { request_id, code: "dry_run" },
+        ),
+      );
+    }
+
+    if (!wakeable && skip === undefined) {
+      return this.sim(
+        failResult(
+          "failed_precondition",
+          `computer is ${before.state}; wake only applies to a hibernated computer`,
+          {
+            request_id,
+            hint:
+              before.state_code === RUN_STATE_ABSENT
+                ? "No computer exists. Wake will not create one; EnsureSandBox on an absent computer may provision a new one."
+                : "Check `gbc computer state` and retry once it reports hibernated.",
+            details: { ...base, write_sent: false },
+          },
+        ),
+      );
+    }
+
+    if (skip === "already_running") {
+      return this.sim(
+        okResult(
+          { ...base, action: skip, write_sent: false, after: before, running: true },
+          { request_id, code: "already_running" },
+        ),
+      );
+    }
+
+    let ensure: ComputerWakeRunState | undefined;
+    if (wakeable) {
+      try {
+        // Exactly what the App's connect() sends: an empty EnsureSandBoxRequest.
+        const res = await this.client.ensureSandBox({});
+        ensure = mapEnsureRunState(res);
+      } catch (e) {
+        return this.fromErr(e, request_id, true);
+      }
+    }
+    const action = wakeable ? ("wake" as const) : ("already_starting" as const);
+    const written = {
+      ...base,
+      action,
+      write_sent: wakeable,
+      ...(ensure === undefined ? {} : { ensure_response: ensure }),
+    };
+
+    const deadline = Date.now() + timeoutSeconds * 1000;
+    let polls = 0;
+    let after: ComputerState | undefined;
+    let canceled = false;
+    let readError: unknown;
+    while (true) {
+      try {
+        after = mapComputerState(await this.client.getSandBoxRunState({}));
+        readError = undefined;
+      } catch (e) {
+        readError = e;
+      }
+      polls += 1;
+      if (after?.state_code === RUN_STATE_RUNNING && readError === undefined) break;
+      if (!wait || Date.now() + pollMs > deadline) break;
+      try {
+        await delay(pollMs, signal);
+      } catch {
+        canceled = true;
+        break;
+      }
+    }
+
+    const waitInfo = wait
+      ? {
+          wait: {
+            requested: true as const,
+            completed: after?.state_code === RUN_STATE_RUNNING && readError === undefined,
+            polls,
+            timeout_seconds: timeoutSeconds,
+          },
+        }
+      : {};
+    const running = readError === undefined && after?.state_code === RUN_STATE_RUNNING;
+    const data: ComputerWakeData = {
+      ...written,
+      ...(after === undefined ? {} : { after }),
+      running,
+      ...waitInfo,
+    };
+
+    if (running) {
+      return this.sim(okResult(data, { request_id, code: wakeable ? "ok" : "already_starting" }));
+    }
+
+    if (
+      !wait &&
+      !canceled &&
+      readError === undefined &&
+      after?.state_code === RUN_STATE_STARTING
+    ) {
+      // Accepted and starting; caller did not ask to wait.
+      return this.sim(okResult(data, { request_id, code: "starting" }));
+    }
+
+    const why = canceled
+      ? "stopped waiting"
+      : readError !== undefined
+        ? "read-back failed"
+        : wait
+          ? `still ${after?.state ?? "unknown"} after ${timeoutSeconds}s`
+          : `read-back shows ${after?.state ?? "unknown"}`;
+    return this.sim(
+      failResult("wake_unverified", `computer wake not confirmed: ${why}`, {
+        request_id,
+        outcome: "unknown",
+        hint: wakeable
+          ? "EnsureSandBox was sent; the computer may still be waking. Check `gbc computer state` before retrying. Do not reset."
+          : "The computer was already starting; check `gbc computer state`.",
+        details: data,
+      }),
+    );
   }
 
   private async waitForMigration(

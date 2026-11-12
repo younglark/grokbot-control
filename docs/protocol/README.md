@@ -13,6 +13,7 @@
 | [transcript-body-0.79.3.md](transcript-body-0.79.3.md) | 0.79.3 transcript 正文（body/blob/omitted）读取证据（路径被代码引用） |
 | [attachment-pagination-0.79.3.md](attachment-pagination-0.79.3.md) | 0.79.3 附件与分页证据 |
 | [app-0.79.4-delta.md](app-0.79.4-delta.md) | App 0.79.3 → 0.79.4 静态比对：来源哈希、变化文件、schema/鉴权/daemon 结论 |
+| [computer-wake-0.79.4.md](computer-wake-0.79.4.md) | App「唤醒电脑」→ `EnsureSandBox` 的静态证据链（#5）：哪些已证实、哪些是推断 |
 | [compat-matrix.md](compat-matrix.md) | 版本兼容、create/sidebar 漂移、未 live 验证项 |
 | [references.md](references.md) | 外部参考 |
 | [冻结 schema](../../packages/protocol/baselines/) | `schema-0.79.4`（不可变归档）与 `schema-0.79.4-daemon-exec`（当前生成器输入）；0.79.3 两个目录保留为历史冻结 |
