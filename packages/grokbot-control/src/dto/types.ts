@@ -123,12 +123,30 @@ export type SourceFreshnessView = {
   error?: string;
 };
 
+/**
+ * Where `session_id` came from. `SendGrokBotUserMessage` / `GetGrokBotSendStatus`
+ * never return a session id, so an omitted caller value stays unknown.
+ */
+export type SessionSource = "caller" | "default_unreported";
+
+/** aiserver.v1.GrokBotHarnessRefusal, as returned by SendGrokBotUserMessage. */
+export type SendRefusal = { failure_code: string; message: string };
+
 export type SendDelivery = {
   message_id: string;
   agent_id: string;
-  session_id: string;
+  /** Caller-supplied session id, or null when the default session was used. */
+  session_id: string | null;
+  session_source: SessionSource;
   dispatched?: boolean;
+  /** GrokBotUserMessageDelivery name (lower snake), e.g. "accepted_temporal"; "unknown" if not in the schema. */
   delivery?: string;
+  delivery_code?: number;
+  /** GrokBotTemporalHarnessMode name (lower snake), e.g. "live". */
+  mode?: string;
+  mode_code?: number;
+  workflow_id?: string | null;
+  refusal?: SendRefusal | null;
   /** Delivery/acceptance only — NOT task/business success. */
   note: string;
 };
@@ -136,22 +154,44 @@ export type SendDelivery = {
 export type SendStatusView = {
   agent_id: string;
   message_id: string;
-  session_id: string;
-  status?: string;
-  rejection_code?: string;
-  accepted_at_ms?: string;
+  session_id: string | null;
+  session_source: SessionSource;
+  /** GrokBotSendStatus name (lower snake), e.g. "accepted"; "unknown" if not in the schema. */
+  status: string;
+  status_code: number;
+  echo_entry_id: string | null;
+  rejection_code: string | null;
+  accepted_at_ms: string | null;
   note: string;
 };
 
+/**
+ * One `message history` row. Bodies are decoded with the same UI-entry JSON decoder
+ * as the dashboard transcript (`mapTimelineEntry`); nothing is decrypted.
+ */
 export type TranscriptEntryView = {
-  /** Opaque / partial — ciphertext or omitted bodies are not decrypted. */
   entry_id?: string;
+  seq?: string;
+  updated_seq?: string;
   kind?: string;
-  omitted?: boolean;
+  role?: string;
+  timestamp_ms?: string;
+  /** True when the server omitted the body (body_omitted). */
+  omitted: boolean;
+  decode_status: "decoded" | "opaque" | "absent" | "omitted";
+  decode_reason?: string;
+  /** First 200 characters of `text`. */
   preview?: string;
-  untrusted?: boolean;
+  /** Decoded body text; capped unless the caller asked for full text. */
+  text?: string;
+  /** Present and true when `text` was cut; `text_chars` is the full length. */
+  text_truncated?: boolean;
+  text_chars?: number;
+  tool_name?: string;
+  tool_status?: string;
+  attachment_name?: string;
+  untrusted: true;
 };
-
 
 /** Sanitized whoami for the local `gbc dashboard` page (no tokens or paths). */
 export type SanitizedWhoami = {

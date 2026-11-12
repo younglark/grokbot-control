@@ -51,6 +51,7 @@ export function mapExitCode(
     case "sidebar_conflict":
       return 6;
     case "denied":
+    case "refused":
     case "permission_denied":
     case "failed_precondition":
       return 7;

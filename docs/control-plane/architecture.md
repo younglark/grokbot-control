@@ -74,7 +74,7 @@ src/
 | 4 | auth |
 | 5 | not_found |
 | 6 | conflict（含 sidebar base 冲突） |
-| 7 | denied / dry-run 外的写拒绝 |
+| 7 | denied / dry-run 外的写拒绝；服务端拒收消息（`message send` 的 `delivery=refused`，code `refused`） |
 | 8 | retryable（瞬时） |
 | 9 | known_failure |
 | 10 | unknown outcome（丢响应、证据不足） |
