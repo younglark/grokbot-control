@@ -216,7 +216,7 @@ gbc dashboard [--port 8787] [--host 127.0.0.1] [--no-open]
 | `account` | `cleanup`（先 `--dry-run`；执行需 `--confirm=ACCOUNT_CLEANUP --plan=<fingerprint>`，可选 `--hard` / `--wait` / `--timeout`） |
 | `message` | `send` / `status` / `history`（`--session-id`、`--full`） |
 | `session` | `list` |
-| `sidebar` | `list` / `create` / `rename` / `delete` / `move` |
+| `sidebar` | `list` / `create`（`--if-exists=reuse`） / `rename` / `delete` / `move`（`--section-id` 或 `--section-name`） |
 | `dashboard` | （可省略 `start`）本地只读监视器；`--port` / `--host` / `--no-open`。不是官方 DashboardService。详情含任务区、活动时间线、用量明细，以及等待处理 / 当前动作 / 新鲜度 / 最近动态 / 沙箱状态 / 渠道连接 |
 | `sync` | `pull` / `status` / `render` / `attachments` |
 
@@ -246,6 +246,37 @@ gbc dashboard [--port 8787] [--host 127.0.0.1] [--no-open]
 - `delivery=refused` 算失败：`ok:false`、`code:"refused"`、退出码 7，错误封套写到 stderr，`data` 里仍带 `refusal{failure_code,message}` 和 `workflow_id`。MCP 返回 `isError:true` 和同一封套。`duplicate` 仍是成功（服务端认出同一 `message_id`）。
 - `message history` 用和本地监视器 transcript 同一套解码器解析 body（UTF-8 JSON UI 条目）：每条有 `decode_status`、`role`、`preview`（200 字）和 `text`（默认最多 2000 字，`--full` 取全文；被截断时带 `text_truncated` / `text_chars`）。省略或解不开的 body 保持占位，不解密。`--session-id` 只在传了时发给服务端，不会猜一个默认值。
 
+### 中途失败后重跑同一脚本（`--if-exists=reuse`）
+
+建分组、建 Bot、移入分组是几条独立的写，不是事务。给创建加 `--if-exists=reuse`，脚本中途失败后原样重跑即可补齐，不会产生同名分组或同名 Bot（#6）：
+
+```bash
+set -euo pipefail
+g() { gbc --json --allow-writes "$@"; }
+g sidebar create --name "Grok Bot Replica" --if-exists=reuse >/dev/null
+for spec in "Showrunner|幕僚长|./showrunner.md" "Spec|行为规格|./spec.md"; do
+  IFS='|' read -r name title desc <<<"$spec"
+  id=$(g bot create --name "$name" --title "$title" --description-file "$desc" --if-exists=reuse | jq -r .data.agent_id)
+  g sidebar move --agent-id "$id" --section-name "Grok Bot Replica" >/dev/null
+done
+```
+
+- 先预览：把 `--allow-writes` 换成 `--dry-run`，每条结果的 `data.would` 是 `create` / `reuse` / `move` / `skip`，不发写 RPC（`bot create --if-exists=reuse --dry-run` 会读一次 Bot 列表）。dry-run 下新 Bot 没有真实 agent_id，后续 `move` 的预览只对已存在的 Bot 有意义。
+- 分组按精确名字匹配；Bot 按 `--agent-id`、`--name`，或服务端把职称并进显示名后的 `"<name> · <title>"` 匹配，`data.matched_by` 说明命中方式，`data.existing:true` 表示复用、未写。复用的 Bot 不会被改描述或职称。
+- 同名多个时退出码 6（`ambiguous_match`，`error.details.candidates` 列出 id），Bot 列表被截断或读取失败时退出码 10（`lookup_incomplete`），都不会创建。
+- Bot 已只在目标分组里时，`sidebar move` 返回 `skipped:true`，不写，位置不变。
+- 写失败时 `error.details` 带已确定的 `section_id` / `agent_id`，对账后重跑同一脚本即可。
+- 匹配范围是 `ListGrokBotAgents` 返回的全部 Bot，包括别人共享给你的；不传 `--if-exists` 时行为不变（总是新建）。
+
+```jsonc
+// 第二次运行 gbc --json --allow-writes bot create --name Showrunner --title 幕僚长 --if-exists=reuse
+{"ok":true,"code":"ok", …, "data":{"agent_id":"…","existing":true,"matched_by":"merged_name",
+  "requested":{"name":"Showrunner","title":"幕僚长"},"observed":{"name":"Showrunner · 幕僚长","title":""},
+  "renamed_by_server":true, …}}
+// 第二次运行 gbc --json --allow-writes sidebar move --agent-id <id> --section-name "Grok Bot Replica"
+{"ok":true,"code":"ok", …, "data":{"agent_id":"…","section_id":"…","existing":true,"skipped":true, …}}
+```
+
 ### 退出码
 
 | 码 | 含义 |
@@ -254,11 +285,11 @@ gbc dashboard [--port 8787] [--host 127.0.0.1] [--no-open]
 | 2 | usage |
 | 4 | auth |
 | 5 | not_found |
-| 6 | conflict |
+| 6 | conflict；`--if-exists=reuse` / `--section-name` 同名多个（code `ambiguous_match`） |
 | 7 | denied；`message send` 被服务端拒收（`delivery=refused`，code `refused`） |
 | 8 | retryable |
 | 9 | known_failure |
-| 10 | unknown outcome（写后无法排除副作用时勿盲目重试） |
+| 10 | unknown outcome（写后无法排除副作用时勿盲目重试）；`bot create --if-exists=reuse` 列表截断或读取失败（code `lookup_incomplete`，未创建） |
 | 1 | other |
 
 统一 JSON 结果契约见 [docs/control-plane/architecture.md](https://github.com/younglark/grokbot-control/blob/main/docs/control-plane/architecture.md)。

@@ -67,6 +67,10 @@ export function toolAnnotations(t: {
 }
 
 const agentId = z.string().min(1);
+const ifExistsSchema = z
+  .enum(["reuse"])
+  .optional()
+  .describe("reuse: return the single existing match instead of creating (omit to always create)");
 const writeFlags = {
   dry_run: z.boolean().optional(),
   allow_writes: z.boolean().optional(),
@@ -104,7 +108,7 @@ export function buildTools(opts?: {
     {
       name: "create_bot",
       description:
-        "Create temporal harness bot (CreateGrokBotTemporalAgent), then read it back from ListGrokBotAgents. Result has requested{name,title}, observed{name,title}, renamed_by_server; use observed.name. The server has been observed to merge title into name and clear title (not guaranteed). Read-back failure returns code create_unverified, outcome unknown, with error.details.agent_id. Omitted title is sent as \"\" (App behaviour). dry_run cannot detect a server rename.",
+        "Create temporal harness bot (CreateGrokBotTemporalAgent), then read it back from ListGrokBotAgents. Result has requested{name,title}, observed{name,title}, renamed_by_server; use observed.name. The server has been observed to merge title into name and clear title (not guaranteed). Read-back failure returns code create_unverified, outcome unknown, with error.details.agent_id. Omitted title is sent as \"\" (App behaviour). dry_run cannot detect a server rename. if_exists=\"reuse\": list first and reuse one bot matching agent_id, name, or \"<name> · <title>\" (existing:true, no create); several matches -> ambiguous_match; truncated/failed list -> lookup_incomplete (outcome unknown), nothing created.",
       inputSchema: input({
         name: z.string().min(1),
         description: z.string().optional(),
@@ -112,6 +116,7 @@ export function buildTools(opts?: {
         agent_id: z.string().optional(),
         language: z.string().optional(),
         kickstart: z.boolean().optional(),
+        if_exists: ifExistsSchema,
         ...writeFlags,
       }),
       handler: (p, a) =>
@@ -125,6 +130,7 @@ export function buildTools(opts?: {
             kickstart: Boolean(a.kickstart),
           },
           { dryRun: Boolean(a.dry_run), allowWrite: Boolean(a.allow_writes) },
+          { ifExists: a.if_exists as "reuse" | undefined },
         ),
     },
     {
@@ -329,13 +335,18 @@ export function buildTools(opts?: {
     },
     {
       name: "create_sidebar_section",
-      description: "Create sidebar section (does not delete bots)",
-      inputSchema: input({ name: z.string().min(1), ...writeFlags }),
+      description:
+        "Create sidebar section (does not delete bots). Result has section_id and existing. if_exists=\"reuse\": reuse the one section with exactly this name (existing:true, no write); several -> ambiguous_match.",
+      inputSchema: input({ name: z.string().min(1), if_exists: ifExistsSchema, ...writeFlags }),
       handler: (p, a) =>
-        p.sidebar.createSection(String(a.name), {
-          dryRun: Boolean(a.dry_run),
-          allowWrite: Boolean(a.allow_writes),
-        }),
+        p.sidebar.createSection(
+          String(a.name),
+          {
+            dryRun: Boolean(a.dry_run),
+            allowWrite: Boolean(a.allow_writes),
+          },
+          { ifExists: a.if_exists as "reuse" | undefined },
+        ),
     },
     {
       name: "rename_sidebar_section",
@@ -368,17 +379,26 @@ export function buildTools(opts?: {
     },
     {
       name: "move_bot_to_sidebar_section",
-      description: "Move bot into a sidebar section",
+      description:
+        "Move bot into a sidebar section, by section_id or a unique exact section_name (pass exactly one). Already only in that section -> skipped:true, no write, position kept.",
       inputSchema: input({
         agent_id: agentId,
-        section_id: z.string().min(1),
+        section_id: z.string().min(1).optional(),
+        section_name: z.string().min(1).optional(),
         ...writeFlags,
       }),
       handler: (p, a) =>
-        p.sidebar.moveBot(String(a.agent_id), String(a.section_id), {
-          dryRun: Boolean(a.dry_run),
-          allowWrite: Boolean(a.allow_writes),
-        }),
+        p.sidebar.moveBot(
+          String(a.agent_id),
+          {
+            sectionId: a.section_id as string | undefined,
+            sectionName: a.section_name as string | undefined,
+          },
+          {
+            dryRun: Boolean(a.dry_run),
+            allowWrite: Boolean(a.allow_writes),
+          },
+        ),
     },
     {
       name: "auth_whoami",

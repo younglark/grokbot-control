@@ -23,6 +23,9 @@ EXAMPLES:
   gbc --json --allow-writes computer reset --confirm=RESET_COMPUTER --wait --timeout 600
   gbc --mock --json --allow-writes sidebar create --name Work
   gbc --mock --json --allow-writes sidebar move --agent-id <id> --section-id <sid>
+  gbc --json --allow-writes sidebar create --name "Grok Bot Replica" --if-exists=reuse
+  gbc --json --allow-writes bot create --name Showrunner --title 幕僚长 --if-exists=reuse
+  gbc --json --allow-writes sidebar move --agent-id <id> --section-name "Grok Bot Replica"
   gbc --mock --json auth whoami
   gbc --json auth login-begin            # prints authorization_url; open it in a browser
   gbc --json auth login-begin --login-mode bot  # optional App-style URL (sand + supportsSelectedTeamLogin)
@@ -135,6 +138,17 @@ NOTES:
     is truncated, or never finds the agent: exit 10, code create_unverified/update_unverified,
     outcome unknown; error.details.agent_id is kept for reconciliation. --dry-run sends no RPC
     and cannot reveal such a rename. Without --title, create sends title "" (as the App does).
+  - Rerunnable scripts (issue #6): --if-exists=reuse on sidebar create / bot create lists first
+    and reuses exactly one match (data.existing true, no write). Sections match by exact name.
+    Bots match by --agent-id, --name, or "<name> · <title>" (server title merge); data.matched_by
+    says which. A reused bot is not updated. Several matches: exit 6 ambiguous_match (sidebar
+    create, bot create, move --section-name), candidates in error.details. --agent-id that
+    differs from the one same-name bot: exit 6 conflict. Truncated or failed ListGrokBotAgents:
+    exit 10 lookup_incomplete, nothing created. Without --if-exists, create always creates.
+    sidebar move writes nothing when the bot is already only in the target section
+    (skipped true, position kept). --dry-run adds would=create|reuse|move|skip and sends no
+    write. Failed writes keep section_id / agent_id in error.details for the next run.
+    Matching covers every bot ListGrokBotAgents returns, including ones shared with you.
   - --description-file <path> (bot create/update) reads UTF-8 verbatim like --text-file; it
     is exclusive with --description (exit 2). "-" is a path, not stdin.
   - Do not re-print --json output with echo: JSON strings keep newlines as \\n escapes and some

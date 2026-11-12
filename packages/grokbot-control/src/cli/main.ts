@@ -231,6 +231,7 @@ async function main(): Promise<number> {
             kickstart: hasFlag(rest, "--kickstart"),
           },
           write,
+          { ifExists: ifExistsFlag(rest, "gbc bot create --name <n> --if-exists=reuse") },
         ),
         mode,
       );
@@ -369,7 +370,12 @@ async function main(): Promise<number> {
     } else if (noun === "sidebar" && verb === "create") {
       const name = flag(rest, "--name");
       if (!name) usageExit("sidebar create requires --name");
-      code = emitResult(await plane.sidebar.createSection(name, write), mode);
+      code = emitResult(
+        await plane.sidebar.createSection(name, write, {
+          ifExists: ifExistsFlag(rest, "gbc sidebar create --name <n> --if-exists=reuse"),
+        }),
+        mode,
+      );
     } else if (noun === "sidebar" && verb === "rename") {
       const id = flag(rest, "--section-id");
       const name = flag(rest, "--name");
@@ -392,10 +398,14 @@ async function main(): Promise<number> {
     } else if (noun === "sidebar" && verb === "move") {
       const agentId = flag(rest, "--agent-id");
       const sectionId = flag(rest, "--section-id");
-      if (!agentId || !sectionId)
-        usageExit("sidebar move requires --agent-id --section-id");
+      const sectionName = flag(rest, "--section-name");
+      if (!agentId || !sectionId === !sectionName)
+        usageExit(
+          "sidebar move requires --agent-id and exactly one of --section-id / --section-name",
+          "gbc sidebar move --agent-id <id> --section-id <sid>  or  --section-name <name>",
+        );
       code = emitResult(
-        await plane.sidebar.moveBot(agentId, sectionId, write),
+        await plane.sidebar.moveBot(agentId, { sectionId, sectionName }, write),
         mode,
       );
     } else if (noun === "room") {
@@ -418,6 +428,14 @@ async function main(): Promise<number> {
     persistMockState();
     return catchToExit(e);
   }
+}
+
+/** `--if-exists` accepts only `reuse`; anything else exits 2 before any RPC. */
+function ifExistsFlag(rest: string[], example: string): "reuse" | undefined {
+  if (!hasFlag(rest, "--if-exists")) return undefined;
+  const v = flag(rest, "--if-exists");
+  if (v !== "reuse") usageExit(`unsupported --if-exists value: ${v ?? ""}`, example);
+  return "reuse";
 }
 
 function readStdin(): Promise<string> {

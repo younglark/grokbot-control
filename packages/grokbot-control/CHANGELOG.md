@@ -4,6 +4,21 @@
 
 ## Unreleased
 
+可按名字重跑「建分组 → 建 Bot → 移入分组」的脚本（#6）。不新增名词，也没有任务系统；协议里没有按名字查找或幂等键的 RPC，都是先 list 再在客户端匹配。只做了离线（mock）验证，没有 live 检查。
+
+### 行为变化
+
+- **`sidebar move` 在 Bot 已经只在目标分组里时不再写入**：返回 `skipped:true`、`existing:true`，不发 `UpdateGrokBotUserRuntimeSettings`，也不需要 `--allow-writes`。以前会照样写一次并把 Bot 挪到该分组末尾，现在位置保持不变。Bot 已在目标分组、同时还在别的分组时，仍写一次去掉别处的副本，目标分组里的位置不变。MCP `move_bot_to_sidebar_section` 同步。
+
+### 新增
+
+- `sidebar create --if-exists=reuse`（MCP `create_sidebar_section` 的 `if_exists:"reuse"`）：恰好有一个同名分组（精确、区分大小写）就复用，`existing:true`，不写；两个及以上同名报 `ambiguous_match`、退出码 6，`error.details.candidates` 列出 `section_id`。不传时行为不变（总是新建）。
+- `bot create --if-exists=reuse`（MCP `create_bot` 的 `if_exists:"reuse"`）：先读一次 `ListGrokBotAgents`，按 `--agent-id`、`--name`，或服务端把 title 并进显示名后的 `"<name> · <title>"`（#3 观察到的分隔符 ` · `）匹配。匹配到一个就复用（`existing:true`、`matched_by` 为 `agent_id` / `name` / `merged_name`），不发创建，也不改描述、职称、语言。多个匹配报 `ambiguous_match`（6）；传了 `--agent-id` 但唯一同名 Bot 的 agent_id 不同报 `conflict`（6）；列表截断（且没有 agent_id 命中）或读取失败报 `lookup_incomplete`、`outcome:"unknown"`、退出码 10，都不创建。不传时行为不变。
+- `sidebar move --section-name <name>`（MCP `section_name`）：与 `--section-id` 二选一，按唯一精确名匹配；同名多个 6，没有 5。
+- 结果新增字段：`sidebar create` 带 `section_id`、`section`、`existing`；`sidebar move` 带 `agent_id`、`section_id`、`existing`、`skipped`；`bot create` 带 `existing`（以及复用时的 `matched_by`）。`--dry-run` 额外给 `would`（`create` / `reuse` / `move` / `skip`），不发写 RPC；`bot create --if-exists=reuse --dry-run` 会读一次列表，不带该参数的 dry-run 仍不发任何 RPC。
+- 写失败时 `error.details` 带已确定的 id：`sidebar create` 带新分组的 `section_id`，`sidebar move` 带 `agent_id`、`section_id`，`bot create` 的创建 RPC 失败时带客户端生成的 `agent_id`（以及 `write_sent`），便于对账后重跑。
+- 新退出码映射：`ambiguous_match` → 6（沿用 6 conflict 一类，退出码含义不变）。
+
 ## 0.6.1 — 2026-11-12（通过 GitHub tag `npm-v0.6.1` 分发，不发到 npmjs）
 
 安装：`npx -y --package=github:younglark/grokbot-control#npm-v0.6.1 gbc`（`gbc-mcp` 同样要加 `--package`）。
