@@ -65,6 +65,9 @@ export function mapStatus(s: any): ProgressStatus {
           is_retrying: live.isRetrying ?? live.is_retrying,
           awaiting: sanitizeAwaiting(live.awaiting ?? live.Awaiting),
           working_task_ids: live.workingTaskIds || live.working_task_ids,
+          ...((live.hasRunningSubagents ?? live.has_running_subagents) !== undefined
+            ? { has_running_subagents: Boolean(live.hasRunningSubagents ?? live.has_running_subagents) }
+            : {}),
           ...(activity ? { activity } : {}),
           ...(settlement ? { last_turn_settlement: settlement } : {}),
           ...(handoff ? { box_handoff: handoff } : {}),

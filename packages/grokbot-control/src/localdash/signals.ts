@@ -96,9 +96,14 @@ export function mapTurnSettlement(raw: unknown): TurnSettlementView | undefined 
   const settled_at_ms =
     settledRaw === undefined || settledRaw === null || settledRaw === "" ? undefined : String(settledRaw);
   if (!outcome && !settled_at_ms) return undefined;
+  // turn_id: the App treats it as the sender's client nonce (= SendGrokBotUserMessage
+  // message_id); static analysis only, see ops/message-wait.ts.
+  const rawTurn = rec.turnId ?? rec.turn_id;
+  const turn_id = typeof rawTurn === "string" && /^[A-Za-z0-9._:-]{1,128}$/.test(rawTurn) ? rawTurn : undefined;
   const view: TurnSettlementView = {
     ...(outcome ? { outcome } : {}),
     ...(settled_at_ms ? { settled_at_ms } : {}),
+    ...(turn_id ? { turn_id } : {}),
   };
   const flag = classifySettlementOutcome(outcome);
   if (flag !== undefined) view.settled_normally = flag;
