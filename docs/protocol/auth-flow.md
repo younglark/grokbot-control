@@ -4,6 +4,8 @@ Implementation: `packages/grokbot-control/src/auth/provider.ts`, `src/auth/store
 commands: [protocol-map.md](protocol-map.md) (section Auth). This page records
 **where the evidence lives** so it can be re-found in a new build.
 
+0.79.4 (2026-11-11): `fingerprint.py` on the 0.79.4 main-app/main-core gives the same 67 anchor lines as 0.79.3 once byte offsets and minified names are normalised, and the identifier-normalised bundle diff contains no login/poll/refresh/policy change. No change to `src/auth/` is needed. Details: [app-0.79.4-delta.md](app-0.79.4-delta.md) §4.
+
 | Step | Behaviour | Stable anchor (search the extracted bundle) | 0.79.2 location (A=main-app.cjs) | Level |
 |---|---|---|---|---|
 | Challenge | verifier = base64url(32 random bytes); challenge = base64url(sha256(verifier)); uuid | `randomBytes(32)` next to `"/loginDeepControl"` | fn `Rdn` (prettified A:38644) | S, O |

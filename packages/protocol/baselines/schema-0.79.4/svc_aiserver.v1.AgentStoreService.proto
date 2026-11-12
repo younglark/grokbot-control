@@ -1,0 +1,34 @@
+syntax = "proto3";
+package aiserver.v1;
+
+import "aiserver.v1.proto";
+
+// 0 messages, 0 enums, 1 services -- reconstructed from proto.cjs
+
+service AgentStoreService {
+  rpc ListAgentStores(aiserver.v1.ListAgentStoresRequest) returns (aiserver.v1.ListAgentStoresResponse);
+  rpc ListAgentStoreEntries(aiserver.v1.ListAgentStoreEntriesRequest) returns (aiserver.v1.ListAgentStoreEntriesResponse);
+  rpc ReadAgentStoreFile(aiserver.v1.ReadAgentStoreFileRequest) returns (aiserver.v1.ReadAgentStoreFileResponse);
+  rpc WriteAgentStoreDocument(aiserver.v1.WriteAgentStoreDocumentRequest) returns (aiserver.v1.WriteAgentStoreDocumentResponse);
+  rpc SetAgentStoreDocumentVisibility(aiserver.v1.SetAgentStoreDocumentVisibilityRequest) returns (aiserver.v1.SetAgentStoreDocumentVisibilityResponse);
+  rpc MintAgentStoreToken(aiserver.v1.MintAgentStoreTokenRequest) returns (aiserver.v1.MintAgentStoreTokenResponse);
+  rpc ListAgentStoreFiles(aiserver.v1.ListAgentStoreFilesRequest) returns (aiserver.v1.ListAgentStoreFilesResponse);
+  rpc ListAgentStoreDirectory(aiserver.v1.ListAgentStoreDirectoryRequest) returns (aiserver.v1.ListAgentStoreDirectoryResponse);
+  rpc CheckAgentStoreVersions(aiserver.v1.CheckAgentStoreVersionsRequest) returns (aiserver.v1.CheckAgentStoreVersionsResponse);
+  rpc RecordAgentStoreListingVersionAudit(aiserver.v1.RecordAgentStoreListingVersionAuditRequest) returns (aiserver.v1.RecordAgentStoreListingVersionAuditResponse);
+  rpc PresignAgentStoreReads(aiserver.v1.PresignAgentStoreReadsRequest) returns (aiserver.v1.PresignAgentStoreReadsResponse);
+  rpc PresignAgentStoreWrites(aiserver.v1.PresignAgentStoreWritesRequest) returns (aiserver.v1.PresignAgentStoreWritesResponse);
+  rpc CompleteAgentStoreMultipartWrites(aiserver.v1.CompleteAgentStoreMultipartWritesRequest) returns (aiserver.v1.CompleteAgentStoreMultipartWritesResponse);
+  rpc AbortAgentStoreMultipartWrites(aiserver.v1.AbortAgentStoreMultipartWritesRequest) returns (aiserver.v1.AbortAgentStoreMultipartWritesResponse);
+  rpc AcquireAgentStoreFileLock(aiserver.v1.AcquireAgentStoreFileLockRequest) returns (aiserver.v1.AcquireAgentStoreFileLockResponse);
+  rpc RenewAgentStoreFileLock(aiserver.v1.RenewAgentStoreFileLockRequest) returns (aiserver.v1.RenewAgentStoreFileLockResponse);
+  rpc ReleaseAgentStoreFileLock(aiserver.v1.ReleaseAgentStoreFileLockRequest) returns (aiserver.v1.ReleaseAgentStoreFileLockResponse);
+  rpc GetAgentStoreFileLock(aiserver.v1.GetAgentStoreFileLockRequest) returns (aiserver.v1.GetAgentStoreFileLockResponse);
+  rpc DeleteAgentStoreFiles(aiserver.v1.DeleteAgentStoreFilesRequest) returns (aiserver.v1.DeleteAgentStoreFilesResponse);
+  rpc RmdirAgentStore(aiserver.v1.RmdirAgentStoreRequest) returns (aiserver.v1.RmdirAgentStoreResponse);
+  rpc UndeleteAgentStoreFiles(aiserver.v1.UndeleteAgentStoreFilesRequest) returns (aiserver.v1.UndeleteAgentStoreFilesResponse);
+  rpc ListAgentStoreTombstones(aiserver.v1.ListAgentStoreTombstonesRequest) returns (aiserver.v1.ListAgentStoreTombstonesResponse);
+  rpc ShareAgentStore(aiserver.v1.ShareAgentStoreRequest) returns (aiserver.v1.ShareAgentStoreResponse);
+  rpc UnshareAgentStore(aiserver.v1.UnshareAgentStoreRequest) returns (aiserver.v1.UnshareAgentStoreResponse);
+  rpc ListSharedAgentStores(aiserver.v1.ListSharedAgentStoresRequest) returns (aiserver.v1.ListSharedAgentStoresResponse);
+}

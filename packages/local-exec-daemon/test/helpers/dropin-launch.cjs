@@ -25,7 +25,7 @@ function launch(o) {
   if (o.connection) fs.writeFileSync(connFile, sealJson(KEY, JSON.stringify(o.connection)));
   const logFile = path.join(base, 'daemon.log'); const logFd = fs.openSync(logFile, 'a');
   const env = { PATH: process.env.PATH, HOME: home, TMPDIR: os.tmpdir(), SAND_DATA_ROOT: data, SAND_USER_DATA_DIR: data,
-    SAND_LOCAL_EXEC_ROOT: root, SAND_CLIENT_APP_VERSION: '0.79.3', SAND_LOCAL_EXEC_GENERATION: '7', NODE_USE_SYSTEM_CA: '1', ...o.env };
+    SAND_LOCAL_EXEC_ROOT: root, SAND_CLIENT_APP_VERSION: '0.79.4', SAND_LOCAL_EXEC_GENERATION: '7', NODE_USE_SYSTEM_CA: '1', ...o.env };
   for (const k of Object.keys(env)) if (env[k] === undefined) delete env[k];
   const execPath = o.execPath ?? process.execPath;
   const entry = path.join(__dirname, '..', '..', 'dist', 'index.js');

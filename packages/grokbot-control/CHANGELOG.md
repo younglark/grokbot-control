@@ -4,6 +4,10 @@
 
 ## Unreleased
 
+### 协议
+
+- **`vendor/proto-gen` 改由 App 0.79.4 schema 生成**（新冻结目录 `schema-0.79.4` / `schema-0.79.4-daemon-exec`；0.79.3 目录保留）。0.79.4 只多了两个 optional 字段：`CompleteMcpOAuthRequest.oauth_error`（3）和 `CompleteMcpOAuthResponse.continue_authorization_url`（6），都不在本包用到的 RPC/消息里。已用面 0.79.3 → 0.79.4 完全相同，0 breaking；登录/poll/刷新等鉴权锚点与 0.79.3 相同，`src/auth/` 未改。CLI、MCP、SDK 行为不变。只做了离线验证，没有 live 检查。详见 [docs/protocol/app-0.79.4-delta.md](https://github.com/younglark/grokbot-control/blob/main/docs/protocol/app-0.79.4-delta.md)。
+
 ## 0.6.0 — 2026-11-12（通过 GitHub tag `npm-v0.6.0` 分发，不发到 npmjs）
 
 安装：`npx -y --package=github:younglark/grokbot-control#npm-v0.6.0 gbc`（`gbc-mcp` 同样要加 `--package`）。

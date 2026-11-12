@@ -40,10 +40,15 @@ export function validateIsolatedDeployment(env: NodeJS.ProcessEnv): boolean {
 /** Backend client identity as eke(process.env, "desktop").backend (D:79157, jAt). */
 export type BackendClient = { clientSource: string; clientVersion: string; boxNamespace: "dev" | "lab" | "prod"; clientOS: string };
 
-/** D:jPe/LAt (78967–78972): x.y.z from the value, else from the bundled "0.79.3", else OAt "0.1.0". */
+/**
+ * Version literal bundled into LAt (D:78971). App 0.79.3 shipped "0.79.3"; App 0.79.4 ships "0.79.4" — the only
+ * non-Sentry byte change in the 0.79.4 daemon bundle (see docs/local-exec/remaining-diffs.md, 0.79.4 section).
+ */
+export const BUNDLED_APP_VERSION = "0.79.4";
+/** D:jPe/LAt (78967–78972): x.y.z from the value, else from the bundled BUNDLED_APP_VERSION, else OAt "0.1.0". */
 function baseVersion(v: string | undefined): string {
   const re = /^(\d+\.\d+\.\d+)(?:-.+)?$/;
-  return re.exec(v?.trim() ?? "")?.[1] ?? re.exec("0.79.3")?.[1] ?? "0.1.0";
+  return re.exec(v?.trim() ?? "")?.[1] ?? re.exec(BUNDLED_APP_VERSION)?.[1] ?? "0.1.0";
 }
 /** D:ese — namespace from SAND_BOX_OWNER_NAMESPACE, isolated deployment, and the variant. */
 function namespaceOf(owner: string | undefined, variant: string, isolated: boolean): "dev" | "lab" | "prod" {

@@ -25,8 +25,9 @@ test('one root lock; consumers have no unpublished runtime workspace dependency'
  }
 });
 test('frozen archive is unchanged and both consumers record exactly the same input hash',()=>{
- // Parent App archive (immutable) and t98u daemon-exec generator input are both frozen; verify each vs its own manifest.
- for(const prefix of ['packages/protocol/baselines/schema-0.79.3','packages/protocol/baselines/schema-0.79.3-daemon-exec']){
+ // Parent App archives (immutable) and daemon-exec generator inputs are all frozen; verify each vs its own manifest.
+ // 0.79.3 dirs stay as history; 0.79.4-daemon-exec is the current generator input.
+ for(const prefix of ['packages/protocol/baselines/schema-0.79.3','packages/protocol/baselines/schema-0.79.3-daemon-exec','packages/protocol/baselines/schema-0.79.4','packages/protocol/baselines/schema-0.79.4-daemon-exec']){
   const hashes=json(`${prefix}.sha256.json`);
   assert.deepEqual(readdirSync(join(root,prefix)).sort(),Object.keys(hashes).sort(),prefix);
   for(const [name,hash] of Object.entries(hashes)){
@@ -36,7 +37,7 @@ test('frozen archive is unchanged and both consumers record exactly the same inp
  }
  const a=json('packages/grokbot-control/vendor/proto-gen/SOURCE.json'),b=json('packages/local-exec-daemon/src/generated/SOURCE.json');assert.deepEqual(a,b);
  // Consumers record hashes of the generator input they declare (daemon-exec since t98u), not the parent App archive.
- assert.equal(a.source,'packages/protocol/baselines/schema-0.79.3-daemon-exec');
+ assert.equal(a.source,'packages/protocol/baselines/schema-0.79.4-daemon-exec');
  const inputHashes=json(`${a.source}.sha256.json`);
  for(const [name,hash] of Object.entries(a.sha256))assert.equal(hash,inputHashes[name],name);
 });

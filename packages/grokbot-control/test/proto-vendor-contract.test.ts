@@ -1,5 +1,5 @@
 /**
- * Contract tests for vendor/proto-gen (App 0.79.3 schema, regenerated in this repo).
+ * Contract tests for vendor/proto-gen (App 0.79.4 schema, regenerated in this repo).
  * Offline only: proves the vendored generated code encodes/decodes the fields this
  * project depends on with the expected field numbers, and that 0.79.x additive fields
  * exist and are wire-compatible with the old 0.78.4 shape (unknown-field tolerance).
@@ -25,10 +25,10 @@ const USED_RPCS = [
 ];
 
 const snapshot = JSON.parse(
-  gunzipSync(readFileSync(new URL("../../protocol/baselines/schema-0.79.3/snapshot.json.gz", import.meta.url))).toString("utf8"),
+  gunzipSync(readFileSync(new URL("../../protocol/baselines/schema-0.79.4/snapshot.json.gz", import.meta.url))).toString("utf8"),
 ) as { messages: Record<string, { no: number; name: string }[]>; services: Record<string, { name: string; I: string; O: string }[]> };
 
-test("all used RPCs exist with signatures matching the archived 0.79.3 snapshot", () => {
+test("all used RPCs exist with signatures matching the archived 0.79.4 snapshot", () => {
   const snapRpcs = new Map(snapshot.services["aiserver.v1.GrokBotService"].map((r) => [r.name, r]));
   for (const m of USED_RPCS) {
     const gen = GrokBotService.methods[m];
@@ -54,6 +54,9 @@ test("new 0.79.x fields have the expected numbers and survive a binary round-tri
       { user_time_zone: 13, user_time_zone_override: 14 }],
     ["GetGrokBotUserRuntimeSettingsRequest", { afterMainAgentChange: true }, { after_main_agent_change: 1 }],
     ["CreateGrokBotAgentRequest", { teamId: 5, botBuilderRequested: true }, { team_id: 19, bot_builder_requested: 20 }],
+    // 0.79.4 additive fields (not in the control plane's used surface; pinned so the regenerate is visible).
+    ["CompleteMcpOAuthRequest", { oauthError: "access_denied" }, { oauth_error: 3 }],
+    ["CompleteMcpOAuthResponse", { continueAuthorizationUrl: "https://example.invalid/continue" }, { continue_authorization_url: 6 }],
   ];
   for (const [name, init, nums] of cases) {
     const Msg = T(name);

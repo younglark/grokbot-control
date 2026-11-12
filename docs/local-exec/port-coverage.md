@@ -1,6 +1,7 @@
 # 函数级移植覆盖审计
 
 对象：0.79.3 原版 daemon bundle `/workspace/grokbot-node-analysis-0793/daemon.formatted.cjs`（下称 D:）与我们的 `packages/local-exec-daemon`。
+App 0.79.4 复核（2026-11-11）：0.79.4 daemon 与 0.79.3 只差 Sentry id 和 LAt 内置版本（D:78971），可达单元、标识符和行号都不变，本审计结论原样适用；见 [evidence/app-0.79.4.md](evidence/app-0.79.4.md)。
 方法全部为静态读取：没有执行任何官方代码、worker 或 App 内二进制。脚本与中间产物在 `/tmp/exec-t175/`。（`/tmp/...` 下的证据目录都是当时的临时目录，可能已被清理；需要时按文中方法重新生成。）
 
 ## 1. 方法

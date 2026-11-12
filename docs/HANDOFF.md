@@ -5,14 +5,15 @@
 ## 1. 一句话现状
 
 - **控制面**（`grokbot-control`）：已实现。当前通过 GitHub tag `npm-v0.6.0` 分发（`npx -y --package=github:younglark/grokbot-control#npm-v0.6.0 gbc`），由推送 `v0.6.0` 后的 Actions 生成该 tag，不再向 npmjs 发布。已推送的 `v0.2.0` / `v0.2.1` / `v0.3.0` / `v0.4.0` / `v0.4.1` / `v0.4.2` 不要改写；`v0.2.0` 的发版任务因测试挂起被取消，没有生成 `npm-v0.2.0`；`v0.4.0` 的发版工作流在 `npm test` 处因 Playwright/Chromium 失败，没有生成 `npm-v0.4.0`；`v0.4.1` 打 `npm-v` 时因 `npm pack --json` 被 vite 日志污染而失败，没有生成 `npm-v0.4.1`。npmjs 上的 `grokbot-control@0.1.3` 已停止更新。离线测试覆盖完整；live 验证过 CLI 登录、2026-11-11 的 bot 模式轮询收束、三个只读 RPC，以及一次隔离的同步验收。选中团队绑定与 OAuth 刷新仍未 live 验证。详见 packages/grokbot-control/CHANGELOG.md 与 [development.md](development.md) 的发版一节。
-- **local-exec-daemon**：按 App 0.79.3 原版 daemon 逐函数移植。Linux 上可达、可观测的路径已对齐，有 D: 行号证据和测试；通过了合成后端的门控验收（48 步矩阵：41 步一致、7 步发现差异已修复；另有 2 项 Linux 不可达）。**完整替换验收没有做**，不能说是无条件 drop-in。
+- **协议**：2026-11-11 升级到 App 0.79.4（经分支 `protocol/0.79.4` 合入）（新冻结目录 `schema-0.79.4` / `schema-0.79.4-daemon-exec`；schema 只多 2 个 optional 字段，控制面已用面与鉴权锚点不变）。结论见 [protocol/app-0.79.4-delta.md](protocol/app-0.79.4-delta.md)。
+- **local-exec-daemon**：按 App 0.79.3 原版 daemon 逐函数移植；0.79.4 daemon 只改了 LAt 内置版本（D:78971），已同步。Linux 上可达、可观测的路径已对齐，有 D: 行号证据和测试；通过了合成后端的门控验收（48 步矩阵：41 步一致、7 步发现差异已修复；另有 2 项 Linux 不可达）。**完整替换验收没有做**，不能说是无条件 drop-in。
 - **无头注册 / Docker**：只有设计边界，没有代码。
 
 ## 2. 已完成
 
 | 领域 | 内容 | 入口文档 |
 |---|---|---|
-| 协议 | 0.79.3 schema 冻结（`schema-0.79.3` + 增补 Exec 闭包的 `schema-0.79.3-daemon-exec`），一个生成器同时产出 control ESM 和 daemon TS | [protocol/](protocol/README.md) |
+| 协议 | 0.79.4 schema 冻结（`schema-0.79.4` + 增补 Exec 闭包的 `schema-0.79.4-daemon-exec`；0.79.3 两个目录保留），一个生成器同时产出 control ESM 和 daemon TS | [protocol/](protocol/README.md) |
 | 控制面 | bot / message / session / sidebar / progress / computer / auth / sync，CLI 与 MCP 语义一致；原生跨进程刷新锁；本地 `gbc dashboard` 只读监视器（轮询 + SSE，不是官方 DashboardService） | [control-plane/](control-plane/README.md) |
 | daemon 启动 | IPC / Electron parentPort 交接、crash guard、启动 env 与 fd 清理、代理 env、discovery、ownership | [local-exec/overview.md](local-exec/overview.md) |
 | daemon 通道 | Box（SSE + POST）、UC（Watch/Poll/Submit/Withdraw）、连接交换、续订、unauthorized、network-change、backendReturn、outage ledger、多账号 | 同上 |
@@ -45,7 +46,7 @@
 
 ## 5. 工作约定（必须遵守）
 
-1. **与原版 0.79.3 保持一致**。不发明更「安全」的策略；原版的怪癖也照搬。不可达的代码不移植，但要用 D: 行号证据写明「为什么不可达」。
+1. **与原版保持一致**（0.79.3 逐函数移植基线 + 0.79.4 已知差异）。不发明更「安全」的策略；原版的怪癖也照搬。不可达的代码不移植，但要用 D: 行号证据写明「为什么不可达」。
 2. **证据驱动**：每个行为都写 D:（daemon）或 App 文件 + 行号/锚点；结论写进对应文档，测试钉住。
 3. **协议不手写**：只能从冻结 `.proto` 经 `@bufbuild/protobuf` + `@connectrpc/*` 生成。冻结目录不可修改，升级要新建版本目录。
 4. **第三方依赖必须写进对应包的 `package.json`**，不能依赖 node_modules 里碰巧有的东西，也不能从 App 里拷贝 `.node` 或 js。
@@ -60,6 +61,8 @@
 | 路径 | 用途 |
 |---|---|
 | `/workspace/grokbot-linux-0.79.3/` | 官方 deb 解包（`app.asar` 在 `extracted/opt/Grok Bot/resources/`） |
+| `/workspace/grokbot-linux-0.79.4/` | 0.79.4 官方 deb 解包，另有 `asar-out/`（非 renderer 文件）和 `proto-out/`（extract_proto 输出） |
+| `/workspace/grokbot-node-analysis-0794/daemon.formatted.cjs` | 0.79.4 daemon 格式化副本（sha256 `1ca01f7d…7678`，187 625 行），与 0.79.3 副本只差 4 行，D: 行号对两版都成立 |
 | `/workspace/grokbot-node-analysis-0793/daemon.formatted.cjs` | **D: 行号的来源**。asar 内 `dist/local-exec-daemon/main.cjs`（sha256 `5c1424ed…36be`，Linux 与 macOS 0.79.3 相同）经 prettier 格式化，187 625 行，sha256 `ad69a772…684c` |
 | `/workspace/grokbot-sync-evidence-0793/` | coordinator / renderer 的格式化副本（控制面同步证据） |
 | `/workspace/grokbot-proto/` | 上游 `extract_proto.py`（@ 49fd8ce） |

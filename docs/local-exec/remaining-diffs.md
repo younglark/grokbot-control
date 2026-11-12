@@ -1,6 +1,7 @@
 # 剩余差异：逐项根因
 
 依据：`/workspace/grokbot-node-analysis-0793/daemon.formatted.cjs` 的行号（D:），以及从 App 0.79.3 asar 静态提取的文件（当时放在 `/tmp/exec-t166-evidence/app-0793/`，临时目录，需要时按 [update-runbook](../protocol/update-runbook.md) 重新提取）。全部是静态读取，没有执行任何官方代码。
+App 0.79.4（2026-11-11 比对）：0.79.4 daemon 的格式化副本与 0.79.3 行数相同，只有 D:16/18/78971/187625 四行不同，所以下表所有 D: 行号对 0.79.4 同样成立；唯一行为差异见 #25。
 状态取值：**已修**（与原版一致，有测试）、**有意不移植**（附 App 不可达的证据）、**有意保留**（无线上效果）、**未移植**。
 这是 local-exec 与原版差异的**总表**；新发现的差异写进 `evidence/<主题>.md` 后在这里加一行。
 
@@ -30,6 +31,7 @@
 | 22 | denylist + requestedSandboxPolicy | Qk D:106788–106796；Kc D:106557；Ud/ol D:20797 | 已移植匹配/解析/fail-closed；Linux 无 helper → sandboxUnsupported | 已修 |
 | 23 | ls 配置 ripgrep 后的树路径 | nl/Z2 D:19007–19015；b0 D:19002；LocalLsExecutor D:129392–129609；kO D:107439；yer D:107400；t9 D:132442 | 默认不变（未配置→同句错误）。配置后已移植 kO argv、Md env、Eer、预算树、timeout；b0 接入 shell env。后续补齐 CE、spawnWorkload、ls 外层取消 | 已修，见 [ls-ripgrep.md](evidence/ls-ripgrep.md) |
 | 24 | exec spawn 统一走 Ko/Ud | Ko D:21094；Ud D:20798–20812；Md D:18901；CE D:19166；t$t D:16797；ZUt D:16758；_ae D:15327；eBt D:15440；BNe D:15066；handleCancel D:136353 | 修复前 shell 不做 Md、不合并 CE、无 cgroup/FUSE 跳转、不写 oom_score_adj；ls 无取消；计时器 unref。现在 ls/shellStream/backgroundShell/快照都经 Ko；ls 取消→timeout；去掉 unref。p6（z0e 从未赋值 D:107305）与 fer/ler（t9 恒 [] D:132452）不可达，只记录 | 已修 |
+| 25 | App 0.79.4：LAt 内置版本 | D:78971（0.79.4 副本）`jPe("0.79.4")`；0.79.3 为 `"0.79.3"` | 0.79.4 daemon 唯一的行为字节变化；`SAND_CLIENT_APP_VERSION` 缺失/不合法时 mb 头版本兜底为 0.79.4。`BUNDLED_APP_VERSION` 已改，见 [evidence/app-0.79.4.md](evidence/app-0.79.4.md) | 已修 |
 
 ## 根因未知
 

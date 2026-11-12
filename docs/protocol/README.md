@@ -12,9 +12,10 @@
 | [auth-flow.md](auth-flow.md) | 独立 Cursor 登录/poll/刷新，代码锚点 |
 | [transcript-body-0.79.3.md](transcript-body-0.79.3.md) | 0.79.3 transcript 正文（body/blob/omitted）读取证据（路径被代码引用） |
 | [attachment-pagination-0.79.3.md](attachment-pagination-0.79.3.md) | 0.79.3 附件与分页证据 |
+| [app-0.79.4-delta.md](app-0.79.4-delta.md) | App 0.79.3 → 0.79.4 静态比对：来源哈希、变化文件、schema/鉴权/daemon 结论 |
 | [compat-matrix.md](compat-matrix.md) | 版本兼容、create/sidebar 漂移、未 live 验证项 |
 | [references.md](references.md) | 外部参考 |
-| [冻结 schema](../../packages/protocol/baselines/) | `schema-0.79.3`（不可变归档）与 `schema-0.79.3-daemon-exec`（生成器输入） |
+| [冻结 schema](../../packages/protocol/baselines/) | `schema-0.79.4`（不可变归档）与 `schema-0.79.4-daemon-exec`（当前生成器输入）；0.79.3 两个目录保留为历史冻结 |
 | [baselines/](baselines) | 历史版本的 used-surface / 全量 schema diff |
 | [tools/protocol](../../tools/protocol/README.md) | 离线脚本：ASAR 读取、锚点指纹、used-surface diff、生成代码校验 |
 

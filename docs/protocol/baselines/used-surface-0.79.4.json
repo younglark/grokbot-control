@@ -1,0 +1,4259 @@
+{
+ "enums": {
+  "agent.v1.TodoStatus": [
+   {
+    "name": "TODO_STATUS_UNSPECIFIED",
+    "no": 0
+   },
+   {
+    "name": "TODO_STATUS_PENDING",
+    "no": 1
+   },
+   {
+    "name": "TODO_STATUS_IN_PROGRESS",
+    "no": 2
+   },
+   {
+    "name": "TODO_STATUS_COMPLETED",
+    "no": 3
+   },
+   {
+    "name": "TODO_STATUS_CANCELLED",
+    "no": 4
+   }
+  ],
+  "aiserver.v1.GrokBotAgentCreateCaller": [
+   {
+    "name": "GROK_BOT_AGENT_CREATE_CALLER_UNSPECIFIED",
+    "no": 0
+   },
+   {
+    "name": "GROK_BOT_AGENT_CREATE_CALLER_ROOM_MEMBERS",
+    "no": 1
+   },
+   {
+    "name": "GROK_BOT_AGENT_CREATE_CALLER_ENSURE_SERVER_BACKED",
+    "no": 2
+   },
+   {
+    "name": "GROK_BOT_AGENT_CREATE_CALLER_MINT",
+    "no": 3
+   },
+   {
+    "name": "GROK_BOT_AGENT_CREATE_CALLER_BACKFILL",
+    "no": 4
+   },
+   {
+    "name": "GROK_BOT_AGENT_CREATE_CALLER_PRODUCT_CREATE",
+    "no": 5
+   }
+  ],
+  "aiserver.v1.GrokBotAgentCreateIntent": [
+   {
+    "name": "GROK_BOT_AGENT_CREATE_INTENT_UNSPECIFIED",
+    "no": 0
+   },
+   {
+    "name": "GROK_BOT_AGENT_CREATE_INTENT_FRESH",
+    "no": 1
+   },
+   {
+    "name": "GROK_BOT_AGENT_CREATE_INTENT_REGISTER_EXISTING_LOCAL",
+    "no": 2
+   }
+  ],
+  "aiserver.v1.GrokBotAgentHarnessKind": [
+   {
+    "name": "GROK_BOT_AGENT_HARNESS_KIND_UNSPECIFIED",
+    "no": 0
+   },
+   {
+    "name": "GROK_BOT_AGENT_HARNESS_KIND_BOX",
+    "no": 1
+   },
+   {
+    "name": "GROK_BOT_AGENT_HARNESS_KIND_TEMPORAL",
+    "no": 2
+   }
+  ],
+  "aiserver.v1.GrokBotAgentKind": [
+   {
+    "name": "GROK_BOT_AGENT_KIND_UNSPECIFIED",
+    "no": 0
+   },
+   {
+    "name": "GROK_BOT_AGENT_KIND_AGENT",
+    "no": 1
+   },
+   {
+    "name": "GROK_BOT_AGENT_KIND_ROOM",
+    "no": 2
+   }
+  ],
+  "aiserver.v1.GrokBotAgentSessionKind": [
+   {
+    "name": "GROK_BOT_AGENT_SESSION_KIND_UNSPECIFIED",
+    "no": 0
+   },
+   {
+    "name": "GROK_BOT_AGENT_SESSION_KIND_MAIN",
+    "no": 1
+   },
+   {
+    "name": "GROK_BOT_AGENT_SESSION_KIND_SLACK_DM",
+    "no": 2
+   },
+   {
+    "name": "GROK_BOT_AGENT_SESSION_KIND_SLACK_THREAD",
+    "no": 3
+   },
+   {
+    "name": "GROK_BOT_AGENT_SESSION_KIND_DM",
+    "no": 4
+   },
+   {
+    "name": "GROK_BOT_AGENT_SESSION_KIND_GROUP",
+    "no": 5
+   },
+   {
+    "name": "GROK_BOT_AGENT_SESSION_KIND_TEAMS_DM",
+    "no": 6
+   },
+   {
+    "name": "GROK_BOT_AGENT_SESSION_KIND_TEAMS_THREAD",
+    "no": 7
+   },
+   {
+    "name": "GROK_BOT_AGENT_SESSION_KIND_TEAMS_GROUP_CHAT",
+    "no": 8
+   }
+  ],
+  "aiserver.v1.GrokBotAgentViewerAccess": [
+   {
+    "name": "GROK_BOT_AGENT_VIEWER_ACCESS_UNSPECIFIED",
+    "no": 0
+   },
+   {
+    "name": "GROK_BOT_AGENT_VIEWER_ACCESS_DIRECT",
+    "no": 1
+   },
+   {
+    "name": "GROK_BOT_AGENT_VIEWER_ACCESS_GROUP",
+    "no": 2
+   },
+   {
+    "name": "GROK_BOT_AGENT_VIEWER_ACCESS_TEAM",
+    "no": 3
+   }
+  ],
+  "aiserver.v1.GrokBotAgentViewerAction": [
+   {
+    "name": "GROK_BOT_AGENT_VIEWER_ACTION_UNSPECIFIED",
+    "no": 0
+   },
+   {
+    "name": "GROK_BOT_AGENT_VIEWER_ACTION_SHARE_IN_PLACE",
+    "no": 1
+   },
+   {
+    "name": "GROK_BOT_AGENT_VIEWER_ACTION_MANAGE_CREDENTIALS",
+    "no": 2
+   }
+  ],
+  "aiserver.v1.GrokBotAgentVisibility": [
+   {
+    "name": "GROK_BOT_AGENT_VISIBILITY_UNSPECIFIED",
+    "no": 0
+   },
+   {
+    "name": "GROK_BOT_AGENT_VISIBILITY_OWNER",
+    "no": 1
+   },
+   {
+    "name": "GROK_BOT_AGENT_VISIBILITY_TEAM",
+    "no": 2
+   }
+  ],
+  "aiserver.v1.GrokBotAttachmentReadOutcome": [
+   {
+    "name": "GROK_BOT_ATTACHMENT_READ_OUTCOME_UNSPECIFIED",
+    "no": 0
+   },
+   {
+    "name": "GROK_BOT_ATTACHMENT_READ_OUTCOME_STORE",
+    "no": 1
+   },
+   {
+    "name": "GROK_BOT_ATTACHMENT_READ_OUTCOME_NOT_IN_STORE",
+    "no": 2
+   },
+   {
+    "name": "GROK_BOT_ATTACHMENT_READ_OUTCOME_NO_STORAGE",
+    "no": 3
+   }
+  ],
+  "aiserver.v1.GrokBotAutoReviewRuleSaveSurface": [
+   {
+    "name": "GROK_BOT_AUTO_REVIEW_RULE_SAVE_SURFACE_UNSPECIFIED",
+    "no": 0
+   },
+   {
+    "name": "GROK_BOT_AUTO_REVIEW_RULE_SAVE_SURFACE_DRAFT_CARD",
+    "no": 1
+   },
+   {
+    "name": "GROK_BOT_AUTO_REVIEW_RULE_SAVE_SURFACE_APPROVAL_CARD",
+    "no": 2
+   },
+   {
+    "name": "GROK_BOT_AUTO_REVIEW_RULE_SAVE_SURFACE_SETTINGS",
+    "no": 3
+   },
+   {
+    "name": "GROK_BOT_AUTO_REVIEW_RULE_SAVE_SURFACE_CHAT_CARD",
+    "no": 4
+   }
+  ],
+  "aiserver.v1.GrokBotAutoReviewRuleTextSource": [
+   {
+    "name": "GROK_BOT_AUTO_REVIEW_RULE_TEXT_SOURCE_UNSPECIFIED",
+    "no": 0
+   },
+   {
+    "name": "GROK_BOT_AUTO_REVIEW_RULE_TEXT_SOURCE_SERVER_PROPOSAL",
+    "no": 1
+   },
+   {
+    "name": "GROK_BOT_AUTO_REVIEW_RULE_TEXT_SOURCE_AGENT_FALLBACK",
+    "no": 2
+   },
+   {
+    "name": "GROK_BOT_AUTO_REVIEW_RULE_TEXT_SOURCE_USER_TYPED",
+    "no": 3
+   },
+   {
+    "name": "GROK_BOT_AUTO_REVIEW_RULE_TEXT_SOURCE_RECIPIENTS_RULE",
+    "no": 4
+   },
+   {
+    "name": "GROK_BOT_AUTO_REVIEW_RULE_TEXT_SOURCE_CHAT_REQUEST",
+    "no": 5
+   }
+  ],
+  "aiserver.v1.GrokBotAutomationPolicyAction": [
+   {
+    "name": "GROK_BOT_AUTOMATION_POLICY_ACTION_UNSPECIFIED",
+    "no": 0
+   },
+   {
+    "name": "GROK_BOT_AUTOMATION_POLICY_ACTION_CREATE",
+    "no": 1
+   },
+   {
+    "name": "GROK_BOT_AUTOMATION_POLICY_ACTION_CHANGE_POLICY",
+    "no": 2
+   }
+  ],
+  "aiserver.v1.GrokBotClientSurface": [
+   {
+    "name": "GROK_BOT_CLIENT_SURFACE_UNSPECIFIED",
+    "no": 0
+   },
+   {
+    "name": "GROK_BOT_CLIENT_SURFACE_DESKTOP",
+    "no": 1
+   },
+   {
+    "name": "GROK_BOT_CLIENT_SURFACE_MOBILE",
+    "no": 2
+   },
+   {
+    "name": "GROK_BOT_CLIENT_SURFACE_GLASS",
+    "no": 3
+   }
+  ],
+  "aiserver.v1.GrokBotEmailProvider": [
+   {
+    "name": "GROK_BOT_EMAIL_PROVIDER_UNSPECIFIED",
+    "no": 0
+   },
+   {
+    "name": "GROK_BOT_EMAIL_PROVIDER_GOOGLE",
+    "no": 1
+   },
+   {
+    "name": "GROK_BOT_EMAIL_PROVIDER_MICROSOFT",
+    "no": 2
+   }
+  ],
+  "aiserver.v1.GrokBotSendSource": [
+   {
+    "name": "GROK_BOT_SEND_SOURCE_UNSPECIFIED",
+    "no": 0
+   },
+   {
+    "name": "GROK_BOT_SEND_SOURCE_CHAT",
+    "no": 1
+   },
+   {
+    "name": "GROK_BOT_SEND_SOURCE_PUSH",
+    "no": 2
+   },
+   {
+    "name": "GROK_BOT_SEND_SOURCE_APP_INTENT",
+    "no": 3
+   },
+   {
+    "name": "GROK_BOT_SEND_SOURCE_ACTION_BUTTON_DICTATION",
+    "no": 4
+   }
+  ],
+  "aiserver.v1.GrokBotSendStatus": [
+   {
+    "name": "GROK_BOT_SEND_STATUS_UNSPECIFIED",
+    "no": 0
+   },
+   {
+    "name": "GROK_BOT_SEND_STATUS_NOT_FOUND",
+    "no": 1
+   },
+   {
+    "name": "GROK_BOT_SEND_STATUS_ACCEPTED",
+    "no": 2
+   },
+   {
+    "name": "GROK_BOT_SEND_STATUS_REJECTED",
+    "no": 3
+   },
+   {
+    "name": "GROK_BOT_SEND_STATUS_PENDING",
+    "no": 4
+   },
+   {
+    "name": "GROK_BOT_SEND_STATUS_UNKNOWN_DURABILITY",
+    "no": 5
+   }
+  ],
+  "aiserver.v1.GrokBotTeamsInstallState": [
+   {
+    "name": "GROK_BOT_TEAMS_INSTALL_STATE_UNSPECIFIED",
+    "no": 0
+   },
+   {
+    "name": "GROK_BOT_TEAMS_INSTALL_STATE_NOT_CONNECTED",
+    "no": 1
+   },
+   {
+    "name": "GROK_BOT_TEAMS_INSTALL_STATE_CONNECTED",
+    "no": 2
+   },
+   {
+    "name": "GROK_BOT_TEAMS_INSTALL_STATE_APP_CREATED",
+    "no": 3
+   },
+   {
+    "name": "GROK_BOT_TEAMS_INSTALL_STATE_PENDING_ADMIN_APPROVAL",
+    "no": 4
+   },
+   {
+    "name": "GROK_BOT_TEAMS_INSTALL_STATE_INSTALLED",
+    "no": 5
+   },
+   {
+    "name": "GROK_BOT_TEAMS_INSTALL_STATE_UPDATE_PENDING",
+    "no": 6
+   },
+   {
+    "name": "GROK_BOT_TEAMS_INSTALL_STATE_REMOVED_IN_TEAMS",
+    "no": 7
+   },
+   {
+    "name": "GROK_BOT_TEAMS_INSTALL_STATE_REMOVED",
+    "no": 8
+   },
+   {
+    "name": "GROK_BOT_TEAMS_INSTALL_STATE_UNSUPPORTED_HARNESS",
+    "no": 9
+   },
+   {
+    "name": "GROK_BOT_TEAMS_INSTALL_STATE_NOT_PUBLISHED",
+    "no": 10
+   },
+   {
+    "name": "GROK_BOT_TEAMS_INSTALL_STATE_UNAVAILABLE",
+    "no": 11
+   },
+   {
+    "name": "GROK_BOT_TEAMS_INSTALL_STATE_PROVISIONING",
+    "no": 12
+   }
+  ],
+  "aiserver.v1.GrokBotTemporalHarnessMode": [
+   {
+    "name": "GROK_BOT_TEMPORAL_HARNESS_MODE_UNSPECIFIED",
+    "no": 0
+   },
+   {
+    "name": "GROK_BOT_TEMPORAL_HARNESS_MODE_OFF",
+    "no": 1
+   },
+   {
+    "name": "GROK_BOT_TEMPORAL_HARNESS_MODE_SHADOW",
+    "no": 2
+   },
+   {
+    "name": "GROK_BOT_TEMPORAL_HARNESS_MODE_LIVE",
+    "no": 3
+   },
+   {
+    "name": "GROK_BOT_TEMPORAL_HARNESS_MODE_BOX",
+    "no": 4
+   }
+  ],
+  "aiserver.v1.GrokBotUserMessageDelivery": [
+   {
+    "name": "GROK_BOT_USER_MESSAGE_DELIVERY_UNSPECIFIED",
+    "no": 0
+   },
+   {
+    "name": "GROK_BOT_USER_MESSAGE_DELIVERY_ACCEPTED_BOX",
+    "no": 1
+   },
+   {
+    "name": "GROK_BOT_USER_MESSAGE_DELIVERY_ACCEPTED_TEMPORAL",
+    "no": 2
+   },
+   {
+    "name": "GROK_BOT_USER_MESSAGE_DELIVERY_DUPLICATE",
+    "no": 3
+   },
+   {
+    "name": "GROK_BOT_USER_MESSAGE_DELIVERY_REFUSED",
+    "no": 4
+   }
+  ],
+  "aiserver.v1.GrokBotUserMessageInitiator": [
+   {
+    "name": "GROK_BOT_USER_MESSAGE_INITIATOR_UNSPECIFIED",
+    "no": 0
+   },
+   {
+    "name": "GROK_BOT_USER_MESSAGE_INITIATOR_USER",
+    "no": 1
+   },
+   {
+    "name": "GROK_BOT_USER_MESSAGE_INITIATOR_TEMPLATE_IMPORT",
+    "no": 2
+   },
+   {
+    "name": "GROK_BOT_USER_MESSAGE_INITIATOR_TEMPLATE_SHARE",
+    "no": 3
+   },
+   {
+    "name": "GROK_BOT_USER_MESSAGE_INITIATOR_CARD_ACTION",
+    "no": 4
+   },
+   {
+    "name": "GROK_BOT_USER_MESSAGE_INITIATOR_PLUGIN_SETUP",
+    "no": 5
+   },
+   {
+    "name": "GROK_BOT_USER_MESSAGE_INITIATOR_TEACH_RECORDING",
+    "no": 6
+   }
+  ],
+  "aiserver.v1.GrokBotXToolAccess": [
+   {
+    "name": "GROK_BOT_X_TOOL_ACCESS_UNSPECIFIED",
+    "no": 0
+   },
+   {
+    "name": "GROK_BOT_X_TOOL_ACCESS_OWN",
+    "no": 1
+   },
+   {
+    "name": "GROK_BOT_X_TOOL_ACCESS_SHARED",
+    "no": 2
+   }
+  ],
+  "aiserver.v1.SandBoxMigrationPhase": [
+   {
+    "name": "SAND_BOX_MIGRATION_PHASE_UNSPECIFIED",
+    "no": 0
+   },
+   {
+    "name": "SAND_BOX_MIGRATION_PHASE_BACKING_UP",
+    "no": 1
+   },
+   {
+    "name": "SAND_BOX_MIGRATION_PHASE_CREATING",
+    "no": 2
+   },
+   {
+    "name": "SAND_BOX_MIGRATION_PHASE_MOVING",
+    "no": 3
+   },
+   {
+    "name": "SAND_BOX_MIGRATION_PHASE_CLEANING_UP",
+    "no": 4
+   },
+   {
+    "name": "SAND_BOX_MIGRATION_PHASE_WIPING",
+    "no": 5
+   },
+   {
+    "name": "SAND_BOX_MIGRATION_PHASE_DONE",
+    "no": 6
+   },
+   {
+    "name": "SAND_BOX_MIGRATION_PHASE_FAILED",
+    "no": 7
+   }
+  ],
+  "aiserver.v1.SandBoxRunState": [
+   {
+    "name": "SAND_BOX_RUN_STATE_UNSPECIFIED",
+    "no": 0
+   },
+   {
+    "name": "SAND_BOX_RUN_STATE_ABSENT",
+    "no": 1
+   },
+   {
+    "name": "SAND_BOX_RUN_STATE_HIBERNATED",
+    "no": 2
+   },
+   {
+    "name": "SAND_BOX_RUN_STATE_RUNNING",
+    "no": 3
+   },
+   {
+    "name": "SAND_BOX_RUN_STATE_STARTING",
+    "no": 4
+   }
+  ]
+ },
+ "messages": {
+  "agent.v1.TodoItem": [
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "id",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "content",
+    "no": 2,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "agent.v1.TodoStatus",
+    "V": null,
+    "kind": "named",
+    "name": "status",
+    "no": 3,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "int64",
+    "V": null,
+    "kind": "scalar",
+    "name": "created_at",
+    "no": 4,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "int64",
+    "V": null,
+    "kind": "scalar",
+    "name": "updated_at",
+    "no": 5,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "dependencies",
+    "no": 6,
+    "opt": false,
+    "repeated": true
+   }
+  ],
+  "aiserver.v1.CreateGrokBotAgentRequest": [
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "legacy_agent_id",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "name",
+    "no": 2,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "description",
+    "no": 3,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "title",
+    "no": 4,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "avatar_shape",
+    "no": 5,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "avatar_color",
+    "no": 6,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "avatar_data_url",
+    "no": 7,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "agent_id",
+    "no": 8,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotAgentHarnessKind",
+    "V": null,
+    "kind": "named",
+    "name": "harness",
+    "no": 9,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "kickstart_requested",
+    "no": 10,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "introduction_suppressed",
+    "no": 11,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "purpose",
+    "no": 12,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "origin",
+    "no": 13,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "language",
+    "no": 14,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotAgentCreateIntent",
+    "V": null,
+    "kind": "named",
+    "name": "create_intent",
+    "no": 15,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotAgentCreateCaller",
+    "V": null,
+    "kind": "named",
+    "name": "create_caller",
+    "no": 16,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "created_automatically",
+    "no": 17,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotAgentVisibility",
+    "V": null,
+    "kind": "named",
+    "name": "visibility",
+    "no": 18,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "int32",
+    "V": null,
+    "kind": "scalar",
+    "name": "team_id",
+    "no": 19,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "bot_builder_requested",
+    "no": 20,
+    "opt": true,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.CreateGrokBotAgentResponse": [
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotAgent",
+    "V": null,
+    "kind": "named",
+    "name": "agent",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotAgentHarnessKind",
+    "V": null,
+    "kind": "named",
+    "name": "harness",
+    "no": 2,
+    "opt": false,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.DeleteGrokBotAgentRequest": [
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "id",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.DeleteGrokBotAgentResponse": [],
+  "aiserver.v1.ForceRecreateSandBoxRequest": [],
+  "aiserver.v1.GetGrokBotSendStatusRequest": [
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "agent_id",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "message_id",
+    "no": 2,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "session_id",
+    "no": 3,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "int64",
+    "V": null,
+    "kind": "scalar",
+    "name": "first_sent_age_ms",
+    "no": 4,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "task_id",
+    "no": 5,
+    "opt": true,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.GetGrokBotSendStatusResponse": [
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotSendStatus",
+    "V": null,
+    "kind": "named",
+    "name": "status",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "echo_entry_id",
+    "no": 2,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "rejection_code",
+    "no": 3,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "int64",
+    "V": null,
+    "kind": "scalar",
+    "name": "accepted_at_ms",
+    "no": 4,
+    "opt": true,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.GetGrokBotUserRuntimeSettingsRequest": [
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "after_main_agent_change",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.GetGrokBotUserRuntimeSettingsResponse": [
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotUserRuntimeSettings",
+    "V": null,
+    "kind": "named",
+    "name": "settings",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.GetSandBoxRunStateRequest": [],
+  "aiserver.v1.GetSandBoxRunStateResponse": [
+   {
+    "K": null,
+    "T": "aiserver.v1.SandBoxRunState",
+    "V": null,
+    "kind": "named",
+    "name": "state",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "image_update_available",
+    "no": 2,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "egress_tunnel_ownership",
+    "no": 3,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.SandBoxImageInfo",
+    "V": null,
+    "kind": "named",
+    "name": "image",
+    "no": 4,
+    "opt": false,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.GrokBotAgent": [
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "id",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "legacy_agent_id",
+    "no": 2,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "name",
+    "no": 3,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "description",
+    "no": 4,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "title",
+    "no": 5,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "avatar_shape",
+    "no": 6,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "avatar_color",
+    "no": 7,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "avatar_version",
+    "no": 8,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "avatar_url",
+    "no": 9,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "int64",
+    "V": null,
+    "kind": "scalar",
+    "name": "created_at_ms",
+    "no": 10,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "int64",
+    "V": null,
+    "kind": "scalar",
+    "name": "updated_at_ms",
+    "no": 11,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "agent_id",
+    "no": 12,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "harness",
+    "no": 13,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "role",
+    "no": 14,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotAgentVisibility",
+    "V": null,
+    "kind": "named",
+    "name": "visibility",
+    "no": 15,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "int32",
+    "V": null,
+    "kind": "scalar",
+    "name": "team_id",
+    "no": 16,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "viewer_is_owner",
+    "no": 17,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "viewer_session_id",
+    "no": 18,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotAgentKind",
+    "V": null,
+    "kind": "named",
+    "name": "kind",
+    "no": 19,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "member_agent_ids",
+    "no": 20,
+    "opt": false,
+    "repeated": true
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "owner_display_name",
+    "no": 21,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotRoomPerson",
+    "V": null,
+    "kind": "named",
+    "name": "people",
+    "no": 22,
+    "opt": false,
+    "repeated": true
+   },
+   {
+    "K": null,
+    "T": "google.protobuf.Timestamp",
+    "V": null,
+    "kind": "named",
+    "name": "published_at",
+    "no": 23,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "team_default_for_viewer",
+    "no": 24,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "voice_id",
+    "no": 25,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "float",
+    "V": null,
+    "kind": "scalar",
+    "name": "voice_speed",
+    "no": 26,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "voice_language",
+    "no": 27,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "viewer_can_manage",
+    "no": 28,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "drafting_disabled",
+    "no": 29,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotAgentRoutinePolicy",
+    "V": null,
+    "kind": "named",
+    "name": "routine_policy",
+    "no": 30,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotAgentViewerAccess",
+    "V": null,
+    "kind": "named",
+    "name": "viewer_access",
+    "no": 31,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "access_grants_only",
+    "no": 32,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotAgentViewerAction",
+    "V": null,
+    "kind": "named",
+    "name": "viewer_allowed_actions",
+    "no": 33,
+    "opt": false,
+    "repeated": true
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotAgentSuggestion",
+    "V": null,
+    "kind": "named",
+    "name": "suggestions",
+    "no": 34,
+    "opt": false,
+    "repeated": true
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "access_owner_only",
+    "no": 35,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "shared_with_others",
+    "no": 36,
+    "opt": true,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.GrokBotAgentAwaitingState": [
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "tab_id",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "reason",
+    "no": 2,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "int64",
+    "V": null,
+    "kind": "scalar",
+    "name": "since_ms",
+    "no": 3,
+    "opt": false,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.GrokBotAgentClientState": [
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "agent_id",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "int64",
+    "V": null,
+    "kind": "scalar",
+    "name": "last_viewed_at_ms",
+    "no": 2,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "uint32",
+    "V": null,
+    "kind": "scalar",
+    "name": "unread_count",
+    "no": 3,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "int64",
+    "V": null,
+    "kind": "scalar",
+    "name": "last_activity_at_ms",
+    "no": 4,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "last_entry_id",
+    "no": 5,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "last_entry_kind",
+    "no": 6,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "last_message_id",
+    "no": 7,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "last_message_preview",
+    "no": 8,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "notifications_enabled",
+    "no": 9,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "notify_on_updates_enabled",
+    "no": 10,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "hidden_from_sidebar",
+    "no": 11,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "int64",
+    "V": null,
+    "kind": "scalar",
+    "name": "updated_at_ms",
+    "no": 12,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotAgentEntryPreview",
+    "V": null,
+    "kind": "named",
+    "name": "last_entry_preview",
+    "no": 13,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "last_message_task_id",
+    "no": 14,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "removed_from_sidebar",
+    "no": 15,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "uint32",
+    "V": null,
+    "kind": "scalar",
+    "name": "unread_thread_count",
+    "no": 16,
+    "opt": false,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.GrokBotAgentEntryPreview": [
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotAgentEntryPreview.Text",
+    "V": null,
+    "kind": "named",
+    "name": "text",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotAgentEntryPreview.AgentMessage",
+    "V": null,
+    "kind": "named",
+    "name": "sent_agent_message",
+    "no": 2,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotAgentEntryPreview.AgentMessage",
+    "V": null,
+    "kind": "named",
+    "name": "received_agent_message",
+    "no": 3,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotAgentEntryPreview.Attachments",
+    "V": null,
+    "kind": "named",
+    "name": "attachments",
+    "no": 4,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotAgentEntryPreview.Link",
+    "V": null,
+    "kind": "named",
+    "name": "link",
+    "no": 5,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotAgentEntryPreview.WidgetPrompt",
+    "V": null,
+    "kind": "named",
+    "name": "widget_prompt",
+    "no": 6,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotAgentEntryPreview.WidgetAnswered",
+    "V": null,
+    "kind": "named",
+    "name": "widget_answered",
+    "no": 7,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotAgentEntryPreview.WidgetOptions",
+    "V": null,
+    "kind": "named",
+    "name": "widget_options",
+    "no": 8,
+    "opt": false,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.GrokBotAgentLiveActivity": [
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "kind",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "tool",
+    "no": 2,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "detail",
+    "no": 3,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "target",
+    "no": 4,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "call_id",
+    "no": 5,
+    "opt": false,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.GrokBotAgentLiveState": [
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "agent_id",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "is_running",
+    "no": 2,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "is_composing_message",
+    "no": 3,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "is_retrying",
+    "no": 4,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotAgentLiveActivity",
+    "V": null,
+    "kind": "named",
+    "name": "activity",
+    "no": 5,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotAgentAwaitingState",
+    "V": null,
+    "kind": "named",
+    "name": "awaiting",
+    "no": 6,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "int64",
+    "V": null,
+    "kind": "scalar",
+    "name": "updated_at_ms",
+    "no": 7,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "int64",
+    "V": null,
+    "kind": "scalar",
+    "name": "stale_after_ms",
+    "no": 8,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "box_handoff_request_id",
+    "no": 9,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "box_handoff_instruction",
+    "no": 10,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "session_id",
+    "no": 11,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "active_group_member_id",
+    "no": 12,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "has_running_subagents",
+    "no": 13,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "surface_task_id",
+    "no": 14,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "working_task_ids",
+    "no": 15,
+    "opt": false,
+    "repeated": true
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotTurnSettlement",
+    "V": null,
+    "kind": "named",
+    "name": "last_turn_settlement",
+    "no": 16,
+    "opt": true,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.GrokBotAgentRoutinePolicy": [
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "allow_collaborator_creation",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotAutomationPolicyAction",
+    "V": null,
+    "kind": "named",
+    "name": "viewer_allowed_actions",
+    "no": 2,
+    "opt": false,
+    "repeated": true
+   }
+  ],
+  "aiserver.v1.GrokBotAgentSession": [
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "agent_id",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "session_id",
+    "no": 2,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotAgentSessionKind",
+    "V": null,
+    "kind": "named",
+    "name": "kind",
+    "no": 3,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "int64",
+    "V": null,
+    "kind": "scalar",
+    "name": "created_at_ms",
+    "no": 4,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "int64",
+    "V": null,
+    "kind": "scalar",
+    "name": "updated_at_ms",
+    "no": 5,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "int64",
+    "V": null,
+    "kind": "scalar",
+    "name": "last_activity_at_ms",
+    "no": 6,
+    "opt": true,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.GrokBotAgentStatus": [
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "agent_id",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotAgentLiveState",
+    "V": null,
+    "kind": "named",
+    "name": "live",
+    "no": 2,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotAgentClientState",
+    "V": null,
+    "kind": "named",
+    "name": "client",
+    "no": 3,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "is_running",
+    "no": 4,
+    "opt": false,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.GrokBotAgentSuggestion": [
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "id",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "icon",
+    "no": 2,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "title",
+    "no": 3,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "detail",
+    "no": 4,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "prompt",
+    "no": 5,
+    "opt": false,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.GrokBotAgentTask": [
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "id",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "name",
+    "no": 2,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "description",
+    "no": 3,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "status",
+    "no": 4,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "int64",
+    "V": null,
+    "kind": "scalar",
+    "name": "updated_at_ms",
+    "no": 5,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "unread_entry_id",
+    "no": 6,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "unread_preview",
+    "no": 7,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "int64",
+    "V": null,
+    "kind": "scalar",
+    "name": "unread_at_ms",
+    "no": 8,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "int64",
+    "V": null,
+    "kind": "scalar",
+    "name": "pinned_at_ms",
+    "no": 9,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "subagent_ids",
+    "no": 10,
+    "opt": false,
+    "repeated": true
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "followed",
+    "no": 11,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "cloud_agent_bc_ids",
+    "no": 12,
+    "opt": false,
+    "repeated": true
+   },
+   {
+    "K": null,
+    "T": "int32",
+    "V": null,
+    "kind": "scalar",
+    "name": "file_count",
+    "no": 13,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "last_message_entry_id",
+    "no": 14,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "int64",
+    "V": null,
+    "kind": "scalar",
+    "name": "last_message_at_ms",
+    "no": 15,
+    "opt": true,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.GrokBotAttachmentRead": [
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "path",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotAttachmentReadOutcome",
+    "V": null,
+    "kind": "named",
+    "name": "outcome",
+    "no": 2,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "url",
+    "no": 3,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "int64",
+    "V": null,
+    "kind": "scalar",
+    "name": "expires_at_ms",
+    "no": 4,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "content_type",
+    "no": 5,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "int64",
+    "V": null,
+    "kind": "scalar",
+    "name": "size_bytes",
+    "no": 6,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "etag",
+    "no": 7,
+    "opt": false,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.GrokBotAutoReviewRuleSave": [
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotAutoReviewRuleSaveSurface",
+    "V": null,
+    "kind": "named",
+    "name": "surface",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotAutoReviewRuleTextSource",
+    "V": null,
+    "kind": "named",
+    "name": "text_source",
+    "no": 2,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "connector",
+    "no": 3,
+    "opt": false,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.GrokBotHarnessRefusal": [
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "failure_code",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "message",
+    "no": 2,
+    "opt": false,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.GrokBotPinnedAgents": [
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "agent_ids",
+    "no": 1,
+    "opt": false,
+    "repeated": true
+   }
+  ],
+  "aiserver.v1.GrokBotRoomPerson": [
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "display_name",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "avatar_url",
+    "no": 2,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "is_viewer",
+    "no": 3,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "int32",
+    "V": null,
+    "kind": "scalar",
+    "name": "user_id",
+    "no": 4,
+    "opt": true,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.GrokBotRunningSubagent": [
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "subagent_id",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "subagent_type",
+    "no": 2,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "title",
+    "no": 3,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "int64",
+    "V": null,
+    "kind": "scalar",
+    "name": "started_at_ms",
+    "no": 4,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "int64",
+    "V": null,
+    "kind": "scalar",
+    "name": "fresh_until_ms",
+    "no": 5,
+    "opt": false,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.GrokBotSidebarSection": [
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "id",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "name",
+    "no": 2,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "agent_ids",
+    "no": 3,
+    "opt": false,
+    "repeated": true
+   }
+  ],
+  "aiserver.v1.GrokBotSidebarSections": [
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotSidebarSection",
+    "V": null,
+    "kind": "named",
+    "name": "sections",
+    "no": 1,
+    "opt": false,
+    "repeated": true
+   }
+  ],
+  "aiserver.v1.GrokBotSlackConnection": [
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "agent_id",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "connected",
+    "no": 2,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "workspace_name",
+    "no": 3,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "install_url",
+    "no": 5,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "unavailable_reason",
+    "no": 6,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "pending_admin_approval",
+    "no": 7,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "needs_manifest_update",
+    "no": 8,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "reinstall_url",
+    "no": 9,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "approval_denied",
+    "no": 10,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "app_unreachable",
+    "no": 11,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "removed_in_slack",
+    "no": 12,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "approval_request_unsent",
+    "no": 13,
+    "opt": true,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.GrokBotTeamsConnection": [
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "agent_id",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotTeamsInstallState",
+    "V": null,
+    "kind": "named",
+    "name": "install_state",
+    "no": 2,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "tenant_id",
+    "no": 3,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "tenant_display_name",
+    "no": 4,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "int32",
+    "V": null,
+    "kind": "scalar",
+    "name": "installed_team_count",
+    "no": 5,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotTeamsInstalledTeam",
+    "V": null,
+    "kind": "named",
+    "name": "installed_teams",
+    "no": 6,
+    "opt": false,
+    "repeated": true
+   }
+  ],
+  "aiserver.v1.GrokBotTeamsInstalledTeam": [
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "team_id",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "display_name",
+    "no": 2,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "rsc_granted",
+    "no": 3,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "int64",
+    "V": null,
+    "kind": "scalar",
+    "name": "installed_at_ms",
+    "no": 4,
+    "opt": false,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.GrokBotToolPermissionPolicy": [
+   {
+    "K": 9,
+    "T": null,
+    "V": "aiserver.v1.GrokBotToolPermission",
+    "kind": "map",
+    "name": "tools",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotToolPermission",
+    "V": null,
+    "kind": "named",
+    "name": "reads",
+    "no": 2,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotToolPermission",
+    "V": null,
+    "kind": "named",
+    "name": "writes",
+    "no": 3,
+    "opt": false,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.GrokBotToolPermissions": [
+   {
+    "K": 9,
+    "T": null,
+    "V": "aiserver.v1.GrokBotToolPermissionPolicy",
+    "kind": "map",
+    "name": "scopes",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.GrokBotTranscriptEntry": [
+   {
+    "K": null,
+    "T": "uint64",
+    "V": null,
+    "kind": "scalar",
+    "name": "seq",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "entry_kind",
+    "no": 2,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bytes",
+    "V": null,
+    "kind": "scalar",
+    "name": "body",
+    "no": 3,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "blob_hash",
+    "no": 4,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "uint64",
+    "V": null,
+    "kind": "scalar",
+    "name": "updated_seq",
+    "no": 5,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "entry_id",
+    "no": 6,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "body_omitted",
+    "no": 7,
+    "opt": false,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.GrokBotTranscriptUnreadAnchor": [
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "has_newer_rows",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "entry_id",
+    "no": 2,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "uint64",
+    "V": null,
+    "kind": "scalar",
+    "name": "seq",
+    "no": 3,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "uint32",
+    "V": null,
+    "kind": "scalar",
+    "name": "newer_rows",
+    "no": 4,
+    "opt": false,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.GrokBotTurnSettlement": [
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "turn_id",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "outcome",
+    "no": 2,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "int64",
+    "V": null,
+    "kind": "scalar",
+    "name": "settled_at_ms",
+    "no": 3,
+    "opt": false,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.GrokBotUserAutoReviewInstructions": [
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "is_enabled",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "allow_instructions",
+    "no": 2,
+    "opt": false,
+    "repeated": true
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "block_instructions",
+    "no": 3,
+    "opt": false,
+    "repeated": true
+   }
+  ],
+  "aiserver.v1.GrokBotUserRuntimeSettings": [
+   {
+    "K": null,
+    "T": "int64",
+    "V": null,
+    "kind": "scalar",
+    "name": "updated_at_ms",
+    "no": 5,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotPinnedAgents",
+    "V": null,
+    "kind": "named",
+    "name": "pinned_agents",
+    "no": 6,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotSidebarSections",
+    "V": null,
+    "kind": "named",
+    "name": "sidebar_sections",
+    "no": 7,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "has_seen_onboarding",
+    "no": 8,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "main_agent_id",
+    "no": 9,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "int64",
+    "V": null,
+    "kind": "scalar",
+    "name": "terms_seen_at_ms",
+    "no": 10,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotUserAutoReviewInstructions",
+    "V": null,
+    "kind": "named",
+    "name": "auto_review_instructions",
+    "no": 11,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotEmailProvider",
+    "V": null,
+    "kind": "named",
+    "name": "email_provider",
+    "no": 12,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotXToolAccess",
+    "V": null,
+    "kind": "named",
+    "name": "x_tool_access",
+    "no": 13,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotToolPermissions",
+    "V": null,
+    "kind": "named",
+    "name": "tool_permissions",
+    "no": 14,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "job_role",
+    "no": 15,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "user_time_zone_override",
+    "no": 16,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "int32",
+    "V": null,
+    "kind": "scalar",
+    "name": "main_agent_team_id",
+    "no": 17,
+    "opt": true,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.InterruptGrokBotAgentRunRequest": [
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "agent_id",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "reason",
+    "no": 2,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "session_id",
+    "no": 3,
+    "opt": true,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.InterruptGrokBotAgentRunResponse": [
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "had_active_run",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.ListGrokBotAgentSessionsRequest": [
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "agent_id",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.ListGrokBotAgentSessionsResponse": [
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotAgentSession",
+    "V": null,
+    "kind": "named",
+    "name": "sessions",
+    "no": 1,
+    "opt": false,
+    "repeated": true
+   }
+  ],
+  "aiserver.v1.ListGrokBotAgentStatusesRequest": [
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "agent_ids",
+    "no": 1,
+    "opt": false,
+    "repeated": true
+   }
+  ],
+  "aiserver.v1.ListGrokBotAgentStatusesResponse": [
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotAgentStatus",
+    "V": null,
+    "kind": "named",
+    "name": "statuses",
+    "no": 1,
+    "opt": false,
+    "repeated": true
+   }
+  ],
+  "aiserver.v1.ListGrokBotAgentTasksRequest": [
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "agent_id",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "include_recently_done",
+    "no": 2,
+    "opt": true,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.ListGrokBotAgentTasksResponse": [
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotAgentTask",
+    "V": null,
+    "kind": "named",
+    "name": "tasks",
+    "no": 1,
+    "opt": false,
+    "repeated": true
+   }
+  ],
+  "aiserver.v1.ListGrokBotAgentTodosRequest": [
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "agent_id",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.ListGrokBotAgentTodosResponse": [
+   {
+    "K": null,
+    "T": "agent.v1.TodoItem",
+    "V": null,
+    "kind": "named",
+    "name": "todos",
+    "no": 1,
+    "opt": false,
+    "repeated": true
+   }
+  ],
+  "aiserver.v1.ListGrokBotAgentsRequest": [
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "role",
+    "no": 1,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "include_team_agents",
+    "no": 2,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "added_team_agents_only",
+    "no": 3,
+    "opt": true,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.ListGrokBotAgentsResponse": [
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotAgent",
+    "V": null,
+    "kind": "named",
+    "name": "agents",
+    "no": 1,
+    "opt": false,
+    "repeated": true
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotSlackConnection",
+    "V": null,
+    "kind": "named",
+    "name": "slack_connections",
+    "no": 2,
+    "opt": false,
+    "repeated": true
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "truncated",
+    "no": 3,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotTeamsConnection",
+    "V": null,
+    "kind": "named",
+    "name": "teams_connections",
+    "no": 4,
+    "opt": false,
+    "repeated": true
+   }
+  ],
+  "aiserver.v1.ListGrokBotSubagentsRequest": [
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "agent_id",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.ListGrokBotSubagentsResponse": [
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotRunningSubagent",
+    "V": null,
+    "kind": "named",
+    "name": "subagents",
+    "no": 1,
+    "opt": false,
+    "repeated": true
+   }
+  ],
+  "aiserver.v1.ListGrokBotTranscriptEntriesRequest": [
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "agent_id",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "uint32",
+    "V": null,
+    "kind": "scalar",
+    "name": "generation",
+    "no": 2,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "uint64",
+    "V": null,
+    "kind": "scalar",
+    "name": "before_seq",
+    "no": 3,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "uint32",
+    "V": null,
+    "kind": "scalar",
+    "name": "limit",
+    "no": 4,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "session_id",
+    "no": 5,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "int64",
+    "V": null,
+    "kind": "scalar",
+    "name": "unread_boundary_ms",
+    "no": 6,
+    "opt": true,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.ListGrokBotTranscriptEntriesResponse": [
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotTranscriptEntry",
+    "V": null,
+    "kind": "named",
+    "name": "entries",
+    "no": 1,
+    "opt": false,
+    "repeated": true
+   },
+   {
+    "K": null,
+    "T": "uint32",
+    "V": null,
+    "kind": "scalar",
+    "name": "generation",
+    "no": 2,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "cloud_agent_peer_ids",
+    "no": 3,
+    "opt": false,
+    "repeated": true
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "cloud_agent_peer_ids_known",
+    "no": 4,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotTranscriptUnreadAnchor",
+    "V": null,
+    "kind": "named",
+    "name": "unread_anchor",
+    "no": 5,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "updated_seq_locked",
+    "no": 6,
+    "opt": false,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.RecreateSandBoxRequest": [
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "preserve_data",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "force",
+    "no": 2,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "acknowledge_terminal_upgrade_schedule",
+    "no": 3,
+    "opt": false,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.RecreateSandBoxResponse": [
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "started",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "reason",
+    "no": 2,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "operation_id",
+    "no": 3,
+    "opt": false,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.ResolveGrokBotAttachmentReadsRequest": [
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "agent_id",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "session_id",
+    "no": 2,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "paths",
+    "no": 3,
+    "opt": false,
+    "repeated": true
+   }
+  ],
+  "aiserver.v1.ResolveGrokBotAttachmentReadsResponse": [
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotAttachmentRead",
+    "V": null,
+    "kind": "named",
+    "name": "reads",
+    "no": 1,
+    "opt": false,
+    "repeated": true
+   }
+  ],
+  "aiserver.v1.SandBoxImageInfo": [
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "registry_tag",
+    "no": 1,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "static_snapshot_path",
+    "no": 2,
+    "opt": true,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.SandBoxMigrationEvent": [
+   {
+    "K": null,
+    "T": "aiserver.v1.SandBoxMigrationPhase",
+    "V": null,
+    "kind": "named",
+    "name": "phase",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "detail",
+    "no": 2,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "int64",
+    "V": null,
+    "kind": "scalar",
+    "name": "at_ms",
+    "no": 3,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "offset_key",
+    "no": 4,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "operation_id",
+    "no": 5,
+    "opt": false,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.SendGrokBotUserMessageRequest": [
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "agent_id",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "message_id",
+    "no": 2,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "text",
+    "no": 3,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "int64",
+    "V": null,
+    "kind": "scalar",
+    "name": "sent_at_ms",
+    "no": 4,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "rich_text",
+    "no": 5,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "reply_to_id",
+    "no": 6,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "is_fork",
+    "no": 7,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "reply_quote",
+    "no": 24,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "attachment_paths",
+    "no": 8,
+    "opt": false,
+    "repeated": true
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "attachment_names",
+    "no": 9,
+    "opt": false,
+    "repeated": true
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "traceparent",
+    "no": 10,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "int64",
+    "V": null,
+    "kind": "scalar",
+    "name": "enter_epoch_ms",
+    "no": 11,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "int64",
+    "V": null,
+    "kind": "scalar",
+    "name": "composed_at_ms",
+    "no": 12,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotClientSurface",
+    "V": null,
+    "kind": "named",
+    "name": "source",
+    "no": 13,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "mcp_config_json",
+    "no": 14,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "session_id",
+    "no": 15,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "machine_id",
+    "no": 16,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "one_password_app_installed",
+    "no": 17,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotUserMessageInitiator",
+    "V": null,
+    "kind": "named",
+    "name": "initiator",
+    "no": 18,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "task_id",
+    "no": 19,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "language",
+    "no": 20,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotSendSource",
+    "V": null,
+    "kind": "named",
+    "name": "send_source",
+    "no": 21,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "int64",
+    "V": null,
+    "kind": "scalar",
+    "name": "first_sent_age_ms",
+    "no": 22,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "renders_mcp_elicitation_forms",
+    "no": 25,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "rendered_card_kinds",
+    "no": 26,
+    "opt": false,
+    "repeated": true
+   }
+  ],
+  "aiserver.v1.SendGrokBotUserMessageResponse": [
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "dispatched",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotTemporalHarnessMode",
+    "V": null,
+    "kind": "named",
+    "name": "mode",
+    "no": 2,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "workflow_id",
+    "no": 3,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotUserMessageDelivery",
+    "V": null,
+    "kind": "named",
+    "name": "delivery",
+    "no": 4,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotHarnessRefusal",
+    "V": null,
+    "kind": "named",
+    "name": "refusal",
+    "no": 5,
+    "opt": true,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.UpdateGrokBotAgentRequest": [
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "id",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "name",
+    "no": 2,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "description",
+    "no": 3,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "title",
+    "no": 4,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "avatar_shape",
+    "no": 5,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "avatar_color",
+    "no": 6,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "google.protobuf.Empty",
+    "V": null,
+    "kind": "named",
+    "name": "clear_avatar",
+    "no": 7,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "avatar_data_url",
+    "no": 8,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "partial_update",
+    "no": 9,
+    "opt": true,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.UpdateGrokBotAgentResponse": [
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotAgent",
+    "V": null,
+    "kind": "named",
+    "name": "agent",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.UpdateGrokBotUserRuntimeSettingsRequest": [
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotPinnedAgents",
+    "V": null,
+    "kind": "named",
+    "name": "pinned_agents",
+    "no": 5,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotSidebarSections",
+    "V": null,
+    "kind": "named",
+    "name": "sidebar_sections",
+    "no": 6,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "has_seen_onboarding",
+    "no": 7,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotUserAutoReviewInstructions",
+    "V": null,
+    "kind": "named",
+    "name": "auto_review_instructions",
+    "no": 8,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotXToolAccess",
+    "V": null,
+    "kind": "named",
+    "name": "x_tool_access",
+    "no": 9,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotAutoReviewRuleSave",
+    "V": null,
+    "kind": "named",
+    "name": "auto_review_rule_save",
+    "no": 10,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "bots_hidden",
+    "no": 11,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotSidebarSections",
+    "V": null,
+    "kind": "named",
+    "name": "sidebar_sections_base",
+    "no": 12,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "user_time_zone",
+    "no": 13,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "user_time_zone_override",
+    "no": 14,
+    "opt": true,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.UpdateGrokBotUserRuntimeSettingsResponse": [
+   {
+    "K": null,
+    "T": "aiserver.v1.GrokBotUserRuntimeSettings",
+    "V": null,
+    "kind": "named",
+    "name": "settings",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.WatchSandBoxMigrationRequest": [
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "from_offset_key",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "include_finished",
+    "no": 2,
+    "opt": false,
+    "repeated": false
+   }
+  ]
+ },
+ "services": {
+  "aiserver.v1.GrokBotService": [
+   {
+    "I": "aiserver.v1.CreateGrokBotAgentRequest",
+    "O": "aiserver.v1.CreateGrokBotAgentResponse",
+    "kind": "Unary",
+    "name": "CreateGrokBotTemporalAgent"
+   },
+   {
+    "I": "aiserver.v1.DeleteGrokBotAgentRequest",
+    "O": "aiserver.v1.DeleteGrokBotAgentResponse",
+    "kind": "Unary",
+    "name": "DeleteGrokBotAgent"
+   },
+   {
+    "I": "aiserver.v1.ForceRecreateSandBoxRequest",
+    "O": "aiserver.v1.RecreateSandBoxResponse",
+    "kind": "Unary",
+    "name": "ForceRecreateSandBox"
+   },
+   {
+    "I": "aiserver.v1.GetGrokBotSendStatusRequest",
+    "O": "aiserver.v1.GetGrokBotSendStatusResponse",
+    "kind": "Unary",
+    "name": "GetGrokBotSendStatus"
+   },
+   {
+    "I": "aiserver.v1.GetGrokBotUserRuntimeSettingsRequest",
+    "O": "aiserver.v1.GetGrokBotUserRuntimeSettingsResponse",
+    "kind": "Unary",
+    "name": "GetGrokBotUserRuntimeSettings"
+   },
+   {
+    "I": "aiserver.v1.GetSandBoxRunStateRequest",
+    "O": "aiserver.v1.GetSandBoxRunStateResponse",
+    "kind": "Unary",
+    "name": "GetSandBoxRunState"
+   },
+   {
+    "I": "aiserver.v1.InterruptGrokBotAgentRunRequest",
+    "O": "aiserver.v1.InterruptGrokBotAgentRunResponse",
+    "kind": "Unary",
+    "name": "InterruptGrokBotAgentRun"
+   },
+   {
+    "I": "aiserver.v1.ListGrokBotAgentSessionsRequest",
+    "O": "aiserver.v1.ListGrokBotAgentSessionsResponse",
+    "kind": "Unary",
+    "name": "ListGrokBotAgentSessions"
+   },
+   {
+    "I": "aiserver.v1.ListGrokBotAgentStatusesRequest",
+    "O": "aiserver.v1.ListGrokBotAgentStatusesResponse",
+    "kind": "Unary",
+    "name": "ListGrokBotAgentStatuses"
+   },
+   {
+    "I": "aiserver.v1.ListGrokBotAgentTasksRequest",
+    "O": "aiserver.v1.ListGrokBotAgentTasksResponse",
+    "kind": "Unary",
+    "name": "ListGrokBotAgentTasks"
+   },
+   {
+    "I": "aiserver.v1.ListGrokBotAgentTodosRequest",
+    "O": "aiserver.v1.ListGrokBotAgentTodosResponse",
+    "kind": "Unary",
+    "name": "ListGrokBotAgentTodos"
+   },
+   {
+    "I": "aiserver.v1.ListGrokBotAgentsRequest",
+    "O": "aiserver.v1.ListGrokBotAgentsResponse",
+    "kind": "Unary",
+    "name": "ListGrokBotAgents"
+   },
+   {
+    "I": "aiserver.v1.ListGrokBotSubagentsRequest",
+    "O": "aiserver.v1.ListGrokBotSubagentsResponse",
+    "kind": "Unary",
+    "name": "ListGrokBotSubagents"
+   },
+   {
+    "I": "aiserver.v1.ListGrokBotTranscriptEntriesRequest",
+    "O": "aiserver.v1.ListGrokBotTranscriptEntriesResponse",
+    "kind": "Unary",
+    "name": "ListGrokBotTranscriptEntries"
+   },
+   {
+    "I": "aiserver.v1.RecreateSandBoxRequest",
+    "O": "aiserver.v1.RecreateSandBoxResponse",
+    "kind": "Unary",
+    "name": "RecreateSandBox"
+   },
+   {
+    "I": "aiserver.v1.ResolveGrokBotAttachmentReadsRequest",
+    "O": "aiserver.v1.ResolveGrokBotAttachmentReadsResponse",
+    "kind": "Unary",
+    "name": "ResolveGrokBotAttachmentReads"
+   },
+   {
+    "I": "aiserver.v1.SendGrokBotUserMessageRequest",
+    "O": "aiserver.v1.SendGrokBotUserMessageResponse",
+    "kind": "Unary",
+    "name": "SendGrokBotUserMessage"
+   },
+   {
+    "I": "aiserver.v1.UpdateGrokBotAgentRequest",
+    "O": "aiserver.v1.UpdateGrokBotAgentResponse",
+    "kind": "Unary",
+    "name": "UpdateGrokBotAgent"
+   },
+   {
+    "I": "aiserver.v1.UpdateGrokBotUserRuntimeSettingsRequest",
+    "O": "aiserver.v1.UpdateGrokBotUserRuntimeSettingsResponse",
+    "kind": "Unary",
+    "name": "UpdateGrokBotUserRuntimeSettings"
+   },
+   {
+    "I": "aiserver.v1.WatchSandBoxMigrationRequest",
+    "O": "aiserver.v1.SandBoxMigrationEvent",
+    "kind": "ServerStreaming",
+    "name": "WatchSandBoxMigration"
+   }
+  ]
+ }
+}

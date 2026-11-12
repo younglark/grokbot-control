@@ -17,6 +17,8 @@ plain-HTTP 的 `/sand-box/local-exec-connection`。凭据、HOME、数据目录�
   环境变量取 R$e 的形状：`SAND_LOCAL_EXEC_GENERATION`、`NODE_USE_SYSTEM_CA=1`，并去掉 `ELECTRON_RUN_AS_NODE`。
   以上依据来自静态读取的 main-core.cjs，见 [scenario-matrix.md](scenario-matrix.md) §1；t166 已对照 0.79.3 asar 中的 main-core.cjs 核实，见下文。
 
+- App 0.79.4（2026-11-11）：两个 harness 的合成 App env 改为 `SAND_CLIENT_APP_VERSION: '0.79.4'`（0.79.4 main-core 把它设为 App 版本），下表 #28/#40 的期望值随之变为 `0.79.4-dev`、`0.79.4`/`0.79.4-lab`；表中其余文字仍是 t165/t166/t168 当时（0.79.3）的记录。本次重跑：acceptance 1/1 通过，extra 9 通过 1 跳过（未设 `DROPIN_ELECTRON`），见 [evidence/app-0.79.4.md](evidence/app-0.79.4.md)。
+
 ## 第二个门控 harness
 `packages/local-exec-daemon/test/dropin-extra.test.cjs`，同样由 `DROPIN_ACCEPTANCE=1` 门控；辅助模块 `test/helpers/dropin-launch.cjs`、`test/helpers/ai-tool-fixture.cjs`、`test/helpers/electron-utility-host.cjs`。
 - network-change：自身用 `unshare -rn node <file>` 重新执行（非特权 user+net namespace），在里面加真实 veth/地址；需要 `unshare` 可用。

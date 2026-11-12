@@ -1,6 +1,6 @@
 # local-exec-daemon
 
-独立实现的本地执行 daemon，目标是与 Grok Bot App **0.79.3** 的原版 local-exec-daemon 行为一致。私有包（`UNLICENSED`，不发布），bin `local-exec-daemon` → `dist/index.js`。
+独立实现的本地执行 daemon，目标是与 Grok Bot App 的原版 local-exec-daemon 行为一致：按 **0.79.3** 逐函数移植；**0.79.4** 的 daemon 只改了内置版本字面量（D:78971），已同步（[evidence/app-0.79.4.md](../../docs/local-exec/evidence/app-0.79.4.md)）。私有包（`UNLICENSED`，不发布），bin `local-exec-daemon` → `dist/index.js`。
 
 **不是**官方二进制，**还不能**原位替换 App 安装；开发时**不要**连接真实账户的控制面。
 
