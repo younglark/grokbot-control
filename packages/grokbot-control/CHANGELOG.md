@@ -4,6 +4,22 @@
 
 ## Unreleased
 
+计划随 **0.6.0** 发布（尚未升版本号）。**含破坏性变更**：解析 `message send` / `message status` / `message history` 的 `--json` 输出的脚本需要调整。`schema_version` 仍为 `1.0.0`（按仓库惯例它是封套版本，0.2.0 的 CLI 输出形状破坏性变更也没有升它）。
+
+### Breaking
+
+- **`message send` / `message status` 的枚举改为名字（#1）。** `delivery`、`status` 从 `"2"` 这样的数字字符串改为小写 snake 名字（如 `"accepted_temporal"`、`"accepted"`），数字移到 `delivery_code` / `status_code`。新增 `mode` / `mode_code`。名字表取自生成的冻结 schema 枚举；schema 没有的数值输出 `"unknown"` 加原始 code。
+- **`session_id` 不再用 `""` 表示默认会话。** 调用方传了就回显并带 `session_source:"caller"`；没传时为 `null`、`session_source:"default_unreported"`（发送 RPC 不返回会话号）。`message history` 也带这两个字段。
+- **`delivery=refused` 现在是失败。** 以前返回 `ok:true`、退出码 0。现在 `ok:false`、`code:"refused"`、退出码 7（与 denied 同一类：写请求被拒），错误封套在 stderr，`data` 里仍有 `refusal` 和 `workflow_id`；MCP `send_message` 返回 `isError:true`。
+- **`message status` 的可选字段缺失时为 `null`**（`rejection_code`、`accepted_at_ms`，以及新增的 `echo_entry_id`），不再省略。
+- **`message history` 条目形状变化（#2 的 history 部分）。** 以前读的是 schema 里不存在的 `plaintext` / `text` / `ciphertext`，真实数据永远没有正文，`entry_id` 也读错字段。现在与本地监视器 transcript 用同一解码器解析 `body`（UTF-8 JSON UI 条目）：条目带 `entry_id`、`seq`、`kind`、`role`、`timestamp_ms`、`decode_status`、`preview`（200 字）和 `text`（默认最多 2000 字，`--full` 取全文，被截断时有 `text_truncated` / `text_chars`）。`omitted` 只在服务端省略 body 时为 true。去掉误导性的「Ciphertext … not decrypted」说明。
+
+### 新增
+
+- `message send` 结果补上 `workflow_id`、`refusal{failure_code,message}`（缺失为 `null`）；`message status` 补上 `echo_entry_id`。
+- `message history --session-id <sid>`（MCP `list_transcript` 的 `session_id`）：只在给出时发给服务端，不猜默认值。`--full`（MCP `full: true`）返回全文。
+- 内部：`--mock` 后端的 transcript 改为 schema 形状（`body` 字节），使旧解码错误能被测试发现。
+
 ## 0.5.0 — 2026-11-11（通过 GitHub tag `npm-v0.5.0` 分发，不发到 npmjs）
 
 ### 新增

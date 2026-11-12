@@ -204,13 +204,37 @@ gbc dashboard [--port 8787] [--host 127.0.0.1] [--no-open]
 | `bot` | `create` / `list` / `get` / `update` / `delete` / `status` / `todos` / `tasks` / `subagents` / `interrupt` |
 | `computer` | `state` / `reset`（`--hard`、`--wait`、`--timeout`） |
 | `account` | `cleanup`（先 `--dry-run`；执行需 `--confirm=ACCOUNT_CLEANUP --plan=<fingerprint>`，可选 `--hard` / `--wait` / `--timeout`） |
-| `message` | `send` / `status` / `history` |
+| `message` | `send` / `status` / `history`（`--session-id`、`--full`） |
 | `session` | `list` |
 | `sidebar` | `list` / `create` / `rename` / `delete` / `move` |
 | `dashboard` | （可省略 `start`）本地只读监视器；`--port` / `--host` / `--no-open`。不是官方 DashboardService。详情含任务区、活动时间线、用量明细，以及等待处理 / 当前动作 / 新鲜度 / 最近动态 / 沙箱状态 / 渠道连接 |
 | `sync` | `pull` / `status` / `render` / `attachments` |
 
 危险写操作（`bot delete`、`sidebar delete`、`interrupt` 等）需要 `--confirm=<resource-id>` 精确匹配。`computer reset` 使用固定 token `--confirm=RESET_COMPUTER`，会重建共享电脑且启动后不可取消；`--hard` 走 `ForceRecreateSandBox`。`account cleanup` 先 `--dry-run` 给出可删清单与计划指纹；真实执行必须 `--allow-writes`、`--confirm=ACCOUNT_CLEANUP` 以及与当前清单匹配的 `--plan`。它只删除确定为当前账号自有、可删除的个人 Bot，再按现有 `computer reset` 重建共享电脑，不是彻底账号重置，也不处理订阅、账号删除、Library、会话或连接器。列表截断、权属不明、共享/团队 Bot，或预览后清单变化时不会发出写请求。删除中途失败或重建前核验发现残留/新 Bot 时不会重建。流程不是事务，已删除的 Bot 不能用本命令撤销。远端写需要 `--allow-writes` 或 `GBT_ALLOW_WRITES=1`；`sync` 的本地归档写由命令本身授权，不要求远端 `--allow-writes`。
+
+### 消息输出（`message send` / `status` / `history`）
+
+枚举输出小写 snake 名字，数字放在 `*_code`；schema 里没有的数值输出 `"unknown"` 加原始 code。名字表取自生成的冻结 schema 枚举。
+
+```jsonc
+// gbc --json --allow-writes message send --agent-id <id> --text "ping"   （未传 --session-id；字段值仅为示例）
+{"schema_version":"1.0.0","ok":true,"code":"ok", …,
+ "data":{"message_id":"…","agent_id":"…",
+  "session_id":null,"session_source":"default_unreported",
+  "dispatched":true,"delivery":"accepted_temporal","delivery_code":2,
+  "mode":"live","mode_code":3,"workflow_id":"…","refusal":null,
+  "note":"delivery/acceptance only — NOT task or business success"}}
+
+// gbc --json message status --agent-id <id> --message-id <mid>
+{"data":{"agent_id":"…","session_id":null,"session_source":"default_unreported","message_id":"…",
+  "status":"accepted","status_code":2,"echo_entry_id":"…","rejection_code":null,
+  "accepted_at_ms":"1794454564087","note":"send_status ≠ final user-visible success"}}
+```
+
+- `session_id`：传了 `--session-id` 就原样回显，`session_source:"caller"`；没传时为 `null`、`session_source:"default_unreported"`。发送 RPC 不回会话号，本工具也不会为了补会话号额外调用列表接口。
+- `workflow_id` / `refusal` / `echo_entry_id` / `rejection_code` / `accepted_at_ms` 缺失时显式为 `null`。
+- `delivery=refused` 算失败：`ok:false`、`code:"refused"`、退出码 7，错误封套写到 stderr，`data` 里仍带 `refusal{failure_code,message}` 和 `workflow_id`。MCP 返回 `isError:true` 和同一封套。`duplicate` 仍是成功（服务端认出同一 `message_id`）。
+- `message history` 用和本地监视器 transcript 同一套解码器解析 body（UTF-8 JSON UI 条目）：每条有 `decode_status`、`role`、`preview`（200 字）和 `text`（默认最多 2000 字，`--full` 取全文；被截断时带 `text_truncated` / `text_chars`）。省略或解不开的 body 保持占位，不解密。`--session-id` 只在传了时发给服务端，不会猜一个默认值。
 
 ### 退出码
 
@@ -221,7 +245,7 @@ gbc dashboard [--port 8787] [--host 127.0.0.1] [--no-open]
 | 4 | auth |
 | 5 | not_found |
 | 6 | conflict |
-| 7 | denied |
+| 7 | denied；`message send` 被服务端拒收（`delivery=refused`，code `refused`） |
 | 8 | retryable |
 | 9 | known_failure |
 | 10 | unknown outcome（写后无法排除副作用时勿盲目重试） |
