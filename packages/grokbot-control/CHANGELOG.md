@@ -4,6 +4,12 @@
 
 ## Unreleased
 
+## 0.7.0 — 2026-11-12（通过 GitHub tag `npm-v0.7.0` 分发，不发到 npmjs）
+
+安装：`npx -y --package=github:younglark/grokbot-control#npm-v0.7.0 gbc`（`gbc-mcp` 同样要加 `--package`）。
+
+新增 `gbc message wait`（#10）、`gbc computer wake`（#11），以及 `sidebar`/`bot create --if-exists=reuse`（#12）。既有命令的 JSON 输出只增字段，没有破坏性形状变更；`sidebar move` 在 Bot 已经只在目标分组里时改为跳过写入。`message wait` 与 `computer wake` 只做了离线验证，没有 live 检查；唤醒可能产生费用。
+
 ### 新增
 
 - **`gbc message wait`（#2）。** `gbc message wait --agent-id <id> --message-id <mid> [--session-id <sid>] [--timeout 600] [--interval 3] [--full]` 轮询 `ListGrokBotAgentStatuses`，等这条消息开启的回合结束（settle），再返回该回合 echo 之后的 transcript 条目。
