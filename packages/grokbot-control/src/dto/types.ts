@@ -54,6 +54,8 @@ export type LiveActivityView = {
 export type TurnSettlementView = {
   outcome?: string;
   settled_at_ms?: string;
+  /** GrokBotTurnSettlement.turn_id (App maps it to the message_id/client nonce; not live-verified). */
+  turn_id?: string;
   /** Set only when the outcome token is a known normal/abnormal value. */
   settled_normally?: boolean;
 };
@@ -81,6 +83,7 @@ export type ProgressStatus = {
     /** Whitelisted waiting record only; never the raw awaiting object. */
     awaiting?: SanitizedAwaiting;
     working_task_ids?: string[];
+    has_running_subagents?: boolean;
     activity?: LiveActivityView;
     last_turn_settlement?: TurnSettlementView;
     box_handoff?: BoxHandoffView;
