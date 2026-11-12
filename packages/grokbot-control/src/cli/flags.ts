@@ -29,10 +29,13 @@ export const COMMAND_FLAGS: Record<string, Record<string, FlagSpec>> = {
     list: { values: ["--limit", "--offset"], switches: [] },
     get: { values: ["--agent-id"], switches: [] },
     create: {
-      values: ["--name", "--description", "--title", "--agent-id", "--language"],
+      values: ["--name", "--description", "--description-file", "--title", "--agent-id", "--language"],
       switches: ["--kickstart"],
     },
-    update: { values: ["--agent-id", "--name", "--description", "--title"], switches: [] },
+    update: {
+      values: ["--agent-id", "--name", "--description", "--description-file", "--title"],
+      switches: [],
+    },
     delete: { values: ["--agent-id", "--confirm"], switches: [] },
     status: { values: ["--agent-id"], switches: [] },
     todos: { values: ["--agent-id"], switches: [] },
