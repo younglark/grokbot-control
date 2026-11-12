@@ -82,6 +82,15 @@ export type MockState = {
   usageFixture?: MockUsageFixture;
   /** Official GetGrokBotUsageBreakdown fixture. */
   breakdownFixture?: MockBreakdownFixture;
+  /**
+   * GetGrokBotUserRuntimeSettings.main_agent_id.
+   * When unset, the mock returns an unlisted id so existing fixtures keep their delete targets.
+   */
+  mainAgentId?: string;
+  /** When true, omit main_agent_id from the settings response. */
+  omitMainAgentId?: boolean;
+  /** Test hook: GetGrokBotUserRuntimeSettings throws. */
+  failRuntimeSettings?: boolean;
   /** Last GetGrokBotUsageBreakdown request (to assert no team id). */
   lastUsageBreakdownRequest?: unknown;
   callCounts?: MockCallCounts;
@@ -690,6 +699,9 @@ export function createMockTransport(state: MockState) {
       },
       async getGrokBotUserRuntimeSettings() {
         counts(state).getGrokBotUserRuntimeSettings += 1;
+        if (state.failRuntimeSettings) {
+          throw new ConnectError("simulated runtime settings failure", Code.Unavailable);
+        }
         return {
           settings: {
             sidebarSections: {
@@ -702,6 +714,7 @@ export function createMockTransport(state: MockState) {
             updatedAtMs: BigInt(Date.now()),
             emailProvider: 0,
             xToolAccess: 0,
+            ...(state.omitMainAgentId ? {} : { mainAgentId: state.mainAgentId ?? "agent-unlisted-main" }),
           },
         };
       },

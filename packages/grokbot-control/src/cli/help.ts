@@ -93,19 +93,23 @@ NOTES:
     account reset: it does not cancel a subscription, delete the account, or claim to
     clear sessions, connectors, Library, skills/routines, or all cloud data. Side effects
     are not live-verified. Preview first: \`gbc account cleanup --dry-run\` lists targets,
-    skips (shared/team/others/unknown ownership are never guessed or deleted), counts,
-    data-loss warnings, and a plan fingerprint. A truncated ListGrokBotAgents response
-    is refused before any write. Real execution needs --allow-writes and
+    skips (the current main bot, plus shared/team/others/unknown ownership, are never
+    guessed or deleted), counts, data-loss warnings, and a plan fingerprint. The main bot
+    is identified from GetGrokBotUserRuntimeSettings.main_agent_id and appears under
+    skipped with reason \`main\`; it is never a delete target. If that field is missing,
+    cleanup is refused. A truncated ListGrokBotAgents response is refused before any
+    write. Real execution needs --allow-writes and
     --confirm=ACCOUNT_CLEANUP --plan=<fingerprint> from that exact preview. If the
     current list no longer matches the plan, no writes are sent. Deletes are serial and
     reported one by one. Any failure, permission error, or unknown outcome stops the
     flow; computer reset is not started and unknown writes are not retried. After
     successful deletes a read-only re-list must show no planned residual and no new
-    owned targets, or reset is skipped. Zero owned bots is valid: matching empty plan,
-    no deletes, then reset. --hard/--wait/--timeout are forwarded to the existing
-    computer reset and keep its semantics (SIGINT stops waiting only). The flow is not
-    a transaction; already-deleted bots cannot be undone. Existing \`bot delete\` and
-    \`computer reset\` stay unchanged. No dashboard or MCP entry for this command.
+    owned targets, or reset is skipped. Zero owned bots, or only the main bot remaining,
+    is valid: matching empty plan, no deletes, then reset. --hard/--wait/--timeout are
+    forwarded to the existing computer reset and keep its semantics (SIGINT stops waiting
+    only). The flow is not a transaction; already-deleted bots cannot be undone. Existing
+    \`bot delete\` and \`computer reset\` stay unchanged. No dashboard or MCP entry for
+    this command. This command does not change which bot is main.
   - computer wake (non-destructive; separate from reset, no confirm word) sends one
     EnsureSandBox with an empty request (wake/supports_asleep_box unset, no extra headers)
     when \`computer state\` is hibernated. STATIC INFERENCE from the official App, NOT

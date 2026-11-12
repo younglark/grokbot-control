@@ -4,6 +4,10 @@
 
 ## Unreleased
 
+### 变更
+
+- **`gbc account cleanup` 不再删除当前主 Bot。** 主 Bot 由只读 RPC `GetGrokBotUserRuntimeSettings` 的 `main_agent_id` 标识，会出现在预览的 `skipped` 中，原因是 `main`，不会进入删除清单或计划指纹。其他已确认的自有个人 Bot 仍可删除。若列表里只有主 Bot，空计划匹配后跳过删除，再按原路径重建电脑。若该字段缺失，会拒绝预览和执行，而不会猜测哪一个是主 Bot。本命令不会改主 Bot。`bot delete` 行为不变。
+
 ## 0.7.0 — 2026-11-12（通过 GitHub tag `npm-v0.7.0` 分发，不发到 npmjs）
 
 安装：`npx -y --package=github:younglark/grokbot-control#npm-v0.7.0 gbc`（`gbc-mcp` 同样要加 `--package`）。

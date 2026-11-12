@@ -17,6 +17,7 @@ export const ACCOUNT_CLEANUP_CONFIRM = "ACCOUNT_CLEANUP";
 
 export const ACCOUNT_CLEANUP_WARNINGS = [
   "This deletes only the listed personal bots you own, then recreates the shared computer with preserve_data=false.",
+  "The current main bot, identified from GetGrokBotUserRuntimeSettings.main_agent_id, is skipped and is never a delete target.",
   "This is not a full account reset. It does not cancel a subscription, delete the account, or claim to clear sessions, connectors, Library, skills/routines, or all cloud data.",
   "Side effects of DeleteGrokBotAgent and RecreateSandBox are not live-verified. The flow is not a transaction; already-deleted bots cannot be undone by this tool.",
   "Computer reset cannot be canceled after it starts. Do not start another reset while one may still be running.",
@@ -29,7 +30,8 @@ export type CleanupSkipReason =
   | "team"
   | "shared"
   | "group_access"
-  | "room";
+  | "room"
+  | "main";
 
 export type CleanupTarget = {
   id: string;
@@ -85,6 +87,8 @@ type Inventory = {
   targets: CleanupTarget[];
   skipped: CleanupSkipped[];
   fingerprint: string;
+  main_agent_id: string;
+  main_agent_unmatched: boolean;
 };
 
 export function planFingerprint(targets: CleanupTarget[]): string {
@@ -181,13 +185,31 @@ function isTarget(row: CleanupTarget | CleanupSkipped): row is CleanupTarget {
   return !("reason" in row);
 }
 
-function inventoryFromAgents(agents: unknown[]): Inventory {
+/** Match official main_agent_id to a listed row's agent_id, or id if the values coincide. */
+export function isCleanupMainAgent(row: CleanupTarget, mainAgentId: string): boolean {
+  return mainAgentId.length > 0 && (row.agent_id === mainAgentId || row.id === mainAgentId);
+}
+
+function mainAgentIdFromSettings(rawUnknown: unknown): string {
+  const root = (rawUnknown ?? {}) as Record<string, unknown>;
+  const settings = (root.settings ?? root) as Record<string, unknown>;
+  return rawText(settings, "mainAgentId", "main_agent_id");
+}
+
+function inventoryFromAgents(agents: unknown[], mainAgentId: string): Inventory {
   const targets: CleanupTarget[] = [];
   const skipped: CleanupSkipped[] = [];
+  let mainListed = false;
   for (const agent of agents) {
     const row = classifyListedAgent(agent);
-    if (isTarget(row)) targets.push(row);
-    else skipped.push(row);
+    if (row.id === mainAgentId || row.agent_id === mainAgentId) mainListed = true;
+    if (isTarget(row) && isCleanupMainAgent(row, mainAgentId)) {
+      skipped.push({ ...row, reason: "main" });
+    } else if (isTarget(row)) {
+      targets.push(row);
+    } else {
+      skipped.push(row);
+    }
   }
   targets.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : a.agent_id.localeCompare(b.agent_id)));
   return {
@@ -195,6 +217,8 @@ function inventoryFromAgents(agents: unknown[]): Inventory {
     targets,
     skipped,
     fingerprint: planFingerprint(targets),
+    main_agent_id: mainAgentId,
+    main_agent_unmatched: !mainListed,
   };
 }
 
@@ -203,6 +227,12 @@ function sameTarget(a: CleanupTarget, b: CleanupTarget): boolean {
 }
 
 function previewData(inv: Inventory, extra?: Partial<AccountCleanupData>): AccountCleanupData {
+  const warnings: string[] = [...ACCOUNT_CLEANUP_WARNINGS];
+  if (inv.main_agent_unmatched) {
+    warnings.push(
+      "GetGrokBotUserRuntimeSettings.main_agent_id did not match a listed bot; no main bot was skipped from this list.",
+    );
+  }
   return {
     preview: extra?.preview ?? true,
     fingerprint: inv.fingerprint,
@@ -212,7 +242,7 @@ function previewData(inv: Inventory, extra?: Partial<AccountCleanupData>): Accou
     skip_count: inv.skipped.length,
     targets: inv.targets,
     skipped: inv.skipped,
-    warnings: [...ACCOUNT_CLEANUP_WARNINGS],
+    warnings,
     ...extra,
   };
 }
@@ -449,7 +479,19 @@ export class AccountCleanupOps {
         },
       );
     }
-    return inventoryFromAgents(res.agents ?? []);
+    const settingsRes = await this.client.getGrokBotUserRuntimeSettings({});
+    const mainAgentId = mainAgentIdFromSettings(settingsRes);
+    if (!mainAgentId) {
+      throw new GbcError(
+        "lookup_incomplete",
+        "GetGrokBotUserRuntimeSettings did not return main_agent_id; refusing cleanup rather than guessing the main bot",
+        {
+          outcome: "unknown",
+          hint: "The current main bot is identified only from GetGrokBotUserRuntimeSettings.main_agent_id. No deletes or computer reset were sent.",
+        },
+      );
+    }
+    return inventoryFromAgents(res.agents ?? [], mainAgentId);
   }
 
   private incomplete(

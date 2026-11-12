@@ -130,6 +130,127 @@ describe("account cleanup classification", () => {
   });
 });
 
+describe("account cleanup skips the official main bot", () => {
+  it("dry-run lists the main bot under skipped, not targets, and fingerprints only targets", async () => {
+    const state = createEmptyMockState();
+    state.bots = [owned("202"), owned("101"), owned("303", { viewerIsOwner: false, name: "Other" })];
+    state.mainAgentId = "agent-101";
+    const { plane } = mockPlane(state);
+    const r = await plane.account.cleanup({ dryRun: true });
+    assert.equal(r.ok, true, JSON.stringify(r));
+    assert.deepEqual(
+      r.data?.targets.map((t) => t.id),
+      ["202"],
+    );
+    const main = r.data?.skipped.find((row) => row.id === "101");
+    assert.equal(main?.reason, "main");
+    assert.equal(main?.agent_id, "agent-101");
+    assert.equal(r.data?.delete_count, 1);
+    assert.equal(r.data?.skip_count, 2);
+    assert.equal(r.data?.fingerprint, planFingerprint(r.data!.targets));
+    assert.notEqual(r.data?.fingerprint, planFingerprint([
+      { id: "101", agent_id: "agent-101", name: "Bot 101" },
+      { id: "202", agent_id: "agent-202", name: "Bot 202" },
+    ]));
+    assert.ok(r.data?.warnings.some((w) => w.includes("main bot")));
+    assert.equal(state.callCounts?.getGrokBotUserRuntimeSettings, 1);
+    assert.deepEqual(writeMethods(state), []);
+  });
+
+  it("matches main_agent_id against the listed server id as well as agent_id", async () => {
+    const state = createEmptyMockState();
+    state.bots = [owned("101"), owned("202")];
+    state.mainAgentId = "101";
+    const { plane } = mockPlane(state);
+    const r = await plane.account.cleanup({ dryRun: true });
+    assert.equal(r.ok, true, JSON.stringify(r));
+    assert.deepEqual(
+      r.data?.targets.map((t) => t.id),
+      ["202"],
+    );
+    assert.equal(r.data?.skipped.find((row) => row.id === "101")?.reason, "main");
+  });
+
+  it("keeps an earlier skip reason when the main bot was already not deletable", async () => {
+    const state = createEmptyMockState();
+    state.bots = [owned("101", { teamId: 9, name: "Team main" }), owned("202")];
+    state.mainAgentId = "agent-101";
+    const { plane } = mockPlane(state);
+    const r = await plane.account.cleanup({ dryRun: true });
+    assert.equal(r.ok, true, JSON.stringify(r));
+    assert.equal(r.data?.skipped.find((row) => row.id === "101")?.reason, "team");
+    assert.deepEqual(
+      r.data?.targets.map((t) => t.id),
+      ["202"],
+    );
+  });
+
+  it("deletes other owned personal bots, leaves the main bot, then resets", async () => {
+    const state = createEmptyMockState();
+    state.bots = [owned("202"), owned("101"), owned("303", { teamId: 9 })];
+    state.mainAgentId = "agent-101";
+    const { plane, fingerprint } = await previewThen(state);
+    const r = await plane.account.cleanup({
+      allowWrite: true,
+      confirm: ACCOUNT_CLEANUP_CONFIRM,
+      plan: fingerprint,
+    });
+    assert.equal(r.ok, true, JSON.stringify(r));
+    assert.equal(r.data?.deleted, 1);
+    assert.deepEqual(writeIds(state, "DeleteGrokBotAgent"), ["202"]);
+    assert.deepEqual(writeMethods(state), ["DeleteGrokBotAgent", "RecreateSandBox"]);
+    assert.equal(state.bots.some((b) => b.id === "101"), true);
+    assert.equal(state.bots.some((b) => b.id === "202"), false);
+  });
+
+  it("treats a sole owned main bot as an empty plan: no deletes, then reset", async () => {
+    const state = createEmptyMockState();
+    state.bots = [owned("101")];
+    state.mainAgentId = "agent-101";
+    const { plane, fingerprint } = await previewThen(state);
+    assert.equal(fingerprint, planFingerprint([]));
+    const r = await plane.account.cleanup({
+      allowWrite: true,
+      confirm: ACCOUNT_CLEANUP_CONFIRM,
+      plan: fingerprint,
+    });
+    assert.equal(r.ok, true, JSON.stringify(r));
+    assert.equal(r.data?.delete_count, 0);
+    assert.equal(r.data?.skipped.find((row) => row.id === "101")?.reason, "main");
+    assert.deepEqual(writeMethods(state), ["RecreateSandBox"]);
+    assert.equal(state.bots.some((b) => b.id === "101"), true);
+  });
+
+  it("refuses dry-run and writes when main_agent_id is missing", async () => {
+    const state = createEmptyMockState();
+    state.bots = [owned("101")];
+    state.omitMainAgentId = true;
+    const { plane } = mockPlane(state);
+    const preview = await plane.account.cleanup({ dryRun: true });
+    assert.equal(preview.ok, false);
+    assert.equal(preview.code, "lookup_incomplete");
+    assert.match(preview.error?.message ?? "", /main_agent_id/);
+    const exec = await plane.account.cleanup({
+      allowWrite: true,
+      confirm: ACCOUNT_CLEANUP_CONFIRM,
+      plan: planFingerprint([{ id: "101", agent_id: "agent-101", name: "Bot 101" }]),
+    });
+    assert.equal(exec.ok, false);
+    assert.equal(exec.code, "lookup_incomplete");
+    assert.deepEqual(writeMethods(state), []);
+  });
+
+  it("refuses cleanup when runtime settings cannot be read", async () => {
+    const state = createEmptyMockState();
+    state.bots = [owned("101")];
+    state.failRuntimeSettings = true;
+    const { plane } = mockPlane(state);
+    const r = await plane.account.cleanup({ dryRun: true });
+    assert.equal(r.ok, false);
+    assert.deepEqual(writeMethods(state), []);
+  });
+});
+
 describe("account cleanup preview and confirmation", () => {
   it("dry-run lists targets, skips, counts, warnings, and sends no writes", async () => {
     const state = createEmptyMockState();
@@ -446,6 +567,26 @@ describe("account cleanup CLI and surfaces", () => {
     assert.equal(j.data.targets[0].id, "101");
     assert.equal(typeof j.data.fingerprint, "string");
     assert.equal(j.data.fingerprint.length, 64);
+  });
+
+  it("CLI dry-run reports the main bot as skipped with reason main", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gbc-account-cleanup-"));
+    const statePath = path.join(dir, "state.json");
+    const state = createEmptyMockState();
+    state.bots = [owned("101"), owned("202")];
+    state.mainAgentId = "agent-101";
+    fs.writeFileSync(statePath, JSON.stringify(state));
+    const r = await runGbc(
+      ["--mock", "--json", "account", "cleanup", "--dry-run"],
+      statePath,
+    );
+    assert.equal(r.code, 0, r.stderr);
+    const j = JSON.parse(r.stdout);
+    assert.equal(j.data.delete_count, 1);
+    assert.equal(j.data.targets[0].id, "202");
+    const main = j.data.skipped.find((row) => row.id === "101");
+    assert.equal(main.reason, "main");
+    assert.equal(j.data.fingerprint, planFingerprint(j.data.targets));
   });
 
   it("CLI refuses execution without allow-writes or a matching plan", async () => {
