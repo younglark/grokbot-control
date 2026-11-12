@@ -14,6 +14,7 @@
   - 进度以 JSON 行写到 stderr。超时：`ok:false`、`code:"wait_timeout"`、`outcome:"unknown"`、退出码 10（与 `computer reset --wait` 一致），`error.details.last_live` 带最后一次 live 状态。发送状态 `rejected`：`code:"message_rejected"`，退出码 7；连续 3 次 `not_found`：`code:"message_not_found"`，退出码 5。SIGINT：退出码 10。
 - **MCP `wait_for_message`**（只读）：`wait_seconds` 0..30（默认 0，只查一次）。没结束时返回 `ok:true`、`code:"pending"`、`data.state:"pending"`，调用方用同一 `message_id` 再查，并把上次的 `observed_running` 传回（MCP 调用之间不保存状态）。结束时的 `data` 与 CLI 相同。
 - **SDK**：`plane.message.wait(input)`，导出 `MessageWaitInput` / `MessageWaitData` 等类型。
+- **`gbc computer wake`、MCP `wake_computer`、SDK `computer.wake()`（#5）。** 非破坏性唤醒休眠的共享电脑，与 `computer reset` 完全分开，不需要确认词，需要 `--allow-writes`。只在 run state 为 hibernated 时发一次 `EnsureSandBox`，请求为空（与官方 App `connect()` 相同，不设 `wake`/`supports_asleep_box`，不带 App 的 `x-sand-box-park` 头），然后用 `GetSandBoxRunState` 读回；`--wait` 轮询到 running（`--timeout` 1..3600，默认 120；MCP `wait_seconds` 上限 30）。running → `already_running`（不发写）；starting → 不发写；absent/unspecified → `failed_precondition`（退出 7，不会借唤醒新建电脑）；仍 hibernated / 超时 / 读回失败 → `wake_unverified`、outcome unknown、退出 10。`--dry-run` 只读当前状态并报告将要做什么。输出白名单：run state 名字与 code、`image_update_available`、镜像信息；`EnsureSandBoxResponse` 里的 token、URL、cluster/pod 等一律不输出。不升级镜像、不 reset、不调 `EnsureSandBoxWindow`。**静态推断，未 live 验证；唤醒可能产生费用。** 证据见 [docs/protocol/computer-wake-0.79.4.md](https://github.com/younglark/grokbot-control/blob/main/docs/protocol/computer-wake-0.79.4.md)。
 
 ### 输出补充（只增字段）
 

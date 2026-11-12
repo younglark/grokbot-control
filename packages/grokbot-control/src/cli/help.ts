@@ -18,6 +18,8 @@ EXAMPLES:
   gbc --mock --json session list --agent-id <id> [--limit 50] [--offset 0]
   gbc --mock --json bot status --agent-id <id>
   gbc --mock --json computer state
+  gbc --json --dry-run computer wake        # reads run state only; no write
+  gbc --json --allow-writes computer wake --wait --timeout 120
   gbc --mock --json account cleanup --dry-run
   gbc --mock --json --allow-writes account cleanup --confirm=ACCOUNT_CLEANUP --plan=<fingerprint>
   gbc --mock --json --allow-writes computer reset --confirm=RESET_COMPUTER
@@ -101,6 +103,18 @@ NOTES:
     computer reset and keep its semantics (SIGINT stops waiting only). The flow is not
     a transaction; already-deleted bots cannot be undone. Existing \`bot delete\` and
     \`computer reset\` stay unchanged. No dashboard or MCP entry for this command.
+  - computer wake (non-destructive; separate from reset, no confirm word) sends one
+    EnsureSandBox with an empty request (wake/supports_asleep_box unset, no extra headers)
+    when \`computer state\` is hibernated. STATIC INFERENCE from the official App, NOT
+    live-verified; waking may incur compute charges. Requires --allow-writes (or
+    GBT_ALLOW_WRITES=1). running -> already_running (no write); starting -> no write;
+    absent/unspecified -> refused (exit 7, wake never provisions). --dry-run reads
+    GetSandBoxRunState only and reports the planned action. After the write, the state
+    is read back once; --wait polls GetSandBoxRunState until running (--timeout 1..3600s,
+    default 120). Still hibernated / timeout / failed read-back -> wake_unverified,
+    outcome unknown, exit 10. Output is whitelisted (run state names+codes,
+    image_update_available, image); tokens and URLs from EnsureSandBoxResponse are never
+    printed. It never upgrades the image, resets, or calls EnsureSandBoxWindow.
   - computer reset --wait follows WatchSandBoxMigration phases (backing-up, creating, moving,
     cleaning-up, wiping, done/failed) and stops waiting at --timeout (1..3600s, default 600).
     SIGINT stops waiting only; the reset may continue. No percentage is reported.

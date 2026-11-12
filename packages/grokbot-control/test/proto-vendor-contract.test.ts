@@ -21,7 +21,7 @@ const USED_RPCS = [
   "listGrokBotAgents", "listGrokBotSubagents", "listGrokBotTranscriptEntries",
   "sendGrokBotUserMessage", "updateGrokBotAgent", "updateGrokBotUserRuntimeSettings",
   "getSandBoxRunState", "recreateSandBox", "forceRecreateSandBox",
-  "watchSandBoxMigration",
+  "watchSandBoxMigration", "ensureSandBox",
 ];
 
 const snapshot = JSON.parse(
@@ -77,6 +77,21 @@ test("long-standing used fields keep their numbers (matches snapshot)", () => {
     const gen = new Map(Msg.fields.list().map((f: { no: number; name: string }) => [f.no, f.name]));
     for (const f of snap) assert.equal(gen.get(f.no), f.name, `${name}#${f.no}`);
   }
+});
+
+test("EnsureSandBox (computer wake) request/response field numbers match the snapshot; empty request is zero bytes", () => {
+  for (const name of ["EnsureSandBoxRequest", "EnsureSandBoxResponse", "GetSandBoxRunStateResponse"]) {
+    const Msg = T(name);
+    const snap = snapshot.messages[`aiserver.v1.${name}`];
+    assert.ok(snap, name);
+    const gen = new Map(Msg.fields.list().map((f: { no: number; name: string }) => [f.no, f.name]));
+    for (const f of snap) assert.equal(gen.get(f.no), f.name, `${name}#${f.no}`);
+  }
+  const Req = T("EnsureSandBoxRequest");
+  assert.equal(Req.fields.findJsonName("wake")?.no, 2);
+  assert.equal(Req.fields.findJsonName("supportsAsleepBox")?.no, 3);
+  // computer wake sends {} exactly like the App's connect(): wake/supports_asleep_box unset.
+  assert.equal(new Req({}).toBinary().length, 0);
 });
 
 test("bytes from a peer with new fields decode cleanly; unknown numbers are preserved", () => {

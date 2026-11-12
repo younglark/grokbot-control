@@ -833,6 +833,210 @@
    }
   ],
   "aiserver.v1.DeleteGrokBotAgentResponse": [],
+  "aiserver.v1.EnsureSandBoxRequest": [
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "wake",
+    "no": 2,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "supports_asleep_box",
+    "no": 3,
+    "opt": true,
+    "repeated": false
+   }
+  ],
+  "aiserver.v1.EnsureSandBoxResponse": [
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "cluster",
+    "no": 1,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "tenant_id",
+    "no": 2,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "pod_id",
+    "no": 3,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "network_token",
+    "no": 4,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "exec_daemon_auth_token",
+    "no": 5,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "exec_daemon_url",
+    "no": 6,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "vnc_url",
+    "no": 7,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "terminals_folder",
+    "no": 8,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "fork_vnc_base_url",
+    "no": 12,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "image_update_available",
+    "no": 9,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "gateway_url",
+    "no": 10,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "gateway_token",
+    "no": 11,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.SandBoxRunState",
+    "V": null,
+    "kind": "named",
+    "name": "run_state",
+    "no": 13,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "bool",
+    "V": null,
+    "kind": "scalar",
+    "name": "egress_tunnel_ownership",
+    "no": 14,
+    "opt": true,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "aiserver.v1.SandBoxImageInfo",
+    "V": null,
+    "kind": "named",
+    "name": "image",
+    "no": 15,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "gateway_port_token",
+    "no": 16,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "egress_tunnel_port_token",
+    "no": 17,
+    "opt": false,
+    "repeated": false
+   },
+   {
+    "K": null,
+    "T": "string",
+    "V": null,
+    "kind": "scalar",
+    "name": "fork_vnc_port_token",
+    "no": 18,
+    "opt": false,
+    "repeated": false
+   }
+  ],
   "aiserver.v1.ForceRecreateSandBoxRequest": [],
   "aiserver.v1.GetGrokBotSendStatusRequest": [
    {
@@ -4145,6 +4349,12 @@
     "O": "aiserver.v1.DeleteGrokBotAgentResponse",
     "kind": "Unary",
     "name": "DeleteGrokBotAgent"
+   },
+   {
+    "I": "aiserver.v1.EnsureSandBoxRequest",
+    "O": "aiserver.v1.EnsureSandBoxResponse",
+    "kind": "Unary",
+    "name": "EnsureSandBox"
    },
    {
     "I": "aiserver.v1.ForceRecreateSandBoxRequest",

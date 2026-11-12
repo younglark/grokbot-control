@@ -157,6 +157,44 @@ async function main(): Promise<number> {
         process.off("SIGINT", onSig);
         process.off("SIGTERM", onSig);
       }
+    } else if (noun === "computer" && verb === "wake") {
+      const timeoutRaw = flag(rest, "--timeout");
+      let timeoutSeconds: number | undefined;
+      if (timeoutRaw !== undefined) {
+        const parsed = Number(timeoutRaw);
+        if (
+          !/^\d+$/.test(timeoutRaw) ||
+          !Number.isInteger(parsed) ||
+          parsed < 1 ||
+          parsed > 3600
+        ) {
+          usageExit(
+            "--timeout must be an integer 1..3600 seconds",
+            "--timeout=120",
+          );
+        }
+        timeoutSeconds = parsed;
+      }
+      const ac = new AbortController();
+      const onSig = () => ac.abort();
+      process.once("SIGINT", onSig);
+      process.once("SIGTERM", onSig);
+      try {
+        code = emitResult(
+          await plane.computer.wake(
+            {
+              ...write,
+              wait: hasFlag(rest, "--wait"),
+              timeoutSeconds,
+            },
+            ac.signal,
+          ),
+          mode,
+        );
+      } finally {
+        process.off("SIGINT", onSig);
+        process.off("SIGTERM", onSig);
+      }
     } else if (noun === "account" && verb === "cleanup") {
       const timeoutRaw = flag(rest, "--timeout");
       let timeoutSeconds: number | undefined;
